@@ -19,6 +19,7 @@
 #include "Layers.h"              // for Layer
 #include "mozilla/Assertions.h"  // for MOZ_ASSERT_HELPER2
 #include "mozilla/Attributes.h"  // for override
+#include "mozilla/GfxMessageUtils.h"  // for WebGLVersion
 #include "mozilla/Maybe.h"
 #include "mozilla/Monitor.h"    // for Monitor
 #include "mozilla/RefPtr.h"     // for RefPtr
@@ -50,6 +51,12 @@ class nsIWidget;
 namespace mozilla {
 
 class CancelableRunnable;
+
+namespace dom {
+class HostWebGLCommandSink;
+class HostWebGLErrorSource;
+class WebGLParent;
+}
 
 namespace gfx {
 class DrawTarget;
@@ -262,6 +269,19 @@ class CompositorBridgeParentBase : public PCompositorBridgeParent,
       const uint32_t& startIndex, nsTArray<float>* intervals) = 0;
   virtual mozilla::ipc::IPCResult RecvCheckContentOnlyTDR(
       const uint32_t& sequenceNum, bool* isContentOnlyTDR) = 0;
+
+  virtual PWebGLParent*
+  AllocPWebGLParent(const WebGLVersion& aVersion,
+                    UniquePtr<HostWebGLCommandSink>& aCommandSink,
+                    UniquePtr<HostWebGLErrorSource>& aErrorSource) = 0;
+
+  virtual PWebGLParent*
+  AllocPWebGLParent(const WebGLVersion& aVersion,
+                    UniquePtr<HostWebGLCommandSink>&& aCommandSink,
+                    UniquePtr<HostWebGLErrorSource>&& aErrorSource) = 0;
+
+  virtual bool
+  DeallocPWebGLParent(PWebGLParent* aWebGLParent) = 0;
 
   bool mCanSend;
 
@@ -627,6 +647,27 @@ class CompositorBridgeParent final : public CompositorBridgeParentBase,
 #endif  // defined(MOZ_WIDGET_ANDROID)
 
   WebRenderBridgeParent* GetWrBridge() { return mWrBridge; }
+
+  PWebGLParent*
+  AllocPWebGLParent(const WebGLVersion& aVersion,
+                    UniquePtr<HostWebGLCommandSink>& aCommandSink,
+                    UniquePtr<HostWebGLErrorSource>& aErrorSource) override {
+    MOZ_ASSERT_UNREACHABLE("This message is CrossProcessCompositorBridgeParent only");
+    return nullptr;
+  }
+
+  PWebGLParent*
+  AllocPWebGLParent(const WebGLVersion& aVersion,
+                    UniquePtr<HostWebGLCommandSink>&& aCommandSink,
+                    UniquePtr<HostWebGLErrorSource>&& aErrorSource) override {
+    MOZ_ASSERT_UNREACHABLE("This message is CrossProcessCompositorBridgeParent only");
+    return nullptr;
+  }
+
+  bool DeallocPWebGLParent(PWebGLParent* aWebGLParent) override {
+    MOZ_ASSERT_UNREACHABLE("This message is CrossProcessCompositorBridgeParent only");
+    return false;
+  }
 
  private:
   void Initialize();

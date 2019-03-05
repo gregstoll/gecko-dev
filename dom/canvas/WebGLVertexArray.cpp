@@ -14,11 +14,6 @@
 
 namespace mozilla {
 
-JSObject* WebGLVertexArray::WrapObject(JSContext* cx,
-                                       JS::Handle<JSObject*> givenProto) {
-  return dom::WebGLVertexArrayObject_Binding::Wrap(cx, this, givenProto);
-}
-
 WebGLVertexArray::WebGLVertexArray(WebGLContext* const webgl, const GLuint name)
     : WebGLRefCountedObject(webgl), mGLName(name) {
   mAttribs.SetLength(mContext->mGLMaxVertexAttribs);
@@ -52,11 +47,5 @@ void WebGLVertexArray::Delete() {
   mElementArrayBuffer = nullptr;
   mAttribs.Clear();
 }
-
-NS_IMPL_CYCLE_COLLECTION_WRAPPERCACHE(WebGLVertexArray, mAttribs,
-                                      mElementArrayBuffer)
-
-NS_IMPL_CYCLE_COLLECTION_ROOT_NATIVE(WebGLVertexArray, AddRef)
-NS_IMPL_CYCLE_COLLECTION_UNROOT_NATIVE(WebGLVertexArray, Release)
 
 }  // namespace mozilla

@@ -5,6 +5,7 @@
 
 #include "WebGL2Context.h"
 
+#include "ClientWebGLContext.h"
 #include "GLContext.h"
 #include "WebGLBuffer.h"
 #include "WebGLTransformFeedback.h"
@@ -81,35 +82,26 @@ void WebGL2Context::CopyBufferSubData(GLenum readTarget, GLenum writeTarget,
   writeBuffer->ResetLastUpdateFenceId();
 }
 
-void WebGL2Context::GetBufferSubData(GLenum target, GLintptr srcByteOffset,
-                                     const dom::ArrayBufferView& dstData,
-                                     GLuint dstElemOffset,
-                                     GLuint dstElemCountOverride) {
+Maybe<nsTArray<uint8_t>>
+WebGL2Context::GetBufferSubData(GLenum target, GLintptr srcByteOffset,
+                                size_t byteLen,
+                                const Maybe<ipc::Shmem>& maybeShmem) {
   const FuncScope funcScope(*this, "getBufferSubData");
-  if (IsContextLost()) return;
 
-  if (!ValidateNonNegative("srcByteOffset", srcByteOffset)) return;
-
-  uint8_t* bytes;
-  size_t byteLen;
-  if (!ValidateArrayBufferView(dstData, dstElemOffset, dstElemCountOverride,
-                               LOCAL_GL_INVALID_VALUE, &bytes, &byteLen)) {
-    return;
-  }
-
-  ////
+  if (IsContextLost()) return Nothing();
 
   const auto& buffer = ValidateBufferSelection(target);
-  if (!buffer) return;
+  if (!buffer) return Nothing();
 
-  if (!buffer->ValidateRange(srcByteOffset, byteLen)) return;
+  if (!buffer->ValidateRange(srcByteOffset, byteLen)) return Nothing();
 
   ////
 
   if (!CheckedInt<GLsizeiptr>(byteLen).isValid()) {
     ErrorOutOfMemory("Size too large.");
-    return;
+    return Nothing();
   }
+
   const GLsizeiptr glByteLen(byteLen);
 
   ////
@@ -133,6 +125,18 @@ void WebGL2Context::GetBufferSubData(GLenum target, GLintptr srcByteOffset,
   }
 
   ////
+
+  nsTArray<uint8_t> arr;
+  uint8_t* bytes;
+  if (!maybeShmem) {
+    arr.SetLength(byteLen);     // TODO: Make Fallible
+    bytes = arr.Elements();
+  } else {
+    bytes = maybeShmem.ref().get<uint8_t>();
+    MOZ_ASSERT(maybeShmem.ref().Size<uint8_t>() >= byteLen);
+  }
+
+  MOZ_ASSERT(bytes);
 
   const ScopedLazyBind readBind(gl, target, buffer);
 
@@ -158,6 +162,7 @@ void WebGL2Context::GetBufferSubData(GLenum target, GLintptr srcByteOffset,
       gl->fBindTransformFeedback(LOCAL_GL_TRANSFORM_FEEDBACK, tfo);
     }
   }
+  return (!maybeShmem) ? Some(arr) : Nothing();
 }
 
 }  // namespace mozilla

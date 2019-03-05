@@ -155,12 +155,13 @@ VOID = VoidType()
 
 
 class ImportedCxxType(Type):
-    def __init__(self, qname, refcounted, moveonly):
+    def __init__(self, qname, refcounted, moveonly, shmemholder):
         assert isinstance(qname, QualifiedId)
         self.loc = qname.loc
         self.qname = qname
         self.refcounted = refcounted
         self.moveonly = moveonly
+        self.shmemholder = shmemholder
 
     def isCxx(self):
         return True
@@ -173,6 +174,9 @@ class ImportedCxxType(Type):
 
     def isMoveonly(self):
         return self.moveonly
+
+    def isShmemHolder(self):
+        return self.shmemholder
 
     def name(self):
         return self.qname.baseid
@@ -559,6 +563,11 @@ def hasshmem(type):
 
     class findShmem(TypeVisitor):
         def visitShmemType(self, s): raise found()
+        def visitImportedCxxType(self, s):
+            if s.isShmemHolder():
+                raise found()
+        def visitUniquePtrType(self, s):
+            s.innertype.accept(self)
     try:
         type.accept(findShmem())
     except found:
@@ -896,7 +905,8 @@ class GatherDecls(TcheckVisitor):
         elif fullname == 'mozilla::ipc::FileDescriptor':
             ipdltype = FDType(using.type.spec)
         else:
-            ipdltype = ImportedCxxType(using.type.spec, using.isRefcounted(), using.isMoveonly())
+            ipdltype = ImportedCxxType(using.type.spec, using.isRefcounted(),
+                                       using.isMoveonly(), using.isShmemHolder())
             existingType = self.symtab.lookup(ipdltype.fullname())
             if existingType and existingType.fullname == ipdltype.fullname():
                 if ipdltype.isRefcounted() != existingType.type.isRefcounted():
@@ -904,6 +914,9 @@ class GatherDecls(TcheckVisitor):
                                str(using.type))
                 if ipdltype.isMoveonly() != existingType.type.isMoveonly():
                     self.error(using.loc, "inconsistent moveonly status of type `%s`",
+                               str(using.type))
+                if ipdltype.isShmemHolder() != existingType.type.isShmemHolder():
+                    self.error(using.loc, "inconsistent shmem holder status of type `%s`",
                                str(using.type))
                 using.decl = existingType
                 return

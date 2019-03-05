@@ -4824,7 +4824,7 @@ class _GenerateProtocolActorCode(ipdl.ast.Visitor):
     def callAllocActor(self, md, retsems, side):
         return self.thisCall(
             _allocMethod(md.decl.type.constructedType(), side),
-            args=md.makeCxxArgs(retsems=retsems, retcallsems='out',
+            args=md.makeCxxArgs(paramsems='move', retsems=retsems, retcallsems='out',
                                 implicit=False))
 
     def callActorDestroy(self, actorexpr, why=_DestroyReason.Deletion):
