@@ -178,7 +178,7 @@ class Include(Node):
 
 class UsingStmt(Node):
     def __init__(self, loc, cxxTypeSpec, cxxHeader=None, kind=None,
-                 refcounted=False, moveonly=False):
+                 refcounted=False, moveonly=False, shmemholder=False):
         Node.__init__(self, loc)
         assert not isinstance(cxxTypeSpec, str)
         assert cxxHeader is None or isinstance(cxxHeader, str)
@@ -187,6 +187,7 @@ class UsingStmt(Node):
         self.header = cxxHeader
         self.kind = kind
         self.refcounted = refcounted
+        self.shmemholder = shmemholder
         self.moveonly = moveonly
 
     def canBeForwardDeclared(self):
@@ -203,6 +204,9 @@ class UsingStmt(Node):
 
     def isMoveonly(self):
         return self.moveonly
+
+    def isShmemHolder(self):
+        return self.shmemholder
 
 # "singletons"
 

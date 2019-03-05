@@ -19,6 +19,7 @@
 #include "Layers.h"              // for Layer
 #include "mozilla/Assertions.h"  // for MOZ_ASSERT_HELPER2
 #include "mozilla/Attributes.h"  // for override
+#include "mozilla/GfxMessageUtils.h"  // for WebGLVersion
 #include "mozilla/Maybe.h"
 #include "mozilla/Monitor.h"    // for Monitor
 #include "mozilla/RefPtr.h"     // for RefPtr
@@ -50,6 +51,12 @@ class nsIWidget;
 namespace mozilla {
 
 class CancelableRunnable;
+
+namespace dom {
+class HostWebGLCommandSink;
+class HostWebGLErrorSource;
+class WebGLParent;
+}
 
 namespace gfx {
 class DrawTarget;
@@ -343,6 +350,27 @@ class CompositorBridgeParent final : public CompositorBridgeParentBase,
   };
 
   mozilla::ipc::IPCResult RecvAllPluginsCaptured() override;
+
+  PWebGLParent*
+  AllocPWebGLParent(const WebGLVersion& aVersion,
+                    UniquePtr<HostWebGLCommandSink>& aCommandSink,
+                    UniquePtr<HostWebGLErrorSource>& aErrorSource) {
+    MOZ_ASSERT_UNREACHABLE("This message is CrossProcessCompositorBridgeParent only");
+    return nullptr;
+  }
+
+  PWebGLParent*
+  AllocPWebGLParent(const WebGLVersion& aVersion,
+                    UniquePtr<HostWebGLCommandSink>&& aCommandSink,
+                    UniquePtr<HostWebGLErrorSource>&& aErrorSource) {
+    MOZ_ASSERT_UNREACHABLE("This message is CrossProcessCompositorBridgeParent only");
+    return nullptr;
+  }
+
+  bool DeallocPWebGLParent(PWebGLParent* aWebGLParent) override {
+    // This message is CrossProcessCompositorBridgeParent only
+    return false;
+  }
 
   virtual void NotifyMemoryPressure() override;
   virtual void AccumulateMemoryReport(wr::MemoryReport*) override;

@@ -94,11 +94,11 @@ void WebGL2Context::FramebufferTextureLayer(GLenum target, GLenum attachment,
   fb->FramebufferTextureLayer(attachment, texture, level, layer);
 }
 
-JS::Value WebGL2Context::GetFramebufferAttachmentParameter(
-    JSContext* cx, GLenum target, GLenum attachment, GLenum pname,
-    ErrorResult& out_error) {
-  return WebGLContext::GetFramebufferAttachmentParameter(cx, target, attachment,
-                                                         pname, out_error);
+MaybeWebGLVariant
+WebGL2Context::GetFramebufferAttachmentParameter(
+    GLenum target, GLenum attachment, GLenum pname) {
+  return WebGLContext::GetFramebufferAttachmentParameter(target, attachment,
+                                                         pname);
 }
 
 ////
@@ -141,8 +141,8 @@ static bool ValidateFramebufferAttachmentEnum(WebGLContext* webgl,
 }
 
 bool WebGLContext::ValidateInvalidateFramebuffer(
-    GLenum target, const dom::Sequence<GLenum>& attachments,
-    ErrorResult* const out_rv, std::vector<GLenum>* const scopedVector,
+    GLenum target, const nsTArray<GLenum>& attachments,
+    std::vector<GLenum>* const scopedVector,
     GLsizei* const out_glNumAttachments,
     const GLenum** const out_glAttachments) {
   if (IsContextLost()) return false;
@@ -218,13 +218,13 @@ bool WebGLContext::ValidateInvalidateFramebuffer(
 }
 
 void WebGL2Context::InvalidateFramebuffer(
-    GLenum target, const dom::Sequence<GLenum>& attachments, ErrorResult& rv) {
+    GLenum target, const nsTArray<GLenum>& attachments) {
   const FuncScope funcScope(*this, "invalidateFramebuffer");
 
   std::vector<GLenum> scopedVector;
   GLsizei glNumAttachments;
   const GLenum* glAttachments;
-  if (!ValidateInvalidateFramebuffer(target, attachments, &rv, &scopedVector,
+  if (!ValidateInvalidateFramebuffer(target, attachments, &scopedVector,
                                      &glNumAttachments, &glAttachments)) {
     return;
   }
@@ -245,14 +245,14 @@ void WebGL2Context::InvalidateFramebuffer(
 }
 
 void WebGL2Context::InvalidateSubFramebuffer(
-    GLenum target, const dom::Sequence<GLenum>& attachments, GLint x, GLint y,
-    GLsizei width, GLsizei height, ErrorResult& rv) {
+    GLenum target, const nsTArray<GLenum>& attachments, GLint x, GLint y,
+    GLsizei width, GLsizei height) {
   const FuncScope funcScope(*this, "invalidateSubFramebuffer");
 
   std::vector<GLenum> scopedVector;
   GLsizei glNumAttachments;
   const GLenum* glAttachments;
-  if (!ValidateInvalidateFramebuffer(target, attachments, &rv, &scopedVector,
+  if (!ValidateInvalidateFramebuffer(target, attachments, &scopedVector,
                                      &glNumAttachments, &glAttachments)) {
     return;
   }

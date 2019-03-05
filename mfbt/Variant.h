@@ -25,6 +25,10 @@ struct ParamTraits;
 
 namespace mozilla {
 
+namespace ipc {
+template <typename T> struct PcqParamTraits;
+}  // namespace ipc
+
 template <typename... Ts>
 class Variant;
 
@@ -472,6 +476,7 @@ struct VariantIndex {
 template <typename... Ts>
 class MOZ_INHERIT_TYPE_ANNOTATIONS_FROM_TEMPLATE_ARGS MOZ_NON_PARAM Variant {
   friend struct IPC::ParamTraits<mozilla::Variant<Ts...>>;
+  friend struct mozilla::ipc::PcqParamTraits<mozilla::Variant<Ts...>>;
 
   using Tag = typename detail::VariantTag<Ts...>::Type;
   using Impl = detail::VariantImplementation<Tag, 0, Ts...>;

@@ -235,18 +235,19 @@ void WebGLContext::GenerateMipmap(GLenum rawTexTarget) {
   tex->GenerateMipmap();
 }
 
-JS::Value WebGLContext::GetTexParameter(GLenum rawTexTarget, GLenum pname) {
+MaybeWebGLVariant
+WebGLContext::GetTexParameter(GLenum rawTexTarget, GLenum pname) {
   const FuncScope funcScope(*this, "getTexParameter");
   const uint8_t funcDims = 0;
 
   TexTarget texTarget;
   WebGLTexture* tex;
   if (!ValidateTexTarget(this, funcDims, rawTexTarget, &texTarget, &tex))
-    return JS::NullValue();
+    return Nothing();
 
   if (!IsTexParamValid(pname)) {
     ErrorInvalidEnumInfo("pname", pname);
-    return JS::NullValue();
+    return Nothing();
   }
 
   return tex->GetTexParameter(texTarget, pname);
@@ -272,7 +273,7 @@ void WebGLContext::CompressedTexImage(uint8_t funcDims, GLenum rawTarget,
                                       GLint level, GLenum internalFormat,
                                       GLsizei width, GLsizei height,
                                       GLsizei depth, GLint border,
-                                      const TexImageSource& src,
+                                      const PcqTexUnpack& src,
                                       const Maybe<GLsizei>& expectedImageSize) {
   TexImageTarget target;
   WebGLTexture* tex;
@@ -285,7 +286,7 @@ void WebGLContext::CompressedTexImage(uint8_t funcDims, GLenum rawTarget,
 void WebGLContext::CompressedTexSubImage(
     uint8_t funcDims, GLenum rawTarget, GLint level, GLint xOffset,
     GLint yOffset, GLint zOffset, GLsizei width, GLsizei height, GLsizei depth,
-    GLenum unpackFormat, const TexImageSource& src,
+    GLenum unpackFormat, const PcqTexUnpack& src,
     const Maybe<GLsizei>& expectedImageSize) {
   TexImageTarget target;
   WebGLTexture* tex;
@@ -330,7 +331,7 @@ void WebGLContext::TexImage(uint8_t funcDims, GLenum rawTarget, GLint level,
                             GLenum internalFormat, GLsizei width,
                             GLsizei height, GLsizei depth, GLint border,
                             GLenum unpackFormat, GLenum unpackType,
-                            const TexImageSource& src) {
+                            const PcqTexUnpack& src) {
   TexImageTarget target;
   WebGLTexture* tex;
   if (!ValidateTexImageTarget(this, funcDims, rawTarget, &target, &tex)) return;
@@ -344,7 +345,7 @@ void WebGLContext::TexSubImage(uint8_t funcDims, GLenum rawTarget, GLint level,
                                GLint xOffset, GLint yOffset, GLint zOffset,
                                GLsizei width, GLsizei height, GLsizei depth,
                                GLenum unpackFormat, GLenum unpackType,
-                               const TexImageSource& src) {
+                               const PcqTexUnpack& src) {
   TexImageTarget target;
   WebGLTexture* tex;
   if (!ValidateTexImageTarget(this, funcDims, rawTarget, &target, &tex)) return;

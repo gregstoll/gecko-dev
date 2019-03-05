@@ -120,6 +120,7 @@ reserved = set((
     'compress',
     'compressall',
     'from',
+    'shmemholder',
     'include',
     'intr',
     'manager',
@@ -296,14 +297,21 @@ def p_MaybeMoveOnly(p):
     p[0] = 2 == len(p)
 
 
+def p_MaybeShmemHolder(p):
+    """MaybeShmemHolder : SHMEMHOLDER
+                       |"""
+    p[0] = 2 == len(p)
+
+
 def p_UsingStmt(p):
-    """UsingStmt : USING MaybeRefcounted MaybeMoveOnly UsingKind CxxType FROM STRING"""
+    """UsingStmt : USING MaybeRefcounted MaybeMoveOnly MaybeShmemHolder UsingKind CxxType FROM STRING"""
     p[0] = UsingStmt(locFromTok(p, 1),
                      refcounted=p[2],
                      moveonly=p[3],
-                     kind=p[4],
-                     cxxTypeSpec=p[5],
-                     cxxHeader=p[7])
+                     shmemholder=p[4],
+                     kind=p[5],
+                     cxxTypeSpec=p[6],
+                     cxxHeader=p[8])
 
 # --------------------
 # Namespaced stuff
@@ -679,7 +687,10 @@ def p_BasicType(p):
             # p[1] is CxxID. isunique = False
             p[1] = p[1] + (False,)
         loc, id, isunique = p[1]
-        p[1] = TypeSpec(loc, QualifiedId(loc, id))
+        if isunique:
+            p[1] = id
+        else:
+            p[1] = TypeSpec(loc, QualifiedId(loc, id))
         p[1].uniqueptr = isunique
     if 4 == len(p):
         p[1].array = True
@@ -695,6 +706,11 @@ def p_MaybeNullable(p):
 
 # --------------------
 # C++ stuff
+
+
+def p_CxxUniquePtrInst(p):
+    """CxxUniquePtrInst : UNIQUEPTR '<' CxxType '>'"""
+    p[0] = (locFromTok(p, 1), p[3], True)
 
 
 def p_CxxType(p):
@@ -732,11 +748,6 @@ def p_CxxID(p):
 def p_CxxTemplateInst(p):
     """CxxTemplateInst : ID '<' ID '>'"""
     p[0] = (locFromTok(p, 1), str(p[1]) + '<' + str(p[3]) + '>')
-
-
-def p_CxxUniquePtrInst(p):
-    """CxxUniquePtrInst : UNIQUEPTR '<' ID '>'"""
-    p[0] = (locFromTok(p, 1), str(p[3]), True)
 
 
 def p_error(t):

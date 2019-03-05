@@ -48,8 +48,7 @@
 #include "ActiveLayerTracker.h"
 #include "CanvasUtils.h"
 #include "VRManagerChild.h"
-#include "WebGL1Context.h"
-#include "WebGL2Context.h"
+#include "ClientWebGLContext.h"
 
 using namespace mozilla::layers;
 using namespace mozilla::gfx;
@@ -1428,7 +1427,8 @@ HTMLCanvasElement::GetVRFrame() {
     return nullptr;
   }
 
-  WebGLContext* webgl = static_cast<WebGLContext*>(GetContextAtIndex(0));
+  ClientWebGLContext* webgl =
+    static_cast<ClientWebGLContext*>(GetContextAtIndex(0));
   if (!webgl) {
     return nullptr;
   }

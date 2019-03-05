@@ -13,7 +13,7 @@
 namespace mozilla {
 
 WebGLExtensionBase::WebGLExtensionBase(WebGLContext* context)
-    : WebGLContextBoundObject(context), mIsLost(false) {}
+    : WebGLContextBoundObject<WebGLExtensionBase>(context), mIsLost(false) {}
 
 WebGLExtensionBase::~WebGLExtensionBase() {}
 

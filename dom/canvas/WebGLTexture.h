@@ -24,6 +24,7 @@
 
 namespace mozilla {
 class ErrorResult;
+class PcqTexUnpack;
 class WebGLContext;
 class WebGLFramebuffer;
 class WebGLSampler;
@@ -96,8 +97,7 @@ struct ImageInfo final {
 
 // NOTE: When this class is switched to new DOM bindings, update the (then-slow)
 // WrapObject calls in GetParameter and GetFramebufferAttachmentParameter.
-class WebGLTexture final : public nsWrapperCache,
-                           public WebGLRefCountedObject<WebGLTexture>,
+class WebGLTexture final : public WebGLRefCountedObject<WebGLTexture>,
                            public LinkedListElement<WebGLTexture>,
                            public CacheInvalidator {
   // Friends
@@ -164,19 +164,13 @@ class WebGLTexture final : public nsWrapperCache,
 
   ////////////////////////////////////
 
-  NS_INLINE_DECL_CYCLE_COLLECTING_NATIVE_REFCOUNTING(WebGLTexture)
-  NS_DECL_CYCLE_COLLECTION_SCRIPT_HOLDER_NATIVE_CLASS(WebGLTexture)
+  NS_INLINE_DECL_REFCOUNTING(WebGLTexture)
 
   WebGLTexture(WebGLContext* webgl, GLuint tex);
 
   void Delete();
 
   TexTarget Target() const { return mTarget; }
-
-  WebGLContext* GetParentObject() const { return mContext; }
-
-  virtual JSObject* WrapObject(JSContext* cx,
-                               JS::Handle<JSObject*> givenProto) override;
 
  protected:
   ~WebGLTexture() { DeleteOnce(); }
@@ -186,7 +180,7 @@ class WebGLTexture final : public nsWrapperCache,
   // GL calls
   bool BindTexture(TexTarget texTarget);
   void GenerateMipmap();
-  JS::Value GetTexParameter(TexTarget texTarget, GLenum pname);
+  MaybeWebGLVariant GetTexParameter(TexTarget texTarget, GLenum pname);
   void TexParameter(TexTarget texTarget, GLenum pname, const FloatOrInt& param);
 
   ////////////////////////////////////
@@ -217,11 +211,11 @@ class WebGLTexture final : public nsWrapperCache,
                   GLsizei width, GLsizei height, GLsizei depth);
   void TexImage(TexImageTarget target, GLint level, GLenum internalFormat,
                 GLsizei width, GLsizei height, GLsizei depth, GLint border,
-                const webgl::PackingInfo& pi, const TexImageSource& src);
+                const webgl::PackingInfo& pi, const PcqTexUnpack& src);
   void TexSubImage(TexImageTarget target, GLint level, GLint xOffset,
                    GLint yOffset, GLint zOffset, GLsizei width, GLsizei height,
                    GLsizei depth, const webgl::PackingInfo& pi,
-                   const TexImageSource& src);
+                   const PcqTexUnpack& src);
 
  protected:
   void TexImage(TexImageTarget target, GLint level, GLenum internalFormat,
@@ -234,13 +228,13 @@ class WebGLTexture final : public nsWrapperCache,
   void CompressedTexImage(TexImageTarget target, GLint level,
                           GLenum internalFormat, GLsizei width, GLsizei height,
                           GLsizei depth, GLint border,
-                          const TexImageSource& src,
+                          const PcqTexUnpack& src,
                           const Maybe<GLsizei>& expectedImageSize);
   void CompressedTexSubImage(TexImageTarget target, GLint level, GLint xOffset,
                              GLint yOffset, GLint zOffset, GLsizei width,
                              GLsizei height, GLsizei depth,
                              GLenum sizedUnpackFormat,
-                             const TexImageSource& src,
+                             const PcqTexUnpack& src,
                              const Maybe<GLsizei>& expectedImageSize);
 
   void CopyTexImage2D(TexImageTarget target, GLint level, GLenum internalFormat,
@@ -312,6 +306,7 @@ class WebGLTexture final : public nsWrapperCache,
 
   bool IsCubeMap() const { return (mTarget == LOCAL_GL_TEXTURE_CUBE_MAP); }
 };
+
 
 inline TexImageTarget TexImageTargetForTargetAndFace(TexTarget target,
                                                      uint8_t face) {

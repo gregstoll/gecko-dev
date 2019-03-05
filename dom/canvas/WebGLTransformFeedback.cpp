@@ -171,16 +171,4 @@ void WebGLTransformFeedback::AddBufferBindCounts(int8_t addVal) const {
   }
 }
 
-////////////////////////////////////////
-
-JSObject* WebGLTransformFeedback::WrapObject(JSContext* cx,
-                                             JS::Handle<JSObject*> givenProto) {
-  return dom::WebGLTransformFeedback_Binding::Wrap(cx, this, givenProto);
-}
-
-NS_IMPL_CYCLE_COLLECTION_ROOT_NATIVE(WebGLTransformFeedback, AddRef)
-NS_IMPL_CYCLE_COLLECTION_UNROOT_NATIVE(WebGLTransformFeedback, Release)
-NS_IMPL_CYCLE_COLLECTION_WRAPPERCACHE(WebGLTransformFeedback, mIndexedBindings,
-                                      mActive_Program)
-
 }  // namespace mozilla

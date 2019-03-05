@@ -225,37 +225,38 @@ void WebGLShader::CompileShader() {
                              &mCompilationLog);
 }
 
-void WebGLShader::GetShaderInfoLog(nsAString* out) const {
+nsString WebGLShader::GetShaderInfoLog() const {
+  nsString out;
   const nsCString& log =
       !mTranslationSuccessful ? mValidationLog : mCompilationLog;
-  CopyASCIItoUTF16(log, *out);
+  CopyASCIItoUTF16(log, out);
+  return out;
 }
 
-JS::Value WebGLShader::GetShaderParameter(GLenum pname) const {
+MaybeWebGLVariant WebGLShader::GetShaderParameter(GLenum pname) const {
   switch (pname) {
     case LOCAL_GL_SHADER_TYPE:
-      return JS::NumberValue(mType);
+      return AsSomeVariant(mType);
 
     case LOCAL_GL_DELETE_STATUS:
-      return JS::BooleanValue(IsDeleteRequested());
+      return AsSomeVariant(IsDeleteRequested());
 
     case LOCAL_GL_COMPILE_STATUS:
-      return JS::BooleanValue(mCompilationSuccessful);
+      return AsSomeVariant(mCompilationSuccessful);
 
     default:
       mContext->ErrorInvalidEnumInfo("getShaderParameter: `pname`", pname);
-      return JS::NullValue();
+      return Nothing();
   }
 }
-
-void WebGLShader::GetShaderSource(nsAString* out) const {
-  out->SetIsVoid(false);
-  *out = mSource;
+nsString WebGLShader::GetShaderSource() const {
+  return mSource;
 }
 
-void WebGLShader::GetShaderTranslatedSource(nsAString* out) const {
-  out->SetIsVoid(false);
-  CopyASCIItoUTF16(mTranslatedSource, *out);
+nsString WebGLShader::GetShaderTranslatedSource() const {
+  nsString out;
+  CopyASCIItoUTF16(mTranslatedSource, out);
+  return out;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -371,11 +372,6 @@ void WebGLShader::MapTransformFeedbackVaryings(
 ////////////////////////////////////////////////////////////////////////////////
 // Boilerplate
 
-JSObject* WebGLShader::WrapObject(JSContext* js,
-                                  JS::Handle<JSObject*> givenProto) {
-  return dom::WebGLShader_Binding::Wrap(js, this, givenProto);
-}
-
 size_t WebGLShader::SizeOfIncludingThis(MallocSizeOf mallocSizeOf) const {
   size_t validatorSize = mValidator ? mallocSizeOf(mValidator.get()) : 0;
   return mallocSizeOf(this) +
@@ -394,10 +390,5 @@ void WebGLShader::Delete() {
 
   LinkedListElement<WebGLShader>::removeFrom(mContext->mShaders);
 }
-
-NS_IMPL_CYCLE_COLLECTION_WRAPPERCACHE_0(WebGLShader)
-
-NS_IMPL_CYCLE_COLLECTION_ROOT_NATIVE(WebGLShader, AddRef)
-NS_IMPL_CYCLE_COLLECTION_UNROOT_NATIVE(WebGLShader, Release)
 
 }  // namespace mozilla

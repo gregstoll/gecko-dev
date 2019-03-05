@@ -65,22 +65,21 @@ WebGLExtensionCompressedTextureASTC::WebGLExtensionCompressedTextureASTC(
 
 WebGLExtensionCompressedTextureASTC::~WebGLExtensionCompressedTextureASTC() {}
 
-void WebGLExtensionCompressedTextureASTC::GetSupportedProfiles(
-    dom::Nullable<nsTArray<nsString> >& retval) const {
-  retval.SetNull();
+Maybe<nsTArray<nsString>>
+WebGLExtensionCompressedTextureASTC::GetSupportedProfiles() const {
   if (mIsLost) {
     mContext->ErrorInvalidOperation("%s: Extension is lost.",
                                     "drawElementsInstancedANGLE");
-    return;
+    return Nothing();
   }
 
-  nsTArray<nsString>& arr = retval.SetValue();
+  nsTArray<nsString> arr;
   arr.AppendElement(NS_LITERAL_STRING("ldr"));
-
   if (mContext->gl->IsExtensionSupported(
           gl::GLContext::KHR_texture_compression_astc_hdr)) {
     arr.AppendElement(NS_LITERAL_STRING("hdr"));
   }
+  return Some(arr);
 }
 
 bool WebGLExtensionCompressedTextureASTC::IsSupported(
@@ -89,8 +88,5 @@ bool WebGLExtensionCompressedTextureASTC::IsSupported(
   return gl->IsExtensionSupported(
       gl::GLContext::KHR_texture_compression_astc_ldr);
 }
-
-IMPL_WEBGL_EXTENSION_GOOP(WebGLExtensionCompressedTextureASTC,
-                          WEBGL_compressed_texture_astc)
 
 }  // namespace mozilla

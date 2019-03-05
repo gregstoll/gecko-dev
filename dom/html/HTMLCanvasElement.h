@@ -332,6 +332,8 @@ class HTMLCanvasElement final : public nsGenericHTMLElement,
 
   bool MaybeModified() const { return mMaybeModified; };
 
+  AsyncCanvasRenderer* GetAsyncCanvasRenderer();
+
  protected:
   virtual ~HTMLCanvasElement();
 
@@ -361,8 +363,6 @@ class HTMLCanvasElement final : public nsGenericHTMLElement,
   virtual nsresult OnAttrSetButNotChanged(int32_t aNamespaceID, nsAtom* aName,
                                           const nsAttrValueOrString& aValue,
                                           bool aNotify) override;
-
-  AsyncCanvasRenderer* GetAsyncCanvasRenderer();
 
   bool mResetLayer;
   bool mMaybeModified;  // we fetched the context, so we may have written to the

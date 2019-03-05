@@ -164,7 +164,9 @@ class CanvasClientBridge final : public CanvasClient {
  public:
   CanvasClientBridge(CompositableForwarder* aLayerForwarder,
                      TextureFlags aFlags)
-      : CanvasClient(aLayerForwarder, aFlags), mLayer(nullptr) {}
+      : CanvasClient(aLayerForwarder, aFlags), mLayer(nullptr) {
+    mIsAsync = true;
+  }
 
   TextureInfo GetTextureInfo() const override {
     return TextureInfo(CompositableType::IMAGE);
@@ -175,7 +177,10 @@ class CanvasClientBridge final : public CanvasClient {
 
   virtual void UpdateAsync(AsyncCanvasRenderer* aRenderer) override;
 
-  void SetLayer(ShadowableLayer* aLayer) { mLayer = aLayer; }
+  void SetLayer(ShadowableLayer* aLayer) {
+    mLayer = aLayer;
+    Connect();
+  }
 
  protected:
   CompositableHandle mAsyncHandle;

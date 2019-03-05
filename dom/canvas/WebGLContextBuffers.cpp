@@ -5,6 +5,7 @@
 
 #include "WebGLContext.h"
 
+#include "ClientWebGLContext.h"
 #include "GLContext.h"
 #include "WebGLBuffer.h"
 #include "WebGLTransformFeedback.h"
@@ -293,51 +294,6 @@ void WebGLContext::BufferDataImpl(GLenum target, size_t dataLen,
   buffer->BufferData(target, dataLen, data, usage);
 }
 
-////
-
-void WebGLContext::BufferData(GLenum target, WebGLsizeiptr size, GLenum usage) {
-  const FuncScope funcScope(*this, "bufferData");
-  if (IsContextLost()) return;
-
-  if (!ValidateNonNegative("size", size)) return;
-
-  ////
-
-  const UniqueBuffer zeroBuffer(calloc(size, 1));
-  if (!zeroBuffer) return ErrorOutOfMemory("Failed to allocate zeros.");
-
-  BufferDataImpl(target, size_t(size), (const uint8_t*)zeroBuffer.get(), usage);
-}
-
-void WebGLContext::BufferData(GLenum target,
-                              const dom::Nullable<dom::ArrayBuffer>& maybeSrc,
-                              GLenum usage) {
-  const FuncScope funcScope(*this, "bufferData");
-  if (IsContextLost()) return;
-
-  if (!ValidateNonNull("src", maybeSrc)) return;
-  const auto& src = maybeSrc.Value();
-
-  src.ComputeLengthAndData();
-  BufferDataImpl(target, src.LengthAllowShared(), src.DataAllowShared(), usage);
-}
-
-void WebGLContext::BufferData(GLenum target, const dom::ArrayBufferView& src,
-                              GLenum usage, GLuint srcElemOffset,
-                              GLuint srcElemCountOverride) {
-  const FuncScope funcScope(*this, "bufferData");
-  if (IsContextLost()) return;
-
-  uint8_t* bytes;
-  size_t byteLen;
-  if (!ValidateArrayBufferView(src, srcElemOffset, srcElemCountOverride,
-                               LOCAL_GL_INVALID_VALUE, &bytes, &byteLen)) {
-    return;
-  }
-
-  BufferDataImpl(target, byteLen, bytes, usage);
-}
-
 ////////////////////////////////////////
 
 void WebGLContext::BufferSubDataImpl(GLenum target, WebGLsizeiptr dstByteOffset,
@@ -350,35 +306,6 @@ void WebGLContext::BufferSubDataImpl(GLenum target, WebGLsizeiptr dstByteOffset,
   if (!buffer) return;
 
   buffer->BufferSubData(target, size_t(dstByteOffset), dataLen, data);
-}
-
-////
-
-void WebGLContext::BufferSubData(GLenum target, WebGLsizeiptr dstByteOffset,
-                                 const dom::ArrayBuffer& src) {
-  const FuncScope funcScope(*this, "bufferSubData");
-  if (IsContextLost()) return;
-
-  src.ComputeLengthAndData();
-  BufferSubDataImpl(target, dstByteOffset, src.LengthAllowShared(),
-                    src.DataAllowShared());
-}
-
-void WebGLContext::BufferSubData(GLenum target, WebGLsizeiptr dstByteOffset,
-                                 const dom::ArrayBufferView& src,
-                                 GLuint srcElemOffset,
-                                 GLuint srcElemCountOverride) {
-  const FuncScope funcScope(*this, "bufferSubData");
-  if (IsContextLost()) return;
-
-  uint8_t* bytes;
-  size_t byteLen;
-  if (!ValidateArrayBufferView(src, srcElemOffset, srcElemCountOverride,
-                               LOCAL_GL_INVALID_VALUE, &bytes, &byteLen)) {
-    return;
-  }
-
-  BufferSubDataImpl(target, dstByteOffset, byteLen, bytes);
 }
 
 ////////////////////////////////////////
