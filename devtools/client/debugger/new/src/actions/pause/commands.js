@@ -21,7 +21,7 @@ import type { Source, ThreadId } from "../../types";
 import type { ThunkArgs } from "../types";
 import type { Command } from "../../reducers/types";
 
-export function selectThread(thread: string) {
+export function selectThread(thread: ThreadId) {
   return { type: "SELECT_THREAD", thread };
 }
 
