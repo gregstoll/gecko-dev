@@ -31,7 +31,7 @@ template<typename T> struct PcqParamTraits;
 }
 
 namespace webgl {
-class TexUnpackBlob;
+class TexUnpackBytes;
 }
 
 class ClientWebGLContext;
@@ -308,7 +308,7 @@ struct WebGLTexPboOffset {
 };
 
 using WebGLTexUnpackVariant =
-  Variant<UniquePtr<webgl::TexUnpackBlob>, WebGLTexPboOffset>;
+  Variant<UniquePtr<webgl::TexUnpackBytes>, WebGLTexPboOffset>;
 
 using MaybeWebGLTexUnpackVariant = Maybe<WebGLTexUnpackVariant>;
 
@@ -337,6 +337,7 @@ struct SetDimensionsData {
   WebGLContextOptions mOptions;
   bool mOptionsFrozen;
   bool mResetLayer;
+  bool mMaybeLostOldContext;
   nsresult mResult;
 };
 
@@ -370,7 +371,7 @@ public:
 
   template<typename ... As>
   operator Maybe<Variant<As...>>&&() {
-    if (mMaybeObj.isNothing()) {
+    if (!mMaybeObj) {
       return std::forward<Maybe<Variant<As...>>>(Nothing());
     }
     return std::forward<Maybe<Variant<As...>>>(Some(std::move(Variant<As...>(std::move(mMaybeObj.ref())))));

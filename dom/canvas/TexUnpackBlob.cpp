@@ -896,4 +896,25 @@ bool TexUnpackSurface::TexOrSubImage(
 }
 
 }  // namespace webgl
+
+//////////
+
+UniquePtr<webgl::TexUnpackBytes>&&
+PcqTexUnpack::TakeBlob(WebGLContext* aContext) {
+  UniquePtr<webgl::TexUnpackBytes> ret;
+  if (!mMaybeBlob) {
+    return std::move(ret);
+  }
+
+  if (mMaybeBlob.ref().is<UniquePtr<webgl::TexUnpackBytes>>()) {
+    if (!aContext->ValidateNullPixelUnpackBuffer()) {
+      return std::move(ret);
+    }
+    return std::move(mMaybeBlob.ref().as<UniquePtr<webgl::TexUnpackBytes>>());
+  }
+
+  MOZ_ASSERT_UNREACHABLE("TODO: Handle PBO case");
+  return std::move(ret);
+}
+
 }  // namespace mozilla

@@ -253,7 +253,12 @@ class WebGLContext : public SupportsWeakPtr<WebGLContext> {
   // lifetime
   HostWebGLContext* mHost;
 
-  nsresult DoSetDimensions(int32_t width, int32_t height);
+  struct DoSetDimensionsData {
+    nsresult result;
+    bool maybeLoseOldContext;
+  };
+
+  DoSetDimensionsData DoSetDimensions(int32_t width, int32_t height);
 
  public:
   NS_INLINE_DECL_REFCOUNTING(WebGLContext)
@@ -263,8 +268,9 @@ class WebGLContext : public SupportsWeakPtr<WebGLContext> {
   virtual int32_t GetHeight() { return DrawingBufferHeight(); }
 
   SetDimensionsData SetDimensions(int32_t width, int32_t height) {
-    nsresult result = DoSetDimensions(width, height);
-    return { mOptions, mOptionsFrozen, mResetLayer, result };
+    DoSetDimensionsData result = DoSetDimensions(width, height);
+    return { mOptions, mOptionsFrozen, mResetLayer,
+             result.maybeLoseOldContext, result.result };
   }
 
   NS_IMETHOD InitializeWithDrawTarget(nsIDocShell*,
@@ -300,6 +306,8 @@ class WebGLContext : public SupportsWeakPtr<WebGLContext> {
   NS_IMETHOD Redraw(const gfxRect&) {
     return NS_ERROR_NOT_IMPLEMENTED;
   }
+
+  void OnMemoryPressure();
 
   // -
 
@@ -775,24 +783,24 @@ class WebGLContext : public SupportsWeakPtr<WebGLContext> {
   void CompressedTexImage(uint8_t funcDims, GLenum target, GLint level,
                           GLenum internalFormat, GLsizei width, GLsizei height,
                           GLsizei depth, GLint border,
-                          const PcqTexUnpack& src,
+                          UniquePtr<webgl::TexUnpackBytes>&& src,
                           const Maybe<GLsizei>& expectedImageSize);
   void CompressedTexSubImage(uint8_t funcDims, GLenum target, GLint level,
                              GLint xOffset, GLint yOffset, GLint zOffset,
                              GLsizei width, GLsizei height, GLsizei depth,
-                             GLenum unpackFormat, const PcqTexUnpack& src,
+                             GLenum unpackFormat, UniquePtr<webgl::TexUnpackBytes>&& src,
                              const Maybe<GLsizei>& expectedImageSize);
 
   ////////////////////////////////////
 
  public:
   void CopyTexImage2D(GLenum target, GLint level, GLenum internalFormat,
-                      GLint x, GLint y, GLsizei width, GLsizei height,
-                      GLint border);
+                      GLint x, GLint y, uint32_t width, uint32_t height,
+                      uint32_t depth);
 
   void CopyTexSubImage(uint8_t funcDims, GLenum target, GLint level,
                        GLint xOffset, GLint yOffset, GLint zOffset, GLint x,
-                       GLint y, GLsizei width, GLsizei height);
+                       GLint y, uint32_t width, uint32_t height, uint32_t depth);
 
   ////////////////////////////////////
   // TexImage
@@ -801,15 +809,23 @@ class WebGLContext : public SupportsWeakPtr<WebGLContext> {
 
  public:
   void TexImage(uint8_t funcDims, GLenum target, GLint level,
-                GLenum internalFormat, GLsizei width, GLsizei height,
-                GLsizei depth, GLint border, GLenum unpackFormat,
-                GLenum unpackType, const PcqTexUnpack& src);
+                GLenum internalFormat, uint32_t width, uint32_t height,
+                uint32_t depth, GLint border, GLenum unpackFormat,
+                GLenum unpackType, UniquePtr<webgl::TexUnpackBytes>&& src);
 
   ////
   void TexSubImage(uint8_t funcDims, GLenum target, GLint level, GLint xOffset,
-                   GLint yOffset, GLint zOffset, GLsizei width, GLsizei height,
-                   GLsizei depth, GLenum unpackFormat, GLenum unpackType,
-                   const PcqTexUnpack& src);
+                   GLint yOffset, GLint zOffset, uint32_t width, uint32_t height,
+                   uint32_t depth, GLenum unpackFormat, GLenum unpackType,
+                   UniquePtr<webgl::TexUnpackBytes>&& src);
+
+  bool ValidateNullPixelUnpackBuffer() {
+    if (mBoundPixelUnpackBuffer) {
+      ErrorInvalidOperation("PIXEL_UNPACK_BUFFER must be null.");
+      return false;
+    }
+    return true;
+  }
 
   ////////////////////////////////////
   // WebGLTextureUpload.cpp

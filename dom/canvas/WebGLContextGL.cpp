@@ -1191,7 +1191,7 @@ WebGLContext::ReadPixels(GLint x, GLint y, GLsizei width, GLsizei height,
 
   nsTArray<uint8_t> arr;
   uint8_t* bytes;
-  if (maybeShmem.isNothing()) {
+  if (!maybeShmem) {
     arr.SetLength(byteLen);     // TODO: Make Fallible
     bytes = arr.Elements();
   } else {

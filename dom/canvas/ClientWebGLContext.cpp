@@ -13,6 +13,7 @@
 #include "HostWebGLContext.h"
 #include "WebGLMethodDispatcher.h"
 #include "WebGLChild.h"
+#include "nsIGfxInfo.h"
 
 namespace mozilla {
 
@@ -339,11 +340,11 @@ struct WebGLClientDispatcher<MethodType, method, Id, void> {
 template<typename MethodType, MethodType method,
          typename ReturnType, typename ... Args>
 ReturnType
-ClientWebGLContext::Run(const Args&... aArgs) const {
+ClientWebGLContext::Run(Args&&... aArgs) const {
   if (mHostContext) {
-    return ((mHostContext.get())->*method)(std::forward<const Args>(aArgs)...);
+    return ((mHostContext.get())->*method)(std::forward<Args>(aArgs)...);
   }
-  return WebGLClientDispatcher<MethodType, method>::Run(*this, aArgs...);
+  return WebGLClientDispatcher<MethodType, method>::Run(*this, std::forward<Args>(aArgs)...);
 }
 
 // -------------------------------------------------------------------------
@@ -356,7 +357,7 @@ ClientWebGLContext::Run(const Args&... aArgs) const {
 
 NS_IMETHODIMP
 ClientWebGLContext::SetDimensions(int32_t signedWidth, int32_t signedHeight) {
-  const FuncScope funcScope(*this, "<SetDimensions>");
+  const FuncScope funcScope(this, "<SetDimensions>");
 
   // May have a OffscreenCanvas instead of an HTMLCanvasElement
   if (GetCanvas()) GetCanvas()->InvalidateCanvas();
@@ -364,10 +365,207 @@ ClientWebGLContext::SetDimensions(int32_t signedWidth, int32_t signedHeight) {
   SetDimensionsData data =
     Run<RPROC(SetDimensionsImpl)>(signedWidth, signedHeight);
 
+  // May have a OffscreenCanvas instead of an HTMLCanvasElement
+  if (GetCanvas()) GetCanvas()->InvalidateCanvas();
+
+  // if we exceeded either the global or the per-principal limit for WebGL
+  // contexts, lose the oldest-used context now to free resources. Note that we
+  // can't do that in the ClientWebGLContext constructor as we don't have a canvas
+  // element yet there. Here is the right place to do so, as we are about to
+  // create the OpenGL context and that is what can fail if we already have too
+  // many.
+  if (data.mMaybeLostOldContext) {
+    LoseOldestWebGLContextIfLimitExceeded();
+  }
+
   mOptions = data.mOptions;
   mOptionsFrozen = data.mOptionsFrozen;
   mResetLayer = data.mResetLayer;
   return data.mResult;
+}
+
+void
+ClientWebGLContext::OnMemoryPressure() {
+  return Run<RPROC(OnMemoryPressure)>();
+}
+
+static bool IsFeatureInBlacklist(const nsCOMPtr<nsIGfxInfo>& gfxInfo,
+                                 int32_t feature,
+                                 nsCString* const out_blacklistId) {
+  int32_t status;
+  if (!NS_SUCCEEDED(gfxUtils::ThreadSafeGetFeatureStatus(
+          gfxInfo, feature, *out_blacklistId, &status))) {
+    return false;
+  }
+
+  return status != nsIGfxInfo::FEATURE_STATUS_OK;
+}
+
+NS_IMETHODIMP
+ClientWebGLContext::SetContextOptions(JSContext* cx, JS::Handle<JS::Value> options,
+                                      ErrorResult& aRvForDictionaryInit) {
+  const FuncScope funcScope(this, "getContext");
+  (void)IsContextLost();  // Ignore this.
+
+  if (options.isNullOrUndefined() && mOptionsFrozen) return NS_OK;
+
+  WebGLContextAttributes attributes;
+  if (!attributes.Init(cx, options)) {
+    aRvForDictionaryInit.Throw(NS_ERROR_UNEXPECTED);
+    return NS_ERROR_UNEXPECTED;
+  }
+
+  WebGLContextOptions newOpts;
+
+  newOpts.stencil = attributes.mStencil;
+  newOpts.depth = attributes.mDepth;
+  newOpts.premultipliedAlpha = attributes.mPremultipliedAlpha;
+  newOpts.antialias = attributes.mAntialias;
+  newOpts.preserveDrawingBuffer = attributes.mPreserveDrawingBuffer;
+  newOpts.failIfMajorPerformanceCaveat =
+      attributes.mFailIfMajorPerformanceCaveat;
+  newOpts.powerPreference = attributes.mPowerPreference;
+
+  if (attributes.mAlpha.WasPassed()) {
+    newOpts.alpha = attributes.mAlpha.Value();
+  }
+
+  // Don't do antialiasing if we've disabled MSAA.
+  if (!gfxPrefs::MSAALevel()) {
+    newOpts.antialias = false;
+  }
+
+  if (!gfxPrefs::WebGLForceMSAA()) {
+    const nsCOMPtr<nsIGfxInfo> gfxInfo = services::GetGfxInfo();
+
+    nsCString blocklistId;
+    if (IsFeatureInBlacklist(gfxInfo, nsIGfxInfo::FEATURE_WEBGL_MSAA,
+                             &blocklistId)) {
+      EnqueueWarning(
+          nsCString("Disallowing antialiased backbuffers due to blacklisting."));
+      newOpts.antialias = false;
+    }
+  }
+
+#if 0
+    EnqueueWarning("aaHint: %d stencil: %d depth: %d alpha: %d premult: %d preserve: %d\n",
+               newOpts.antialias ? 1 : 0,
+               newOpts.stencil ? 1 : 0,
+               newOpts.depth ? 1 : 0,
+               newOpts.alpha ? 1 : 0,
+               newOpts.premultipliedAlpha ? 1 : 0,
+               newOpts.preserveDrawingBuffer ? 1 : 0);
+#endif
+
+  if (mOptionsFrozen && !(newOpts == mOptions)) {
+    // Error if the options are already frozen, and the ones that were asked for
+    // aren't the same as what they were originally.
+    return NS_ERROR_FAILURE;
+  }
+
+  mOptions = newOpts;
+
+  // Send new options to the host
+  Run<RPROC(SetContextOptions)>(newOpts);
+
+  return NS_OK;
+}
+
+RefPtr<SharedSurfaceTextureClient>
+ClientWebGLContext::GetScreenTextureClient() {
+  MOZ_ASSERT_UNREACHABLE("TODO:");
+  return nullptr;
+}
+
+#if defined(MOZ_WIDGET_ANDROID)
+already_AddRefed<layers::SharedSurfaceTextureClient>
+ClientWebGLContext::GetVRFrame() {
+  if (!gl) return nullptr;
+
+  EnsureVRReady();
+
+  // Create a custom GLScreenBuffer for VR.
+  if (!mVRScreen) {
+    auto caps = gl->Screen()->mCaps;
+    mVRScreen = GLScreenBuffer::Create(gl, gfx::IntSize(1, 1), caps);
+
+    RefPtr<ImageBridgeChild> imageBridge = ImageBridgeChild::GetSingleton();
+    if (imageBridge) {
+      TextureFlags flags = TextureFlags::ORIGIN_BOTTOM_LEFT;
+      UniquePtr<gl::SurfaceFactory> factory =
+          gl::GLScreenBuffer::CreateFactory(gl, caps, imageBridge.get(), flags);
+      mVRScreen->Morph(std::move(factory));
+    }
+  }
+
+  // Swap buffers as though composition has occurred.
+  // We will then share the resulting front buffer to be submitted to the VR
+  // compositor.
+  BeginComposition(mVRScreen.get());
+  EndComposition();
+
+  if (IsContextLost()) return nullptr;
+
+  RefPtr<SharedSurfaceTextureClient> sharedSurface = mVRScreen->Front();
+  if (!sharedSurface || !sharedSurface->Surf()) return nullptr;
+
+  // Make sure that the WebGL buffer is committed to the attached SurfaceTexture
+  // on Android.
+  sharedSurface->Surf()->ProducerAcquire();
+  sharedSurface->Surf()->Commit();
+  sharedSurface->Surf()->ProducerRelease();
+
+  return sharedSurface.forget();
+}
+#else
+already_AddRefed<layers::SharedSurfaceTextureClient>
+ClientWebGLContext::GetVRFrame() {
+  RefPtr<SharedSurfaceTextureClient> sharedSurface = GetScreenTextureClient();
+  if (!sharedSurface) return nullptr;
+
+  EnsureVRReady();
+
+  /**
+   * Swap buffers as though composition has occurred.
+   * We will then share the resulting front buffer to be submitted to the VR
+   * compositor.
+   */
+  BeginComposition();
+  EndComposition();
+
+  return sharedSurface.forget();
+}
+
+#endif  // ifdefined(MOZ_WIDGET_ANDROID)
+
+void ClientWebGLContext::EnsureVRReady() {
+  if (mVRReady) {
+    return;
+  }
+
+  // Make not composited canvases work with WebVR. See bug #1492554
+  // WebGLContext::InitializeCanvasRenderer is only called when the 2D
+  // compositor renders a WebGL canvas for the first time. This causes canvases
+  // not added to the DOM not to work properly with WebVR. Here we mimic what
+  // InitializeCanvasRenderer does internally as a workaround.
+  const auto imageBridge = ImageBridgeChild::GetSingleton();
+  if (imageBridge) {
+    const auto caps = gl->Screen()->mCaps;
+    auto flags = TextureFlags::ORIGIN_BOTTOM_LEFT;
+    if (!IsPremultAlpha() && mOptions.alpha) {
+      flags |= TextureFlags::NON_PREMULTIPLIED;
+    }
+    auto factory =
+        gl::GLScreenBuffer::CreateFactory(gl, caps, imageBridge.get(), flags);
+    gl->Screen()->Morph(std::move(factory));
+#if defined(MOZ_WIDGET_ANDROID)
+    // On Android we are using a different GLScreenBuffer for WebVR, so we need
+    // a resize here because PresentScreenBuffer() may not be called for the
+    // gl->Screen() after we set the new factory.
+    gl->Screen()->Resize(DrawingBufferSize());
+#endif
+    mVRReady = true;
+  }
 }
 
 // ------------------------- GL State -------------------------
@@ -467,8 +665,8 @@ already_AddRefed<ClientWebGLShaderPrecisionFormat>
 ClientWebGLContext::GetShaderPrecisionFormat(GLenum shadertype, GLenum precisiontype) {
   MaybeWebGLVariant response =
     Run<RPROC(GetShaderPrecisionFormatImpl)>(shadertype, precisiontype);
-  if (response.isNothing() || (!response.ref().is<WebGLShaderPrecisionFormat>())) {
-    MOZ_ASSERT(response.isNothing(),
+  if ((!response) || (!response.ref().is<WebGLShaderPrecisionFormat>())) {
+    MOZ_ASSERT(!response,
                "Expected response to be WebGLShaderPrecisionFormat");
     return nullptr;
   }
@@ -738,9 +936,9 @@ ClientWebGLContext::GetBufferSubData(GLenum target, GLintptr srcByteOffset,
   Maybe<mozilla::ipc::Shmem> maybeShmem(MaybeAllocateShmem(byteLen));
   Maybe<nsTArray<uint8_t>> result =
     Run<RPROC(GetBufferSubDataImpl)>(target, srcByteOffset, byteLen, maybeShmem.isSome());
-  if (maybeShmem.isNothing()) {
+  if (!maybeShmem) {
     // The response went to the response queue
-    if (result.isNothing()) {
+    if (!result) {
       return;
     }
     RawBuffer<>(byteLen, bytes).ReadArray(result.ref());
@@ -748,7 +946,7 @@ ClientWebGLContext::GetBufferSubData(GLenum target, GLintptr srcByteOffset,
   }
 
   // The response went to the Shmem we just allocated
-  MOZ_ASSERT(result.isNothing());
+  MOZ_ASSERT(!result);
   RawBuffer<>(byteLen, bytes).ReadShmem(maybeShmem.ref());
 }
 
@@ -867,7 +1065,7 @@ ClientWebGLContext::GetInternalformatParameter(JSContext* cx, GLenum target,
                            ErrorResult& rv) {
   Maybe<nsTArray<int32_t>> maybeArr =
     Run<RPROC(GetInternalformatParameterImpl)>(target, internalformat, pname);
-  if (maybeArr.isNothing()) {
+  if (!maybeArr) {
     retval.setObjectOrNull(nullptr);
     return;
   }
@@ -917,9 +1115,15 @@ ClientWebGLContext::GenerateMipmap(GLenum texTarget) {
 
 void
 ClientWebGLContext::CopyTexImage2D(GLenum target, GLint level, GLenum internalFormat,
-               GLint x, GLint y, GLsizei width, GLsizei height,
+               GLint x, GLint y, GLsizei rawWidth, GLsizei rawHeight,
                GLint border) {
-  Run<RPROC(CopyTexImage2D)>(target, level, internalFormat, x, y, width, height, border);
+  uint32_t width, height, depth;
+  if (!ValidateExtents(rawWidth, rawHeight, 1, border, &width,
+                       &height, &depth)) {
+    return;
+  }
+
+  Run<RPROC(CopyTexImage2D)>(target, level, internalFormat, x, y, width, height, depth);
 }
 
 void
@@ -960,6 +1164,64 @@ ClientWebGLContext::TexStorage3D(GLenum target, GLsizei levels, GLenum internalF
 
 ////////////////////////////////////
 
+static inline bool DoesJSTypeMatchUnpackType(GLenum unpackType,
+                                             js::Scalar::Type jsType) {
+  switch (unpackType) {
+    case LOCAL_GL_BYTE:
+      return jsType == js::Scalar::Type::Int8;
+
+    case LOCAL_GL_UNSIGNED_BYTE:
+      return jsType == js::Scalar::Type::Uint8 ||
+             jsType == js::Scalar::Type::Uint8Clamped;
+
+    case LOCAL_GL_SHORT:
+      return jsType == js::Scalar::Type::Int16;
+
+    case LOCAL_GL_UNSIGNED_SHORT:
+    case LOCAL_GL_UNSIGNED_SHORT_4_4_4_4:
+    case LOCAL_GL_UNSIGNED_SHORT_5_5_5_1:
+    case LOCAL_GL_UNSIGNED_SHORT_5_6_5:
+    case LOCAL_GL_HALF_FLOAT:
+    case LOCAL_GL_HALF_FLOAT_OES:
+      return jsType == js::Scalar::Type::Uint16;
+
+    case LOCAL_GL_INT:
+      return jsType == js::Scalar::Type::Int32;
+
+    case LOCAL_GL_UNSIGNED_INT:
+    case LOCAL_GL_UNSIGNED_INT_2_10_10_10_REV:
+    case LOCAL_GL_UNSIGNED_INT_10F_11F_11F_REV:
+    case LOCAL_GL_UNSIGNED_INT_5_9_9_9_REV:
+    case LOCAL_GL_UNSIGNED_INT_24_8:
+      return jsType == js::Scalar::Type::Uint32;
+
+    case LOCAL_GL_FLOAT:
+      return jsType == js::Scalar::Type::Float32;
+
+    default:
+      return false;
+  }
+}
+
+////////////////////////////////////
+
+bool
+ClientWebGLContext::ValidateViewType(GLenum unpackType, const TexImageSource& src) {
+  if (!src.mView) return true;
+  const auto& view = *(src.mView);
+
+  const auto& jsType = view.Type();
+  if (!DoesJSTypeMatchUnpackType(unpackType, jsType)) {
+    EnqueueErrorInvalidOperation(
+        "ArrayBufferView type not compatible with `type`.");
+    return false;
+  }
+
+  return true;
+}
+
+////////////////////////////////////
+
 void
 ClientWebGLContext::TexImage2D(GLenum target, GLint level, GLenum internalFormat,
                 GLsizei width, GLsizei height, GLint border,
@@ -968,10 +1230,16 @@ ClientWebGLContext::TexImage2D(GLenum target, GLint level, GLenum internalFormat
   const FuncScope scope(this, FuncScopeId::texImage2D);
   const uint8_t funcDims = 2;
   const GLsizei depth = 1;
-  MaybeWebGLTexUnpackVariant blob = AsBlob(src, FuncScopeId::texImage2D);
-  if (blob.isNothing()) {
+
+  if (!ValidateViewType(unpackType, src)) {
     return;
   }
+
+  MaybeWebGLTexUnpackVariant blob = AsBlob(src, FuncScopeId::texImage2D);
+  if (!blob) {
+    return;
+  }
+
   Run<RPROC(TexImageImpl)>(funcDims, target, level, internalFormat, width, height, depth,
            border, unpackFormat, unpackType, PcqTexUnpack(std::move(blob)), GetFuncScopeId());
 }
@@ -986,10 +1254,16 @@ ClientWebGLContext::TexSubImage2D(GLenum target, GLint level, GLint xOffset, GLi
   const uint8_t funcDims = 2;
   const GLint zOffset = 0;
   const GLsizei depth = 1;
-  MaybeWebGLTexUnpackVariant blob = AsBlob(src, FuncScopeId::texSubImage2D);
-  if (blob.isNothing()) {
+
+  if (!ValidateViewType(unpackType, src)) {
     return;
   }
+
+  MaybeWebGLTexUnpackVariant blob = AsBlob(src, FuncScopeId::texSubImage2D);
+  if (!blob) {
+    return;
+  }
+
   Run<RPROC(TexSubImageImpl)>(funcDims, target, level, xOffset, yOffset, zOffset, width,
               height, depth, unpackFormat, unpackType, PcqTexUnpack(std::move(blob)),
               GetFuncScopeId());
@@ -1005,7 +1279,7 @@ ClientWebGLContext::TexImage3D(GLenum target, GLint level, GLenum internalFormat
   const FuncScope scope(this, FuncScopeId::texImage3D);
   const uint8_t funcDims = 3;
   MaybeWebGLTexUnpackVariant blob = AsBlob(src, FuncScopeId::texImage3D);
-  if (blob.isNothing()) {
+  if (!blob) {
     return;
   }
   Run<RPROC(TexImageImpl)>(funcDims, target, level, internalFormat, width, height, depth,
@@ -1022,7 +1296,7 @@ ClientWebGLContext::TexSubImage3D(GLenum target, GLint level, GLint xOffset, GLi
   const FuncScope scope(this, FuncScopeId::texSubImage3D);
   const uint8_t funcDims = 3;
   MaybeWebGLTexUnpackVariant blob = AsBlob(src, FuncScopeId::texSubImage3D);
-  if (blob.isNothing()) {
+  if (!blob) {
     return;
   }
   Run<RPROC(TexSubImageImpl)>(funcDims, target, level, xOffset, yOffset, zOffset, width,
@@ -1034,13 +1308,20 @@ ClientWebGLContext::TexSubImage3D(GLenum target, GLint level, GLint xOffset, GLi
 
 void
 ClientWebGLContext::CopyTexSubImage2D(GLenum target, GLint level, GLint xOffset,
-                       GLint yOffset, GLint x, GLint y, GLsizei width,
-                       GLsizei height) {
+                       GLint yOffset, GLint x, GLint y, GLsizei rawWidth,
+                       GLsizei rawHeight) {
   const FuncScope scope(this, FuncScopeId::copyTexSubImage2D);
   const uint8_t funcDims = 2;
   const GLint zOffset = 0;
+
+  uint32_t width, height, depth;
+  if (!ValidateExtents(rawWidth, rawHeight, 1, 0, &width,
+                       &height, &depth)) {
+    return;
+  }
+
   Run<RPROC(CopyTexSubImage)>(funcDims, target, level, xOffset, yOffset, zOffset, x, y,
-                  width, height, GetFuncScopeId());
+                  width, height, depth, GetFuncScopeId());
 }
 
  ////////////////////////////////////
@@ -1048,11 +1329,18 @@ ClientWebGLContext::CopyTexSubImage2D(GLenum target, GLint level, GLint xOffset,
 void
 ClientWebGLContext::CopyTexSubImage3D(GLenum target, GLint level, GLint xOffset,
                        GLint yOffset, GLint zOffset, GLint x, GLint y,
-                       GLsizei width, GLsizei height) {
+                       GLsizei rawWidth, GLsizei rawHeight) {
   const FuncScope scope(this, FuncScopeId::copyTexSubImage3D);
   const uint8_t funcDims = 3;
+
+  uint32_t width, height, depth;
+  if (!ValidateExtents(rawWidth, rawHeight, 1, 0, &width,
+                       &height, &depth)) {
+    return;
+  }
+
   Run<RPROC(CopyTexSubImage)>(funcDims, target, level, xOffset, yOffset, zOffset, x, y,
-                  width, height, GetFuncScopeId());
+                  width, height, depth, GetFuncScopeId());
 }
 
 void
@@ -1134,13 +1422,13 @@ ClientWebGLContext::GetFragDataLocation(const WebGLId<WebGLProgram>& prog,
 already_AddRefed<ClientWebGLActiveInfo>
 ClientWebGLContext::GetActiveAttrib(const WebGLId<WebGLProgram>& prog, GLuint index) {
   Maybe<WebGLActiveInfo> response = Run<RPROC(GetActiveAttribImpl)>(prog, index);
-  return response.isSome() ? MakeAndAddRef<ClientWebGLActiveInfo>(this, response.ref()) : nullptr;
+  return response ? MakeAndAddRef<ClientWebGLActiveInfo>(this, response.ref()) : nullptr;
 }
 
 already_AddRefed<ClientWebGLActiveInfo>
 ClientWebGLContext::GetActiveUniform(const WebGLId<WebGLProgram>& prog, GLuint index) {
   Maybe<WebGLActiveInfo> response = Run<RPROC(GetActiveUniformImpl)>(prog, index);
-  return response.isSome() ? MakeAndAddRef<ClientWebGLActiveInfo>(this, response.ref()) : nullptr;
+  return response ? MakeAndAddRef<ClientWebGLActiveInfo>(this, response.ref()) : nullptr;
 }
 
 void
@@ -1157,9 +1445,9 @@ ClientWebGLContext::GetUniformIndices(const WebGLId<WebGLProgram>& prog,
                   dom::Nullable<nsTArray<GLuint> >& retval) {
   MaybeWebGLVariant response =
     Run<RPROC(GetUniformIndicesImpl)>(prog, nsTArray<nsString>(uniformNames));
-  if (response.isNothing() ||
+  if ((!response) ||
       !(response.ref().template is<nsTArray<uint32_t>>())) {
-    MOZ_ASSERT(response.isNothing(), "response has wrong type");
+    MOZ_ASSERT(!response, "response has wrong type");
     retval.SetNull();
     return;
   }
@@ -1536,9 +1824,9 @@ ClientWebGLContext::ReadPixels(GLint x, GLint y, GLsizei width, GLsizei height,
   Maybe<mozilla::ipc::Shmem> maybeShmem(MaybeAllocateShmem(byteLen));
   Maybe<nsTArray<uint8_t>> result =
     Run<RPROC(ReadPixels2)>(x, y, width, height, format, type, byteLen, maybeShmem.isSome());
-  if (maybeShmem.isNothing()) {
+  if (!maybeShmem) {
     // The response went to the response queue
-    if (result.isNothing()) {
+    if (!result) {
       return;
     }
     RawBuffer<>(byteLen, bytes).ReadArray(result.ref());
@@ -1546,7 +1834,7 @@ ClientWebGLContext::ReadPixels(GLint x, GLint y, GLsizei width, GLsizei height,
   }
 
   // The response went to the Shmem we just allocated
-  MOZ_ASSERT(result.isNothing());
+  MOZ_ASSERT(!result);
   RawBuffer<>(byteLen, bytes).ReadShmem(maybeShmem.ref());
 }
 
@@ -1744,7 +2032,7 @@ already_AddRefed<ClientWebGLActiveInfo>
 ClientWebGLContext::GetTransformFeedbackVarying(const WebGLId<WebGLProgram>& prog, GLuint index) {
   Maybe<WebGLActiveInfo> response =
     Run<RPROC(GetTransformFeedbackVaryingImpl)>(prog, index);
-  return response.isSome() ? MakeAndAddRef<ClientWebGLActiveInfo>(this, response.ref()) : nullptr;
+  return response ? MakeAndAddRef<ClientWebGLActiveInfo>(this, response.ref()) : nullptr;
 }
 void
 ClientWebGLContext::TransformFeedbackVaryings(const WebGLId<WebGLProgram>& program,
@@ -1757,9 +2045,9 @@ ClientWebGLContext::TransformFeedbackVaryings(const WebGLId<WebGLProgram>& progr
 
 const Maybe<ExtensionSets>&
 ClientWebGLContext::GetCachedExtensions() {
-  if (mExtensions.isNothing()) {
+  if (!mExtensions) {
     mExtensions = Run<RPROC(GetSupportedExtensionsImpl)>();
-    if (mExtensions.isSome()) {
+    if (mExtensions) {
       mExtensions.ref().mNonSystem.Sort();
       mExtensions.ref().mSystem.Sort();
     }
@@ -1779,7 +2067,7 @@ ClientWebGLContext::GetExtension(dom::CallerType callerType, WebGLExtensionID ex
 void
 ClientWebGLContext::EnableExtension(dom::CallerType callerType, WebGLExtensionID ext) {
   const Maybe<ExtensionSets>& exts = GetCachedExtensions();
-  if (exts.isNothing()) {
+  if (!exts) {
     return;
   }
   if (exts.ref().mNonSystem.ContainsSorted(ext) ||
@@ -1801,7 +2089,7 @@ void
 ClientWebGLContext::GetASTCExtensionSupportedProfiles(dom::Nullable<nsTArray<nsString>>& retval) const {
   Maybe<nsTArray<nsString>> response =
     Run<RPROC(GetASTCExtensionSupportedProfilesImpl)>();
-  if (response.isNothing()) {
+  if (!response) {
     retval.SetNull();
     return;
   }

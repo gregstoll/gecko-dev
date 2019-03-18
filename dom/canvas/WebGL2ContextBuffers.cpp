@@ -135,7 +135,7 @@ WebGL2Context::GetBufferSubData(GLenum target, GLintptr srcByteOffset,
 
   nsTArray<uint8_t> arr;
   uint8_t* bytes;
-  if (maybeShmem.isNothing()) {
+  if (!maybeShmem) {
     arr.SetLength(byteLen);     // TODO: Make Fallible
     bytes = arr.Elements();
   } else {
@@ -169,7 +169,7 @@ WebGL2Context::GetBufferSubData(GLenum target, GLintptr srcByteOffset,
       gl->fBindTransformFeedback(LOCAL_GL_TRANSFORM_FEEDBACK, tfo);
     }
   }
-  return maybeShmem.isNothing() ? Some(arr) : Nothing();
+  return (!maybeShmem) ? Some(arr) : Nothing();
 }
 
 }  // namespace mozilla

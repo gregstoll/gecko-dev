@@ -1069,23 +1069,29 @@ struct PcqParamTraits<PcqTypedArg<Arg>> {
 template<typename Arg>
 struct PcqParamTraits {
   static PcqStatus
-  Write(ProducerView& aProducerView, const Arg& aArg,
-        typename EnableIf<mozilla::ipc::IsTriviallySerializable<Arg>::value, int>::Type = 0) {
+  Write(ProducerView& aProducerView, const Arg& aArg) {
+    static_assert(mozilla::ipc::template IsTriviallySerializable<Arg>::value,
+                  "No PcqParamTraits specialization was found for this type "
+                  "and it does not satisfy IsTriviallySerializable.");
     // Write self as binary
     return aProducerView.Write(&aArg, sizeof(Arg));
   }
 
   static PcqStatus
-  Read(ConsumerView& aConsumerView, Arg* aArg,
-       typename EnableIf<mozilla::ipc::IsTriviallySerializable<Arg>::value, int>::Type = 0) {
+  Read(ConsumerView& aConsumerView, Arg* aArg) {
+    static_assert(mozilla::ipc::template IsTriviallySerializable<Arg>::value,
+                  "No PcqParamTraits specialization was found for this type "
+                  "and it does not satisfy IsTriviallySerializable.");
     // Read self as binary
     return aConsumerView.Read(aArg, sizeof(Arg));
   }
 
   template<typename View>
   static constexpr size_t
-  MinSize(View& aView, const Arg* aArg,
-          typename EnableIf<mozilla::ipc::IsTriviallySerializable<Arg>::value, int>::Type = 0) {
+  MinSize(View& aView, const Arg* aArg) {
+    static_assert(mozilla::ipc::template IsTriviallySerializable<Arg>::value,
+                  "No PcqParamTraits specialization was found for this type "
+                  "and it does not satisfy IsTriviallySerializable.");
     return sizeof(Arg);
   }
 };

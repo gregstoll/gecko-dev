@@ -227,6 +227,8 @@ protected:
 
   void SetCompositableHost(RefPtr<layers::CompositableHost>& aCompositableHost);
 
+  void OnMemoryPressure();
+
   // ------------------------- GL State -------------------------
   bool IsContextLost() const;
 
@@ -490,8 +492,8 @@ protected:
 
   void
   CopyTexImage2D(GLenum target, GLint level, GLenum internalFormat,
-                 GLint x, GLint y, GLsizei width, GLsizei height,
-                 GLint border);
+                 GLint x, GLint y, uint32_t width, uint32_t height,
+                 uint32_t depth);
 
   void
   TexStorage(uint8_t funcDims, GLenum target, GLsizei levels,
@@ -502,20 +504,20 @@ protected:
   TexImageImpl(uint8_t funcDims, GLenum target, GLint level,
            GLenum internalFormat, GLsizei width, GLsizei height,
            GLsizei depth, GLint border, GLenum unpackFormat,
-           GLenum unpackType, const PcqTexUnpack&& src,
+           GLenum unpackType, PcqTexUnpack&& src,
            FuncScopeId aFuncId);
 
   void
   TexSubImageImpl(uint8_t funcDims, GLenum target, GLint level, GLint xOffset,
               GLint yOffset, GLint zOffset, GLsizei width, GLsizei height,
               GLsizei depth, GLenum unpackFormat, GLenum unpackType,
-              const PcqTexUnpack&& src, FuncScopeId aFuncId);
+              PcqTexUnpack&& src, FuncScopeId aFuncId);
 
   void
   CompressedTexImageImpl(uint8_t funcDims, GLenum target, GLint level,
                      GLenum internalFormat, GLsizei width, GLsizei height,
                      GLsizei depth, GLint border,
-                     const PcqTexUnpack&& src,
+                     PcqTexUnpack&& src,
                      const Maybe<GLsizei>& expectedImageSize,
                      FuncScopeId aFuncId);
 
@@ -523,14 +525,14 @@ protected:
   CompressedTexSubImageImpl(uint8_t funcDims, GLenum target, GLint level,
                         GLint xOffset, GLint yOffset, GLint zOffset,
                         GLsizei width, GLsizei height, GLsizei depth,
-                        GLenum unpackFormat, const PcqTexUnpack&& src,
+                        GLenum unpackFormat, PcqTexUnpack&& src,
                         const Maybe<GLsizei>& expectedImageSize,
                         FuncScopeId aFuncId);
 
   void
   CopyTexSubImage(uint8_t funcDims, GLenum target, GLint level,
                   GLint xOffset, GLint yOffset, GLint zOffset, GLint x,
-                  GLint y, GLsizei width, GLsizei height,
+                  GLint y, uint32_t width, uint32_t height, uint32_t depth,
                   FuncScopeId aFuncId);
 
   MaybeWebGLVariant

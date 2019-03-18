@@ -167,10 +167,7 @@ class PcqTexUnpack final {
     : mMaybeBlob(std::move(aMaybeBlob)) {
   }
 
-  MaybeWebGLTexUnpackVariant&& TakeBlob() const {
-    auto nonconst = const_cast<PcqTexUnpack*>(this);
-    return std::move(nonconst->mMaybeBlob);
-  }
+  UniquePtr<webgl::TexUnpackBytes>&& TakeBlob(WebGLContext* aContext);
 
   PcqTexUnpack() {}     // for PcqParamTraits and std::tuple
 

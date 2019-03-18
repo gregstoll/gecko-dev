@@ -453,6 +453,14 @@ class ClientWebGLContext
     return true;
   }
 
+  bool ValidateViewType(GLenum unpackType, const TexImageSource& src);
+
+  bool ValidateExtents(GLsizei width, GLsizei height,
+                       GLsizei depth, GLint border,
+                       uint32_t* const out_width,
+                       uint32_t* const out_height,
+                       uint32_t* const out_depth);
+
   // -------------------------------------------------------------------------
   // nsICanvasRenderingContextInternal / nsAPostRefreshObserver
   // -------------------------------------------------------------------------
@@ -1569,7 +1577,7 @@ class ClientWebGLContext
     const Maybe<ExtensionSets>& exts = GetCachedExtensions();
 
     // DLP: TODO: Cache the value and return properly filtered string array
-    if (exts.isSome()) {
+    if (exts) {
         nsTArray<nsString>& retarr = retval.SetValue();
         AddExtensionStrings(retarr, exts.ref().mNonSystem);
         if (callerType == dom::CallerType::System) {
@@ -1713,7 +1721,7 @@ class ClientWebGLContext
   template<typename MethodType, MethodType method,
            typename ReturnType = typename FunctionTypeTraits<MethodType>::ReturnType,
            typename ... Args>
-  ReturnType Run(const Args&... aArgs) const;
+  ReturnType Run(Args&&... aArgs) const;
 
   UniquePtr<ClientWebGLCommandSource> mCommandSource;
 

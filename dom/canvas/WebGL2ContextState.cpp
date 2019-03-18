@@ -166,7 +166,7 @@ MaybeWebGLVariant WebGL2Context::GetParameter(GLenum pname) {
       return AsSomeVariant(std::move(mBound3DTextures[mActiveTexture].get()));
 
     case LOCAL_GL_TRANSFORM_FEEDBACK_BINDING: {
-      const WebGLTransformFeedback* tf = mBoundTransformFeedback;
+      WebGLTransformFeedback* tf = mBoundTransformFeedback;
       if (tf == mDefaultTransformFeedback) {
         tf = nullptr;
       }

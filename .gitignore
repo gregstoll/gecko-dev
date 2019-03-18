@@ -1,5 +1,9 @@
 # .gitignore - List of filenames git should ignore
 
+# DLP ADDED:
+.gitignore
+/mozconfig.*
+
 # Filenames that should be ignored wherever they appear
 *~
 *.pyc

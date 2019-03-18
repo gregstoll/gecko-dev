@@ -787,7 +787,7 @@ struct MaybeWebGLVariantMatcher {
 JS::Value
 ClientWebGLContext::ToJSValue(JSContext* cx, const MaybeWebGLVariant& aVariant,
                               ErrorResult& rv) const {
-  if (!aVariant.isSome()) {
+  if (!aVariant) {
     return JS::NullValue();
   }
   return aVariant.ref().match(MaybeWebGLVariantMatcher(const_cast<ClientWebGLContext*>(this), cx, &rv));

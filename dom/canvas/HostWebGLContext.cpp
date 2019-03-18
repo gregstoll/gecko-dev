@@ -201,6 +201,11 @@ HostWebGLContext::SetDimensionsImpl(int32_t signedWidth, int32_t signedHeight) {
   return mContext->SetDimensions(signedWidth, signedHeight);
 }
 
+void HostWebGLContext::OnMemoryPressure() {
+  return mContext->OnMemoryPressure();
+}
+
+
 // ------------------------- GL State -------------------------
 bool
 HostWebGLContext::IsContextLost() const {
@@ -707,10 +712,10 @@ HostWebGLContext::GenerateMipmap(GLenum texTarget) {
 
 void
 HostWebGLContext::CopyTexImage2D(GLenum target, GLint level, GLenum internalFormat,
-               GLint x, GLint y, GLsizei width, GLsizei height,
-               GLint border) {
+                                 GLint x, GLint y, uint32_t width, uint32_t height,
+                                 uint32_t depth) {
   mContext->CopyTexImage2D(target, level, internalFormat,
-                           x, y, width, height, border);
+                           x, y, width, height, depth);
 }
 
 void
@@ -727,57 +732,57 @@ void
 HostWebGLContext::TexImageImpl(uint8_t funcDims, GLenum target, GLint level,
                                GLenum internalFormat, GLsizei width, GLsizei height,
                                GLsizei depth, GLint border, GLenum unpackFormat,
-                               GLenum unpackType, const PcqTexUnpack&& src,
+                               GLenum unpackType, PcqTexUnpack&& src,
                                FuncScopeId aFuncId) {
   const WebGLContext::FuncScope scope(*mContext, GetFuncScopeName(aFuncId));
   mContext->TexImage(funcDims, target, level, internalFormat, width, height,
-                     depth, border, unpackFormat, unpackType, src.TakeBlob());
+                     depth, border, unpackFormat, unpackType, std::move(src.TakeBlob(mContext)));
 }
 
 void
 HostWebGLContext::TexSubImageImpl(uint8_t funcDims, GLenum target, GLint level, GLint xOffset,
                                   GLint yOffset, GLint zOffset, GLsizei width, GLsizei height,
                                   GLsizei depth, GLenum unpackFormat, GLenum unpackType,
-                                  const PcqTexUnpack&& src, FuncScopeId aFuncId) {
+                                  PcqTexUnpack&& src, FuncScopeId aFuncId) {
   const WebGLContext::FuncScope scope(*mContext, GetFuncScopeName(aFuncId));
   mContext->TexSubImage(funcDims, target, level, xOffset, yOffset,
                         zOffset, width, height, depth, unpackFormat,
-                        unpackType, src.TakeBlob());
+                        unpackType, std::move(src.TakeBlob(mContext)));
 }
 
 void
 HostWebGLContext::CompressedTexImageImpl(uint8_t funcDims, GLenum target, GLint level,
                                          GLenum internalFormat, GLsizei width, GLsizei height,
                                          GLsizei depth, GLint border,
-                                         const PcqTexUnpack&& src,
+                                         PcqTexUnpack&& src,
                                          const Maybe<GLsizei>& expectedImageSize,
                                          FuncScopeId aFuncId) {
   const WebGLContext::FuncScope scope(*mContext, GetFuncScopeName(aFuncId));
   mContext->CompressedTexImage(funcDims, target, level, internalFormat, width, height,
-                     depth, border, src.TakeBlob(), expectedImageSize);
+                     depth, border, std::move(src.TakeBlob(mContext)), expectedImageSize);
 }
 
 void
 HostWebGLContext::CompressedTexSubImageImpl(uint8_t funcDims, GLenum target, GLint level,
                                             GLint xOffset, GLint yOffset, GLint zOffset,
                                             GLsizei width, GLsizei height, GLsizei depth,
-                                            GLenum unpackFormat, const PcqTexUnpack&& src,
+                                            GLenum unpackFormat, PcqTexUnpack&& src,
                                             const Maybe<GLsizei>& expectedImageSize,
                                             FuncScopeId aFuncId) {
   const WebGLContext::FuncScope scope(*mContext, GetFuncScopeName(aFuncId));
   mContext->CompressedTexSubImage(funcDims, target, level, xOffset, yOffset,
                                   zOffset, width, height, depth, unpackFormat,
-                                  src.TakeBlob(), expectedImageSize);
+                                  std::move(src.TakeBlob(mContext)), expectedImageSize);
 }
 
 void
 HostWebGLContext::CopyTexSubImage(uint8_t funcDims, GLenum target, GLint level,
                 GLint xOffset, GLint yOffset, GLint zOffset, GLint x,
-                GLint y, GLsizei width, GLsizei height,
+                GLint y, uint32_t width, uint32_t height, uint32_t depth,
                 FuncScopeId aFuncId) {
   const WebGLContext::FuncScope scope(*mContext, GetFuncScopeName(aFuncId));
   mContext->CopyTexSubImage(funcDims, target, level, xOffset, yOffset,
-                            zOffset, x, y, width, height);
+                            zOffset, x, y, width, height, depth);
 }
 
 MaybeWebGLVariant
