@@ -548,11 +548,13 @@ class ClientWebGLContext
     return DrawingBufferSize().height;
   }
   void GetContextAttributes(dom::Nullable<dom::WebGLContextAttributes>& retval);
+
   already_AddRefed<layers::SharedSurfaceTextureClient> GetVRFrame();
   void EnsureVRReady();
 
  private:
   gfx::IntSize DrawingBufferSize();
+  RefPtr<SharedSurfaceTextureClient> GetScreenTextureClient();
 
   // -------------------------------------------------------------------------
   // Client-side helper methods.  Dispatch to a Host method.

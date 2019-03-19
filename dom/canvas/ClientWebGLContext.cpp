@@ -473,7 +473,7 @@ ClientWebGLContext::SetContextOptions(JSContext* cx, JS::Handle<JS::Value> optio
 
 RefPtr<SharedSurfaceTextureClient>
 ClientWebGLContext::GetScreenTextureClient() {
-  MOZ_ASSERT_UNREACHABLE("TODO:");
+  MOZ_ASSERT_UNREACHABLE("TODO: Get SharedSurfaceTextureClient that represents gl->Front from host");
   return nullptr;
 }
 
