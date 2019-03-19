@@ -554,7 +554,7 @@ class ClientWebGLContext
 
  private:
   gfx::IntSize DrawingBufferSize();
-  RefPtr<SharedSurfaceTextureClient> GetScreenTextureClient();
+  RefPtr<layers::SharedSurfaceTextureClient> GetScreenTextureClient();
 
   // -------------------------------------------------------------------------
   // Client-side helper methods.  Dispatch to a Host method.
@@ -1072,20 +1072,6 @@ class ClientWebGLContext
   ////////////////////////////////////
 
  public:
-  void CopyTexSubImage2D(GLenum target, GLint level, GLint xOffset,
-                         GLint yOffset, GLint x, GLint y, GLsizei width,
-                         GLsizei height);
-
-   ////////////////////////////////////
-
- public:
-  void CopyTexSubImage3D(GLenum target, GLint level, GLint xOffset,
-                         GLint yOffset, GLint zOffset, GLint x, GLint y,
-                         GLsizei width, GLsizei height);
-
-  ////////////////////////////////////
-
- public:
   void CompressedTexImage3D(GLenum target, GLint level, GLenum internalFormat,
                             GLsizei width, GLsizei height, GLsizei depth,
                             GLint border, GLsizei imageSize,
@@ -1164,6 +1150,19 @@ class ClientWebGLContext
                               const Maybe<GLsizei>& expectedImageSize,
                               FuncScopeId aFuncId);
   MaybeWebGLTexUnpackVariant&& AsBlob(const TexImageSource& aSrc, FuncScopeId aFuncId);
+
+  ////////////////////////////////////
+
+ public:
+  void CopyTexSubImage2D(GLenum target, GLint level, GLint xOffset,
+                         GLint yOffset, GLint x, GLint y, GLsizei width,
+                         GLsizei height);
+
+   ////////////////////////////////////
+
+  void CopyTexSubImage3D(GLenum target, GLint level, GLint xOffset,
+                         GLint yOffset, GLint zOffset, GLint x, GLint y,
+                         GLsizei width, GLsizei height);
 
   // ------------------- Programs and shaders --------------------------------
  public:

@@ -426,10 +426,8 @@ MaybeWebGLTexUnpackVariant&& ClientWebGLContext::From(
 ////////////////////////////////////////////////////////////////////////////////
 
 static bool ValidateTexOrSubImage(
-    WebGLContext* webgl, TexImageTarget target, GLsizei rawWidth,
-    GLsizei rawHeight, GLsizei rawDepth, GLint border,
-    const webgl::PackingInfo& pi, UniquePtr<webgl::TexUnpackBytes>& src,
-    dom::Uint8ClampedArray* const scopedArr) {
+    WebGLContext* webgl, const webgl::PackingInfo& pi,
+    UniquePtr<webgl::TexUnpackBytes>& src) {
   return ValidateUnpackInfo(webgl, pi) && src && src->Validate(webgl, pi);
 }
 
@@ -438,10 +436,7 @@ void WebGLTexture::TexImage(TexImageTarget target, GLint level,
                             GLsizei height, GLsizei depth, GLint border,
                             const webgl::PackingInfo& pi,
                             UniquePtr<webgl::TexUnpackBytes>&& src) {
-  dom::RootedSpiderMonkeyInterface<dom::Uint8ClampedArray> scopedArr(
-      dom::RootingCx());
-  if (!ValidateTexOrSubImage(mContext, target, width, height,
-                             depth, border, pi, src, &scopedArr)) {
+  if (!ValidateTexOrSubImage(mContext, pi, src)) {
     return;
   }
 
@@ -453,11 +448,7 @@ void WebGLTexture::TexSubImage(TexImageTarget target, GLint level,
                                GLsizei width, GLsizei height, GLsizei depth,
                                const webgl::PackingInfo& pi,
                                UniquePtr<webgl::TexUnpackBytes>&& src) {
-  const GLint border = 0;
-  dom::RootedSpiderMonkeyInterface<dom::Uint8ClampedArray> scopedArr(
-      dom::RootingCx());
-  if (!ValidateTexOrSubImage(mContext, target, width, height,
-                             depth, border, pi, src, &scopedArr)) {
+  if (!ValidateTexOrSubImage(mContext, pi, src)) {
     return;
   }
 

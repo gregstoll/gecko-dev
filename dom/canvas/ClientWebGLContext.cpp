@@ -7,6 +7,7 @@
 
 #include "mozilla/layers/CompositorBridgeChild.h"
 #include "mozilla/layers/LayerTransactionChild.h"
+#include "mozilla/layers/TextureClientSharedSurface.h"
 #include "TexUnpackBlob.h"
 #include "WebGLContextEndpoint.h"
 #include "mozilla/dom/WebGLContextEvent.h"

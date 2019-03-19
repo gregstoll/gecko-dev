@@ -157,8 +157,8 @@ class TexUnpackSurface final : public TexUnpackBlob {
 }  // namespace webgl
 
 /**
- * A wrapper for a TexUnpackBlob so that one can be sent to another process.
- * The type of that underlying blob may change when represented in a remote
+ * Simple wrapper for a TexUnpackBlobs so that they can be sent to another process.
+ * The derived type of that underlying blob may change when represented in a remote
  * process.
  */
 class PcqTexUnpack final {
@@ -167,6 +167,8 @@ class PcqTexUnpack final {
     : mMaybeBlob(std::move(aMaybeBlob)) {
   }
 
+  // Take the owned blob.  Returns null if the blob was already taken or if it
+  // is not a TexUnpackBytes.
   UniquePtr<webgl::TexUnpackBytes>&& TakeBlob(WebGLContext* aContext);
 
   PcqTexUnpack() {}     // for PcqParamTraits and std::tuple
