@@ -211,12 +211,12 @@ class CompositorBridgeChild final : public PCompositorBridgeChild,
   dom::PWebGLChild*
   AllocPWebGLChild(const WebGLVersion& aVersion,
                    UniquePtr<HostWebGLCommandSink>&& aCommandSink,
-                   UniquePtr<HostWebGLErrorSource>&& aErrorSource) override;
+                   UniquePtr<HostWebGLErrorSource>&& aErrorSource);
   dom::PWebGLChild*
   AllocPWebGLChild(const WebGLVersion& aVersion,
                    UniquePtr<HostWebGLCommandSink>& aCommandSink,
-                   UniquePtr<HostWebGLErrorSource>& aErrorSource) override;
-  bool DeallocPWebGLChild(PWebGLChild* aActor) override;
+                   UniquePtr<HostWebGLErrorSource>& aErrorSource);
+  bool DeallocPWebGLChild(PWebGLChild* aActor);
 
   void WillEndTransaction();
 

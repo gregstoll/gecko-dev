@@ -1662,41 +1662,4 @@ bool webgl::LinkedProgramInfo::FindUniform(
   return true;
 }
 
-<<<<<<< HEAD
-////////////////////////////////////////////////////////////////////////////////
-
-JSObject* WebGLProgram::WrapObject(JSContext* js,
-                                   JS::Handle<JSObject*> givenProto) {
-  return dom::WebGLProgram_Binding::Wrap(js, this, givenProto);
-}
-
-NS_IMPL_CYCLE_COLLECTION_WRAPPERCACHE(WebGLProgram, mVertShader, mFragShader)
-
-NS_IMPL_CYCLE_COLLECTION_ROOT_NATIVE(WebGLProgram, AddRef)
-NS_IMPL_CYCLE_COLLECTION_UNROOT_NATIVE(WebGLProgram, Release)
-=======
-bool webgl::LinkedProgramInfo::MapFragDataName(
-    const nsCString& userName, nsCString* const out_mappedName) const {
-  // FS outputs can be arrays, but not structures.
-
-  if (fragDataMap.empty()) {
-    // No mappings map from validation, so just forward it.
-    *out_mappedName = userName;
-    return true;
-  }
-
-  nsCString baseUserName;
-  bool isArray;
-  size_t arrayIndex;
-  if (!ParseName(userName, &baseUserName, &isArray, &arrayIndex)) return false;
-
-  const auto itr = fragDataMap.find(baseUserName);
-  if (itr == fragDataMap.end()) return false;
-
-  const auto& baseMappedName = itr->second;
-  AssembleName(baseMappedName, isArray, arrayIndex, out_mappedName);
-  return true;
-}
->>>>>>> WIP Bug 1477756: Run WebGL graphics commands in compositor process
-
 }  // namespace mozilla

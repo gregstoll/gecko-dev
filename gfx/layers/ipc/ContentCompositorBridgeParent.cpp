@@ -656,7 +656,7 @@ void ContentCompositorBridgeParent::ObserveLayersUpdate(
 }
 
 dom::PWebGLParent*
-CrossProcessCompositorBridgeParent::AllocPWebGLParent(const WebGLVersion& aVersion,
+ContentCompositorBridgeParent::AllocPWebGLParent(const WebGLVersion& aVersion,
                                                       UniquePtr<HostWebGLCommandSink>&& aCommandSink,
                                                       UniquePtr<HostWebGLErrorSource>&& aErrorSource) {
   return dom::WebGLParent::Create(aVersion,
@@ -665,7 +665,7 @@ CrossProcessCompositorBridgeParent::AllocPWebGLParent(const WebGLVersion& aVersi
 }
 
 bool
-CrossProcessCompositorBridgeParent::DeallocPWebGLParent(PWebGLParent* aWebGLParent) {
+ContentCompositorBridgeParent::DeallocPWebGLParent(PWebGLParent* aWebGLParent) {
   delete aWebGLParent;
   return true;
 }

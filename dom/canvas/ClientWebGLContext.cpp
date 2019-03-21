@@ -426,6 +426,15 @@ ClientWebGLContext::SetContextOptions(JSContext* cx, JS::Handle<JS::Value> optio
   newOpts.failIfMajorPerformanceCaveat =
       attributes.mFailIfMajorPerformanceCaveat;
   newOpts.powerPreference = attributes.mPowerPreference;
+  MOZ_ASSERT(mCanvasElement || mOffscreenCanvas);
+  newOpts.shouldResistFingerprinting =
+      mCanvasElement ?
+                     // If we're constructed from a canvas element
+          nsContentUtils::ShouldResistFingerprinting(GetOwnerDoc())
+                     :
+                     // If we're constructed from an offscreen canvas
+          nsContentUtils::ShouldResistFingerprinting(
+              mOffscreenCanvas->GetOwnerGlobal()->PrincipalOrNull());
 
   if (attributes.mAlpha.WasPassed()) {
     newOpts.alpha = attributes.mAlpha.Value();

@@ -83,6 +83,7 @@ class WebGLUniformLocation;
 class WebGLVertexArray;
 
 namespace dom {
+class Document;
 class Element;
 class ImageData;
 class OwningHTMLCanvasElementOrOffscreenCanvas;

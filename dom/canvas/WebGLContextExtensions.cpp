@@ -110,15 +110,6 @@ bool WebGLContext::IsExtensionSupported(dom::CallerType callerType,
 bool WebGLContext::IsExtensionSupported(WebGLExtensionID ext) const {
   if (mDisableExtensions) return false;
 
-  bool shouldResistFingerprinting =
-      mCanvasElement ?
-                     // If we're constructed from a canvas element
-          nsContentUtils::ShouldResistFingerprinting(GetOwnerDoc())
-                     :
-                     // If we're constructed from an offscreen canvas
-          nsContentUtils::ShouldResistFingerprinting(
-              mOffscreenCanvas->GetOwnerGlobal()->PrincipalOrNull());
-
   switch (ext) {
     // In alphabetical order
     // ANGLE_
@@ -213,10 +204,10 @@ bool WebGLContext::IsExtensionSupported(WebGLExtensionID ext) const {
 
     case WebGLExtensionID::WEBGL_debug_renderer_info:
       return Preferences::GetBool("webgl.enable-debug-renderer-info", false) &&
-             !shouldResistFingerprinting;
+             !mOptions.shouldResistFingerprinting;
 
     case WebGLExtensionID::WEBGL_debug_shaders:
-      return !shouldResistFingerprinting;
+      return !mOptions.shouldResistFingerprinting;
 
     case WebGLExtensionID::WEBGL_depth_texture:
       return WebGLExtensionDepthTexture::IsSupported(this);

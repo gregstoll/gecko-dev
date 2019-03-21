@@ -67,7 +67,7 @@ WebGL2Context::GetInternalformatParameter(GLenum target,
   if (sampleCount > 0) {
     GLint* samples = static_cast<GLint*>(obj.AppendElements(sampleCount));
     gl->fGetInternalformativ(LOCAL_GL_RENDERBUFFER, internalformat,
-                             LOCAL_GL_SAMPLES, samples.size(), samples.data());
+                             LOCAL_GL_SAMPLES, sampleCount, samples);
   }
 
   return Some(obj);

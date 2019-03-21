@@ -1119,7 +1119,7 @@ bool ClientWebGLContext::InitializeCanvasRenderer(nsDisplayListBuilder* aBuilder
   return true;
 }
 
-nsIDocument* ClientWebGLContext::GetOwnerDoc() const {
+mozilla::dom::Document* ClientWebGLContext::GetOwnerDoc() const {
   MOZ_ASSERT(mCanvasElement);
   if (!mCanvasElement) {
     return nullptr;

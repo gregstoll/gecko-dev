@@ -1137,7 +1137,7 @@ HostWebGLContext::GetTransformFeedbackVaryingImpl(const WebGLId<WebGLProgram>& p
 // ------------------------------ Debug ------------------------------------
 void
 HostWebGLContext::EnqueueError(GLenum aGLError, const nsCString& aMsg) {
-  mContext->SynthesizeGLError(aGLError, aMsg.BeginReading());
+  mContext->GenerateError(aGLError, aMsg.BeginReading());
 }
 
 void

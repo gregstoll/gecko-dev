@@ -3376,12 +3376,6 @@ class _GenerateProtocolActorCode(ipdl.ast.Visitor):
                     _deallocMethod(managed, self.side),
                     params=[Decl(actortype, 'aActor')],
                     ret=Type.BOOL, methodspec=MethodSpec.PURE)))
-    
-                if self.hasMoveableParams(md):
-                    self.cls.addstmt(StmtDecl(MethodDecl(
-                        _allocMethod(managed, self.side).name,
-                        params=md.makeCxxParams(paramsems = "move", side=self.side, implicit=False),
-                        ret=actortype, methodspec=MethodSpec.PURE)))
 
         # ActorDestroy() method; default is no-op
         if self.side == 'parent':
@@ -3997,9 +3991,9 @@ class _GenerateProtocolActorCode(ipdl.ast.Visitor):
                 self.cls.addstmts([self.genHelperCtor(md), Whitespace.NL])
 
             if isctor and isasync:
-                sendmethod, movesendmethod, (recvlbl, recvcase) = self.genAsyncCtor(md)
+                sendmethod, (recvlbl, recvcase) = self.genAsyncCtor(md)
             elif isctor:
-                sendmethod, movesendmethod = self.genBlockingCtorMethod(md)
+                sendmethod = self.genBlockingCtorMethod(md)
             elif isdtor and isasync:
                 sendmethod, (recvlbl, recvcase) = self.genAsyncDtor(md)
             elif isdtor:
@@ -4071,25 +4065,13 @@ class _GenerateProtocolActorCode(ipdl.ast.Visitor):
             + [warnif,
                StmtReturn(actor.var())])
 
-        if self.hasMoveableParams(md):
-            movemethod = MethodDefn(self.makeSendMethodDecl(md, paramsems='move'))
-            movemethod.addstmts(stmts
-                + self.genVerifyMessage(md.decl.type.verify, md.params,
-                                        errfnSendCtor, ExprVar('msg__'))
-                + sendstmts
-                + [warnif,
-                   StmtReturn(actor.var())])
-        else:
-            movemethod = None
-
-
         lbl = CaseLabel(md.pqReplyId())
         case = StmtBlock()
         case.addstmt(StmtReturn(_Result.Processed))
         # TODO not really sure what to do with async ctor "replies" yet.
         # destroy actor if there was an error?  tricky ...
 
-        return method, movemethod, (lbl, case)
+        return method, (lbl, case)
 
     def genBlockingCtorMethod(self, md):
         actor = md.actorDecl()
@@ -4109,20 +4091,6 @@ class _GenerateProtocolActorCode(ipdl.ast.Visitor):
             + sendstmts
             + self.failCtorIf(md, ExprNot(sendok)))
 
-        if self.hasMoveableParams(md):
-            movemethod = MethodDefn(self.makeSendMethodDecl(md, paramsems='move'))
-            movemethod.addstmts(self.ctorPrologue(md) + [Whitespace.NL])
-            movemethod.addstmts(
-                stmts
-                + [Whitespace.NL,
-                    StmtDecl(Decl(Type('Message'), replyvar.name))]
-                + self.genVerifyMessage(md.decl.type.verify, md.params,
-                                        errfnSendCtor, ExprVar('msg__'))
-                + sendstmts
-                + self.failCtorIf(md, ExprNot(sendok)))
-        else:
-            movemethod = None
-
         def errfnCleanupCtor(msg):
             return self.failCtorIf(md, ExprLiteral.TRUE)
         stmts = self.deserializeReply(
@@ -4130,10 +4098,7 @@ class _GenerateProtocolActorCode(ipdl.ast.Visitor):
             errfnCleanupCtor, errfnSentinel(ExprLiteral.NULL))
         method.addstmts(stmts + [StmtReturn(actor.var())])
 
-        if movemethod is not None:
-            movemethod.addstmts(stmts + [StmtReturn(actor.var())])
-
-        return method, movemethod
+        return method
 
     def ctorPrologue(self, md, errfn=ExprLiteral.NULL, idexpr=None):
         actordecl = md.actorDecl()
@@ -4859,7 +4824,7 @@ class _GenerateProtocolActorCode(ipdl.ast.Visitor):
     def callAllocActor(self, md, retsems, side):
         return self.thisCall(
             _allocMethod(md.decl.type.constructedType(), side),
-            args=md.makeCxxArgs(retsems=retsems, retcallsems='out',
+            args=md.makeCxxArgs(paramsems='move', retsems=retsems, retcallsems='out',
                                 implicit=False))
 
     def callActorDestroy(self, actorexpr, why=_DestroyReason.Deletion):

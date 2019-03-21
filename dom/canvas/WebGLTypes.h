@@ -328,7 +328,8 @@ struct WebGLContextOptions {
   bool failIfMajorPerformanceCaveat = false;
   dom::WebGLPowerPreference powerPreference =
       dom::WebGLPowerPreference::Default;
-
+  bool shouldResistFingerprinting = true;
+      
   WebGLContextOptions();
   bool operator==(const WebGLContextOptions&) const;
 };

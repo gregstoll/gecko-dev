@@ -205,16 +205,8 @@ class WebGLProgram final : public WebGLRefCountedObject<WebGLProgram>,
     return mMostRecentLinkInfo.get();
   }
 
-<<<<<<< HEAD
   const auto& FragShader() const { return mFragShader; }
 
-  WebGLContext* GetParentObject() const { return mContext; }
-
-  virtual JSObject* WrapObject(JSContext* js,
-                               JS::Handle<JSObject*> givenProto) override;
-
-=======
->>>>>>> WIP Bug 1477756: Run WebGL graphics commands in compositor process
  private:
   ~WebGLProgram();
 

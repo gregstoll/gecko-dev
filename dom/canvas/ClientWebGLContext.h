@@ -1781,7 +1781,7 @@ class ClientWebGLContext
   // Clean up the context after captured for compositing
   void EndComposition();
 
-  nsIDocument* GetOwnerDoc() const;
+  mozilla::dom::Document* GetOwnerDoc() const;
 
   // Allocate a Shemem with at least nBytes free, or don't, depending on
   // some opaque decision procedure.

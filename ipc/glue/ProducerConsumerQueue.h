@@ -998,7 +998,7 @@ struct IPDLParamTraits<mozilla::detail::PcqBase> {
 
   static void Write(IPC::Message* aMsg, IProtocol* aActor, paramType& aParam) {
     WriteIPDLParam(aMsg, aActor, aParam.QueueSize());
-    WriteIPDLParam(aMsg, aActor, aParam.mShmem);
+    WriteIPDLParam(aMsg, aActor, std::move(aParam.mShmem));
   }
 
   static bool Read(const IPC::Message* aMsg, PickleIterator* aIter,

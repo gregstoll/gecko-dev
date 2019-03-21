@@ -7,10 +7,7 @@
 #define WEBGLCHILD_H_
 
 #include "mozilla/dom/PWebGLChild.h"
-#include "nsICanvasRenderingContextInternal.h"
 #include "nsWeakReference.h"
-#include "nsQueryObject.h"
-#include "ClientWebGLContext.h"
 
 namespace mozilla {
 
@@ -20,27 +17,12 @@ namespace dom {
 
 class WebGLChild : public PWebGLChild {
  public:
-  mozilla::ipc::IPCResult RecvQueueFailed() override {
-    mozilla::ClientWebGLContext* context = GetContext();
-    if (context) {
-      context->OnQueueFailed();
-    }
-    return Send__delete__(this) ? IPC_OK() : IPC_FAIL_NO_REASON(this);
-  }
-
-  mozilla::ClientWebGLContext* GetContext() {
-    nsCOMPtr<nsICanvasRenderingContextInternal> ret = do_QueryReferent(mContext);
-    if (!ret) {
-      return nullptr;
-    }
-    return static_cast<mozilla::ClientWebGLContext*>(ret.get());
-  }
+  mozilla::ipc::IPCResult RecvQueueFailed();
+  mozilla::ClientWebGLContext* GetContext();
 
  protected:
   friend mozilla::ClientWebGLContext;
-  void SetContext(mozilla::ClientWebGLContext* aContext) {
-    mContext = do_GetWeakReference(aContext);
-  }
+  void SetContext(mozilla::ClientWebGLContext* aContext);
 
   nsWeakPtr mContext;
 };

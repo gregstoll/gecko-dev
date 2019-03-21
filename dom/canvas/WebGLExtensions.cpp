@@ -23,11 +23,6 @@ void WebGLExtensionBase::MarkLost() {
   OnMarkLost();
 }
 
-NS_IMPL_CYCLE_COLLECTION_WRAPPERCACHE_0(WebGLExtensionBase)
-
-NS_IMPL_CYCLE_COLLECTION_ROOT_NATIVE(WebGLExtensionBase, AddRef)
-NS_IMPL_CYCLE_COLLECTION_UNROOT_NATIVE(WebGLExtensionBase, Release)
-
 // -
 
 WebGLExtensionFloatBlend::WebGLExtensionFloatBlend(WebGLContext* const webgl)
@@ -47,8 +42,6 @@ bool WebGLExtensionFloatBlend::IsSupported(const WebGLContext* const webgl) {
   return !gl->IsGLES() || gl->IsANGLE() ||
          gl->IsExtensionSupported(gl::GLContext::EXT_float_blend);
 }
-
-IMPL_WEBGL_EXTENSION_GOOP(WebGLExtensionFloatBlend, EXT_float_blend)
 
 // -
 
@@ -70,7 +63,5 @@ bool WebGLExtensionFBORenderMipmap::IsSupported(
   if (gl->Version() >= 300) return true;
   return gl->IsExtensionSupported(gl::GLContext::OES_fbo_render_mipmap);
 }
-
-IMPL_WEBGL_EXTENSION_GOOP(WebGLExtensionFBORenderMipmap, OES_fbo_render_mipmap)
 
 }  // namespace mozilla

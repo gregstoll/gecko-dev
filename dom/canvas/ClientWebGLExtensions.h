@@ -78,6 +78,8 @@ class ClientWebGLExtensionCompressedTextureASTC : public ClientWebGLExtensionBas
   }
 };
 
+DECLARE_SIMPLE_WEBGL_EXTENSION(WebGLExtensionFloatBlend)
+
 DECLARE_SIMPLE_WEBGL_EXTENSION(WebGLExtensionCompressedTextureBPTC)
 
 DECLARE_SIMPLE_WEBGL_EXTENSION(WebGLExtensionCompressedTextureES3)
@@ -87,6 +89,8 @@ DECLARE_SIMPLE_WEBGL_EXTENSION(WebGLExtensionCompressedTextureETC1)
 DECLARE_SIMPLE_WEBGL_EXTENSION(WebGLExtensionCompressedTexturePVRTC)
 
 DECLARE_SIMPLE_WEBGL_EXTENSION(WebGLExtensionCompressedTextureRGTC)
+
+DECLARE_SIMPLE_WEBGL_EXTENSION(WebGLExtensionFBORenderMipmap)
 
 DECLARE_SIMPLE_WEBGL_EXTENSION(WebGLExtensionCompressedTextureS3TC)
 

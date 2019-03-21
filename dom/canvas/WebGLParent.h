@@ -30,6 +30,8 @@ class WebGLParent
          UniquePtr<mozilla::HostWebGLErrorSource>&& aErrorSource);
 
  protected:
+  friend PWebGLParent;
+
   WebGLParent(UniquePtr<HostWebGLContext>&& aHost);
 
   bool BeginCommandQueueDrain();
@@ -38,7 +40,7 @@ class WebGLParent
 
   mozilla::ipc::IPCResult
   RecvUpdateAsyncHandle(layers::PLayerTransactionParent* aLayerTransaction,
-                        const CompositableHandle& aHandle) override;
+                        const CompositableHandle& aHandle);
 
   mozilla::ipc::IPCResult Recv__delete__() override;
 
