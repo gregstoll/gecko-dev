@@ -334,12 +334,21 @@ struct WebGLContextOptions {
   bool operator==(const WebGLContextOptions&) const;
 };
 
+// return value for the SetDimensions message
 struct SetDimensionsData {
   WebGLContextOptions mOptions;
   bool mOptionsFrozen;
   bool mResetLayer;
   bool mMaybeLostOldContext;
   nsresult mResult;
+};
+
+// return value for the InitializeCanvasRenderer message
+struct ICRData {
+  gfx::IntSize size;
+  bool hasAlpha;
+  bool supportsAlpha;
+  bool isPremultAlpha;
 };
 
 using Int32Array2 = Array<int32_t,2>;

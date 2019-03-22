@@ -25,8 +25,6 @@ class nsITimerCallback;
 
 namespace mozilla {
 
-class WebGLContext;
-
 namespace layers {
 class AsyncCanvasRenderer;
 class CanvasRenderer;
@@ -49,6 +47,7 @@ class File;
 class HTMLCanvasPrintState;
 class OffscreenCanvas;
 class PrintCallback;
+class PWebGLChild;
 class RequestedFrameRefreshObserver;
 
 // Listen visibilitychange and memory-pressure event and inform
@@ -328,11 +327,11 @@ class HTMLCanvasElement final : public nsGenericHTMLElement,
   static void SetAttrFromAsyncCanvasRenderer(AsyncCanvasRenderer* aRenderer);
   static void InvalidateFromAsyncCanvasRenderer(AsyncCanvasRenderer* aRenderer);
 
-  already_AddRefed<layers::SharedSurfaceTextureClient> GetVRFrame();
-
   bool MaybeModified() const { return mMaybeModified; };
 
   AsyncCanvasRenderer* GetAsyncCanvasRenderer();
+
+  PWebGLChild* GetWebGLChild();
 
  protected:
   virtual ~HTMLCanvasElement();

@@ -6,6 +6,7 @@
 #include "WebGLParent.h"
 
 #include "mozilla/layers/LayerTransactionParent.h"
+#include "mozilla/layers/TextureClientSharedSurface.h"
 #include "HostWebGLContext.h"
 
 namespace mozilla {
@@ -125,6 +126,15 @@ WebGLParent::RecvUpdateAsyncHandle(layers::PLayerTransactionParent* aLayerTransa
 
   mHost->SetCompositableHost(compositableHost);
   return IPC_OK();
+}
+
+already_AddRefed<layers::SharedSurfaceTextureClient>
+WebGLParent::GetVRFrame() {
+  if (!mHost) {
+    return nullptr;
+  }
+
+  return mHost->GetVRFrame();  
 }
 
 } // namespace dom

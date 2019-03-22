@@ -399,8 +399,7 @@ class WebGLContext : public SupportsWeakPtr<WebGLContext> {
   bool UpdateWebRenderCanvasData(nsDisplayListBuilder* aBuilder,
                                  layers::WebRenderCanvasData* aCanvasData);
 
-  bool InitializeCanvasRenderer(nsDisplayListBuilder* aBuilder,
-                                layers::CanvasRenderer* aRenderer);
+  Maybe<ICRData> InitializeCanvasRenderer(layers::LayersBackend backend);
 
   gl::GLContext* GL() const { return gl; }
 
@@ -414,6 +413,8 @@ class WebGLContext : public SupportsWeakPtr<WebGLContext> {
 
   // Prepare the context for capture before compositing
   void BeginComposition(gl::GLScreenBuffer* const screen = nullptr);
+
+  void EndComposition() { }
 
   // a number that increments every time we have an event that causes
   // all context resources to be lost.
@@ -548,6 +549,9 @@ class WebGLContext : public SupportsWeakPtr<WebGLContext> {
   void LinkProgram(WebGLProgram& prog);
   void PixelStorei(GLenum pname, GLint param);
   void PolygonOffset(GLfloat factor, GLfloat units);
+
+  already_AddRefed<layers::SharedSurfaceTextureClient> GetVRFrame();
+  void EnsureVRReady();
 
   ////
 
@@ -912,6 +916,7 @@ class WebGLContext : public SupportsWeakPtr<WebGLContext> {
   bool mCanLoseContextInForeground = true;
   bool mShouldPresent;
   bool mDisableFragHighP;
+  bool mVRReady = false;
 
   template <typename WebGLObjectType>
   void DeleteWebGLObjectsArray(nsTArray<WebGLObjectType>& array);

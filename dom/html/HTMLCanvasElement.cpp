@@ -1420,8 +1420,8 @@ void HTMLCanvasElement::InvalidateFromAsyncCanvasRenderer(
   element->InvalidateCanvasContent(nullptr);
 }
 
-already_AddRefed<layers::SharedSurfaceTextureClient>
-HTMLCanvasElement::GetVRFrame() {
+PWebGLChild*
+HTMLCanvasElement::GetWebGLChild() {
   if (GetCurrentContextType() != CanvasContextType::WebGL1 &&
       GetCurrentContextType() != CanvasContextType::WebGL2) {
     return nullptr;
@@ -1433,7 +1433,7 @@ HTMLCanvasElement::GetVRFrame() {
     return nullptr;
   }
 
-  return webgl->GetVRFrame();
+  return webgl->GetWebGLChild();
 }
 
 }  // namespace dom

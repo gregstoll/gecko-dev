@@ -316,9 +316,8 @@ class ClientWebGLContext
   }
 
   MaybeWebGLTexUnpackVariant&& From(TexImageTarget target, GLsizei rawWidth,
-                                       GLsizei rawHeight, GLsizei rawDepth,
-                                       GLint border, const TexImageSource& src,
-                                       dom::Uint8ClampedArray* const scopedArr);
+                                    GLsizei rawHeight, GLsizei rawDepth,
+                                    GLint border, const TexImageSource& src);
 
   MaybeWebGLTexUnpackVariant&& FromDomElem(TexImageTarget target,
                                               uint32_t width, uint32_t height,
@@ -420,6 +419,7 @@ class ClientWebGLContext
 
   bool ValidateArrayBufferView(const dom::ArrayBufferView& view,
                                GLuint elemOffset, GLuint elemCountOverride,
+                               const GLenum errorEnum,
                                uint8_t** const out_bytes,
                                size_t* const out_byteLen);
 
@@ -527,6 +527,8 @@ class ClientWebGLContext
   void Invalidate();
 
  protected:
+  layers::LayersBackend GetCompositorBackendType() const;
+
   bool mInvalidated = false;
   bool mCapturedFrameInvalidated = false;
 
@@ -549,12 +551,13 @@ class ClientWebGLContext
   }
   void GetContextAttributes(dom::Nullable<dom::WebGLContextAttributes>& retval);
 
-  already_AddRefed<layers::SharedSurfaceTextureClient> GetVRFrame();
-  void EnsureVRReady();
+  mozilla::dom::PWebGLChild* GetWebGLChild();
 
  private:
   gfx::IntSize DrawingBufferSize();
-  RefPtr<layers::SharedSurfaceTextureClient> GetScreenTextureClient();
+  bool HasAlphaSupport() { return mHWSupportsAlpha; }
+
+  bool mHWSupportsAlpha = false;
 
   // -------------------------------------------------------------------------
   // Client-side helper methods.  Dispatch to a Host method.
@@ -1736,7 +1739,7 @@ class ClientWebGLContext
   // ---------------------------------------------------------------------
   //
   // where 'A -> B' means "A owns B"
-  dom::WebGLChild* mWebGLChild;
+  mozilla::dom::WebGLChild* mWebGLChild;
 
   UniquePtr<HostWebGLContext> mHostContext;
 
@@ -1791,7 +1794,6 @@ class ClientWebGLContext
   uint64_t mLastUseIndex = 0;
   bool mResetLayer = true;
   bool mOptionsFrozen = false;
-  bool mVRReady = false;
   WebGLContextOptions mOptions;
   WebGLPixelStore mPixelStore;
 };

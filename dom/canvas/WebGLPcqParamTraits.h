@@ -39,6 +39,9 @@ template<>
 struct IsTriviallySerializable<SetDimensionsData> : TrueType {};
 
 template<>
+struct IsTriviallySerializable<ICRData> : TrueType {};
+
+template<>
 struct PcqParamTraits<ExtensionSets> {
   using ParamType = ExtensionSets;
 

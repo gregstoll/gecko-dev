@@ -7,6 +7,7 @@
 
 #include "CompositableHost.h"
 #include "mozilla/layers/LayerTransactionChild.h"
+#include "mozilla/layers/TextureClientSharedSurface.h"
 
 #include "TexUnpackBlob.h"
 #include "WebGL1Context.h"
@@ -191,6 +192,11 @@ HostWebGLContext::CreateQueryImpl(const WebGLId<WebGLQuery>& aId,
 }
 
 // ------------------------- Composition -------------------------
+Maybe<ICRData>
+HostWebGLContext::InitializeCanvasRenderer(layers::LayersBackend backend) {
+  return mContext->InitializeCanvasRenderer(backend);
+}
+
 void
 HostWebGLContext::SetContextOptions(const WebGLContextOptions& options) {
   mContext->SetOptions(options);
@@ -1375,5 +1381,11 @@ void HostWebGLContext::OnRestoredContext() {
   }
   mErrorSource->RunCommand(WebGLErrorCommand::OnRestoredContext);
 }
+
+already_AddRefed<layers::SharedSurfaceTextureClient>
+HostWebGLContext::GetVRFrame() {
+  return mContext->GetVRFrame();  
+}
+
 
 } // namespace mozilla

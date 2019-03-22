@@ -219,6 +219,9 @@ protected:
  public:
 
   // ------------------------- Composition -------------------------
+  Maybe<ICRData>
+  InitializeCanvasRenderer(layers::LayersBackend backend);
+
   void
   SetContextOptions(const WebGLContextOptions& options);
 
@@ -847,6 +850,10 @@ protected:
   void OnLostContext();
 
   void OnRestoredContext();
+
+  // Etc
+ public:
+  already_AddRefed<layers::SharedSurfaceTextureClient> GetVRFrame();
 
  protected:
   static WebGLContext* MakeWebGLContext(WebGLVersion aVersion);

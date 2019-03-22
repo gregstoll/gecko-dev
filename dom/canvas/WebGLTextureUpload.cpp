@@ -224,16 +224,16 @@ static MaybeWebGLTexUnpackVariant&& FromImageBitmap(
   return AsSomeVariant(ToTexUnpackBytes(std::move(texUnpackBlob)));
 }
 
-static MaybeWebGLTexUnpackVariant&& FromImageData(
-    ClientWebGLContext* webgl, TexImageTarget target, uint32_t width, uint32_t height,
-    uint32_t depth, const dom::ImageData& imageData,
-    dom::Uint8ClampedArray* scopedArr) {
-  DebugOnly<bool> inited = scopedArr->Init(imageData.GetDataObject());
+static MaybeWebGLTexUnpackVariant&&
+FromImageData(ClientWebGLContext* webgl, TexImageTarget target, uint32_t width,
+              uint32_t height, uint32_t depth, const dom::ImageData& imageData) {
+  dom::Uint32Array scopedArr;
+  DebugOnly<bool> inited = scopedArr.Init(imageData.GetDataObject());
   MOZ_ASSERT(inited);
+  scopedArr.ComputeLengthAndData();
 
-  scopedArr->ComputeLengthAndData();
-  const DebugOnly<size_t> dataSize = scopedArr->Length();
-  const void* const data = scopedArr->Data();
+  const DebugOnly<size_t> dataSize = scopedArr.Length();
+  const void* const data = scopedArr.Data();
 
   const gfx::IntSize size(imageData.Width(), imageData.Height());
   const size_t stride = size.width * 4;
@@ -391,8 +391,7 @@ MaybeWebGLTexUnpackVariant&& ClientWebGLContext::FromDomElem(
 
 MaybeWebGLTexUnpackVariant&& ClientWebGLContext::From(
     TexImageTarget target, GLsizei rawWidth, GLsizei rawHeight,
-    GLsizei rawDepth, GLint border, const TexImageSource& src,
-    dom::Uint8ClampedArray* const scopedArr) {
+    GLsizei rawDepth, GLint border, const TexImageSource& src) {
   uint32_t width, height, depth;
   if (!ValidateExtents(rawWidth, rawHeight, rawDepth, border, &width,
                        &height, &depth)) {
@@ -410,8 +409,7 @@ MaybeWebGLTexUnpackVariant&& ClientWebGLContext::From(
   }
 
   if (src.mImageData) {
-    return std::move(FromImageData(this, target, width, height, depth, *(src.mImageData),
-                             scopedArr));
+    return std::move(FromImageData(this, target, width, height, depth, *(src.mImageData)));
   }
 
   if (src.mDomElem) {
@@ -420,7 +418,8 @@ MaybeWebGLTexUnpackVariant&& ClientWebGLContext::From(
   }
 
   return std::move(FromView(this, target, width, height, depth, src.mView,
-                    src.mViewElemOffset, src.mViewElemLengthOverride));
+                   src.mViewElemOffset, src.mViewElemLengthOverride,
+                   LOCAL_GL_INVALID_OPERATION));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1316,7 +1315,8 @@ MaybeWebGLTexUnpackVariant&& ClientWebGLContext::FromCompressed(
   }
 
   return std::move(FromView(this, target, width, height, depth, src.mView,
-                           src.mViewElemOffset, src.mViewElemLengthOverride));
+                            src.mViewElemOffset, src.mViewElemLengthOverride,
+                            LOCAL_GL_INVALID_VALUE));
 }
 
 void WebGLTexture::CompressedTexImage(TexImageTarget target, GLint level,

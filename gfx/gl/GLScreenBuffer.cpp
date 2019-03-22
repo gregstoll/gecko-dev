@@ -64,9 +64,17 @@ UniquePtr<SurfaceFactory> GLScreenBuffer::CreateFactory(
     GLContext* gl, const SurfaceCaps& caps,
     KnowsCompositor* compositorConnection, const layers::TextureFlags& flags) {
   LayersIPCChannel* ipcChannel = compositorConnection->GetTextureForwarder();
-  const layers::LayersBackend backend =
+  layers::LayersBackend backend =
       compositorConnection->GetCompositorBackendType();
-  const bool useANGLE = compositorConnection->GetCompositorUseANGLE();
+  bool useANGLE = compositorConnection->GetCompositorUseANGLE();
+  return CreateFactory(gl, caps, ipcChannel, backend, useANGLE, flags);
+}
+
+/* static */
+UniquePtr<SurfaceFactory> GLScreenBuffer::CreateFactory(
+    GLContext* gl, const SurfaceCaps& caps, LayersIPCChannel* ipcChannel,
+    layers::LayersBackend backend, bool useANGLE,
+    const layers::TextureFlags& flags) {
 
   const bool useGl =
       !gfxPrefs::WebGLForceLayersReadback() &&

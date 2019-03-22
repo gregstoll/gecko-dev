@@ -46,6 +46,7 @@
 #include "nsIWidget.h"
 #include "nsIXPConnect.h"
 #include "nsServiceManagerUtils.h"
+#include "SharedSurfaceGL.h"
 #include "SVGObserverUtils.h"
 #include "prenv.h"
 #include "ScopedGLHelpers.h"
@@ -984,190 +985,6 @@ WebGLContext::GetInputStream(const char* mimeType,
                                   mimeType, encoderOptions, out_stream);
 }
 
-void ClientWebGLContext::UpdateLastUseIndex() {
-  static CheckedInt<uint64_t> sIndex = 0;
-
-  sIndex++;
-
-  // should never happen with 64-bit; trying to handle this would be riskier
-  // than not handling it as the handler code would never get exercised.
-  if (!sIndex.isValid())
-    MOZ_CRASH("Can't believe it's been 2^64 transactions already!");
-  mLastUseIndex = sIndex.value();
-}
-
-static uint8_t gWebGLLayerUserData;
-
-class WebGLContextUserData : public LayerUserData {
- public:
-  explicit WebGLContextUserData(HTMLCanvasElement* canvas) : mCanvas(canvas) {}
-
-  /* PreTransactionCallback gets called by the Layers code every time the
-   * WebGL canvas is going to be composited.
-   */
-  static void PreTransactionCallback(void* data) {
-    ClientWebGLContext* webgl = static_cast<ClientWebGLContext*>(data);
-
-    // Prepare the context for composition
-    webgl->BeginComposition();
-  }
-
-  /** DidTransactionCallback gets called by the Layers code everytime the WebGL
-   * canvas gets composite, so it really is the right place to put actions that
-   * have to be performed upon compositing
-   */
-  static void DidTransactionCallback(void* data) {
-    ClientWebGLContext* webgl = static_cast<ClientWebGLContext*>(data);
-
-    // Clean up the context after composition
-    webgl->EndComposition();
-  }
-
- private:
-  RefPtr<HTMLCanvasElement> mCanvas;
-};
-
-already_AddRefed<layers::Layer> ClientWebGLContext::GetCanvasLayer(
-    nsDisplayListBuilder* builder, Layer* oldLayer, LayerManager* manager) {
-  if (!mResetLayer && oldLayer && oldLayer->HasUserData(&gWebGLLayerUserData)) {
-    RefPtr<layers::Layer> ret = oldLayer;
-    return ret.forget();
-  }
-
-  RefPtr<CanvasLayer> canvasLayer = manager->CreateCanvasLayer();
-  if (!canvasLayer) {
-    NS_WARNING("CreateCanvasLayer returned null!");
-    return nullptr;
-  }
-
-  WebGLContextUserData* userData = nullptr;
-  if (builder->IsPaintingToWindow() && mCanvasElement) {
-    userData = new WebGLContextUserData(mCanvasElement);
-  }
-
-  canvasLayer->SetUserData(&gWebGLLayerUserData, userData);
-
-  CanvasRenderer* canvasRenderer = canvasLayer->CreateOrGetCanvasRenderer();
-  if (!InitializeCanvasRenderer(builder, canvasRenderer)) return nullptr;
-
-  if (!gl) {
-    NS_WARNING("GLContext is null!");
-    return nullptr;
-  }
-
-  uint32_t flags = gl->Caps().alpha ? 0 : Layer::CONTENT_OPAQUE;
-  canvasLayer->SetContentFlags(flags);
-
-  mResetLayer = false;
-
-  return canvasLayer.forget();
-}
-
-bool ClientWebGLContext::UpdateWebRenderCanvasData(nsDisplayListBuilder* aBuilder,
-                                                   WebRenderCanvasData* aCanvasData) {
-  CanvasRenderer* renderer = aCanvasData->GetCanvasRenderer();
-
-  if (!mResetLayer && renderer) {
-    return true;
-  }
-
-  renderer = aCanvasData->CreateCanvasRenderer();
-  if (!InitializeCanvasRenderer(aBuilder, renderer)) {
-    // Clear CanvasRenderer of WebRenderCanvasData
-    aCanvasData->ClearCanvasRenderer();
-    return false;
-  }
-
-  MOZ_ASSERT(renderer);
-  mResetLayer = false;
-  return true;
-}
-
-bool ClientWebGLContext::InitializeCanvasRenderer(nsDisplayListBuilder* aBuilder,
-                                            CanvasRenderer* aRenderer) {
-  const FuncScope funcScope(this, "<InitializeCanvasRenderer>");
-  if (IsContextLost()) return false;
-
-  CanvasInitializeData data;
-  if (aBuilder->IsPaintingToWindow() && mCanvasElement) {
-    // Make the layer tell us whenever a transaction finishes (including
-    // the current transaction), so we can clear our invalidation state and
-    // start invalidating again. We need to do this for the layer that is
-    // being painted to a window (there shouldn't be more than one at a time,
-    // and if there is, flushing the invalidation state more often than
-    // necessary is harmless).
-
-    // The layer will be destroyed when we tear down the presentation
-    // (at the latest), at which time this userData will be destroyed,
-    // releasing the reference to the element.
-    // The userData will receive DidTransactionCallbacks, which flush the
-    // the invalidation state to indicate that the canvas is up to date.
-    data.mPreTransCallback = WebGLContextUserData::PreTransactionCallback;
-    data.mPreTransCallbackData = this;
-    data.mDidTransCallback = WebGLContextUserData::DidTransactionCallback;
-    data.mDidTransCallbackData = this;
-  }
-
-  data.mSize = DrawingBufferSize();
-  data.mHasAlpha = mOptions.alpha;
-  data.mIsGLAlphaPremult = IsPremultAlpha() || !data.mHasAlpha;
-  data.mGLContext = gl;
-
-  aRenderer->Initialize(data);
-  aRenderer->SetDirty();
-  mVRReady = true;
-  return true;
-}
-
-mozilla::dom::Document* ClientWebGLContext::GetOwnerDoc() const {
-  MOZ_ASSERT(mCanvasElement);
-  if (!mCanvasElement) {
-    return nullptr;
-  }
-  return mCanvasElement->OwnerDoc();
-}
-
-void ClientWebGLContext::Commit() {
-  if (mOffscreenCanvas) {
-    mOffscreenCanvas->CommitFrameToCompositor();
-  }
-}
-
-void ClientWebGLContext::GetCanvas(
-    Nullable<dom::OwningHTMLCanvasElementOrOffscreenCanvas>& retval) {
-  if (mCanvasElement) {
-    MOZ_RELEASE_ASSERT(!mOffscreenCanvas, "GFX: Canvas is offscreen.");
-
-    if (mCanvasElement->IsInNativeAnonymousSubtree()) {
-      retval.SetNull();
-    } else {
-      retval.SetValue().SetAsHTMLCanvasElement() = mCanvasElement;
-    }
-  } else if (mOffscreenCanvas) {
-    retval.SetValue().SetAsOffscreenCanvas() = mOffscreenCanvas;
-  } else {
-    retval.SetNull();
-  }
-}
-
-void ClientWebGLContext::GetContextAttributes(
-    dom::Nullable<dom::WebGLContextAttributes>& retval) {
-  retval.SetNull();
-  const FuncScope funcScope(this, "getContextAttributes");
-  if (IsContextLost()) return;
-
-  dom::WebGLContextAttributes& result = retval.SetValue();
-
-  result.mAlpha.Construct(mOptions.alpha);
-  result.mDepth = mOptions.depth;
-  result.mStencil = mOptions.stencil;
-  result.mAntialias = mOptions.antialias;
-  result.mPremultipliedAlpha = mOptions.premultipliedAlpha;
-  result.mPreserveDrawingBuffer = mOptions.preserveDrawingBuffer;
-  result.mFailIfMajorPerformanceCaveat = mOptions.failIfMajorPerformanceCaveat;
-  result.mPowerPreference = mOptions.powerPreference;
-}
-
 // -
 
 namespace webgl {
@@ -1262,6 +1079,46 @@ void WebGLContext::BlitBackbufferToCurDriverFB() const {
   }
 }
 
+Maybe<ICRData>
+WebGLContext::InitializeCanvasRenderer(layers::LayersBackend backend) 
+{
+  if (!gl) {
+    return Nothing();
+  }
+
+  ICRData ret;
+  ret.size = DrawingBufferSize();
+  ret.hasAlpha = mOptions.alpha;
+  ret.supportsAlpha = gl->Caps().alpha;
+  ret.isPremultAlpha = IsPremultAlpha();
+
+  TextureFlags flags = TextureFlags::ORIGIN_BOTTOM_LEFT;
+  if ((!IsPremultAlpha()) && mOptions.alpha) {
+    flags |= TextureFlags::NON_PREMULTIPLIED;
+  }
+
+  // NB: This is weak.  Creating TextureClient objects in the host-side
+  // WebGLContext class... but these are different concepts of host/client.
+  // Host/ClientWebGLContext represent cross-process communication but
+  // TextureHost/Client represent synchronous texture access, which can
+  // be uniprocess and, for us, is.  Also note that TextureClient couldn't
+  // be in the content process like ClientWebGLContext since TextureClient
+  // uses a GL context.
+  UniquePtr<gl::SurfaceFactory> factory =
+    gl::GLScreenBuffer::CreateFactory(gl, gl->Caps(), nullptr, backend,
+                                      gl->IsANGLE(), flags);
+
+  if (!factory) {
+    // Absolutely must have a factory here, so create a basic one
+    factory = MakeUnique<gl::SurfaceFactory_Basic>(gl, gl->Caps(), flags);
+  }
+
+  gl->Screen()->Morph(std::move(factory));
+
+  mVRReady = true;
+  return Some(ret);
+}
+
 // For an overview of how WebGL compositing works, see:
 // https://wiki.mozilla.org/Platform/GFX/WebGL/Compositing
 bool WebGLContext::PresentScreenBuffer(GLScreenBuffer* const targetScreen) {
@@ -1326,6 +1183,8 @@ void ClientWebGLContext::EndComposition() {
   // Mark ourselves as no longer invalidated.
   MarkContextClean();
   UpdateLastUseIndex();
+  
+  // Host-side EndComposition is a no-op
 }
 
 void WebGLContext::DummyReadFramebufferOperation() {
@@ -1485,8 +1344,9 @@ void WebGLContext::UpdateContextLossStatus() {
     // Context is lost, but we should try to restore it.
 
     if (mAllowContextRestore) {
-      if (NS_FAILED(
-              SetDimensions(mRequestedSize.width, mRequestedSize.height))) {
+      DoSetDimensionsData sdData =
+        DoSetDimensions(mRequestedSize.width, mRequestedSize.height);
+      if (NS_FAILED(sdData.result)) {
         // Assume broken forever.
         mAllowContextRestore = false;
       }
@@ -1745,8 +1605,6 @@ ScopedDrawCallWrapper::~ScopedDrawCallWrapper() {
   if (mWebGL.mBoundDrawFramebuffer) return;
 
   mWebGL.mResolvedDefaultFB = nullptr;
-
-  mWebGL.Invalidate();
   mWebGL.mShouldPresent = true;
 }
 
@@ -1970,6 +1828,103 @@ CheckedUint32 WebGLContext::GetUnpackSize(bool isFunc3D, uint32_t width,
   return totalBytes;
 }
 
+
+#if defined(MOZ_WIDGET_ANDROID)
+already_AddRefed<layers::SharedSurfaceTextureClient>
+WebGLContext::GetVRFrame() {
+  if (!gl) return nullptr;
+
+  EnsureVRReady();
+
+  // Create a custom GLScreenBuffer for VR.
+  if (!mVRScreen) {
+    auto caps = gl->Screen()->mCaps;
+    mVRScreen = GLScreenBuffer::Create(gl, gfx::IntSize(1, 1), caps);
+
+    // DLP: TODO: !!! Android
+    RefPtr<ImageBridgeChild> imageBridge = ImageBridgeChild::GetSingleton();
+    if (imageBridge) {
+      TextureFlags flags = TextureFlags::ORIGIN_BOTTOM_LEFT;
+      UniquePtr<gl::SurfaceFactory> factory =
+          gl::GLScreenBuffer::CreateFactory(gl, caps, imageBridge.get(), flags);
+      mVRScreen->Morph(std::move(factory));
+    }
+  }
+
+  // Swap buffers as though composition has occurred.
+  // We will then share the resulting front buffer to be submitted to the VR
+  // compositor.
+  BeginComposition(mVRScreen.get());
+  EndComposition();
+
+  if (IsContextLost()) return nullptr;
+
+  RefPtr<SharedSurfaceTextureClient> sharedSurface = mVRScreen->Front();
+  if (!sharedSurface || !sharedSurface->Surf()) return nullptr;
+
+  // Make sure that the WebGL buffer is committed to the attached SurfaceTexture
+  // on Android.
+  sharedSurface->Surf()->ProducerAcquire();
+  sharedSurface->Surf()->Commit();
+  sharedSurface->Surf()->ProducerRelease();
+
+  return sharedSurface.forget();
+}
+#else
+already_AddRefed<layers::SharedSurfaceTextureClient>
+WebGLContext::GetVRFrame() {
+  if (!gl) return nullptr;
+
+  EnsureVRReady();
+  /**
+   * Swap buffers as though composition has occurred.
+   * We will then share the resulting front buffer to be submitted to the VR
+   * compositor.
+   */
+  BeginComposition();
+  EndComposition();
+
+  gl::GLScreenBuffer* screen = gl->Screen();
+  if (!screen) return nullptr;
+
+  RefPtr<SharedSurfaceTextureClient> sharedSurface = screen->Front();
+  if (!sharedSurface) return nullptr;
+
+  return sharedSurface.forget();
+}
+
+#endif  // ifdefined(MOZ_WIDGET_ANDROID)
+
+void WebGLContext::EnsureVRReady() {
+  if (mVRReady) {
+    return;
+  }
+
+  // Make not composited canvases work with WebVR. See bug #1492554
+  // WebGLContext::InitializeCanvasRenderer is only called when the 2D
+  // compositor renders a WebGL canvas for the first time. This causes canvases
+  // not added to the DOM not to work properly with WebVR. Here we mimic what
+  // InitializeCanvasRenderer does internally as a workaround.
+  const auto imageBridge = ImageBridgeChild::GetSingleton();
+  if (imageBridge) {
+    const auto caps = gl->Screen()->mCaps;
+    auto flags = TextureFlags::ORIGIN_BOTTOM_LEFT;
+    if (!IsPremultAlpha() && mOptions.alpha) {
+      flags |= TextureFlags::NON_PREMULTIPLIED;
+    }
+    auto factory =
+        gl::GLScreenBuffer::CreateFactory(gl, caps, imageBridge.get(), flags);
+    gl->Screen()->Morph(std::move(factory));
+#if defined(MOZ_WIDGET_ANDROID)
+    // On Android we are using a different GLScreenBuffer for WebVR, so we need
+    // a resize here because PresentScreenBuffer() may not be called for the
+    // gl->Screen() after we set the new factory.
+    gl->Screen()->Resize(DrawingBufferSize());
+#endif
+    mVRReady = true;
+  }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 static inline size_t SizeOfViewElem(const dom::ArrayBufferView& view) {
@@ -2015,6 +1970,7 @@ bool WebGLContext::ValidateArrayBufferView(const dom::ArrayBufferView& view,
 bool ClientWebGLContext::ValidateArrayBufferView(const dom::ArrayBufferView& view,
                                                  GLuint elemOffset,
                                                  GLuint elemCountOverride,
+                                                 const GLenum errorEnum,
                                                  uint8_t** const out_bytes,
                                                  size_t* const out_byteLen) {
   view.ComputeLengthAndData();
@@ -2101,19 +2057,12 @@ bool WebGLContext::IsContextLost() const {
 
 // --
 
-// --
-
 webgl::AvailabilityRunnable* WebGLContext::EnsureAvailabilityRunnable() {
   if (!mAvailabilityRunnable) {
     RefPtr<webgl::AvailabilityRunnable> runnable =
         new webgl::AvailabilityRunnable(this);
 
-    Document* document = GetOwnerDoc();
-    if (document) {
-      document->Dispatch(TaskCategory::Other, runnable.forget());
-    } else {
-      NS_DispatchToCurrentThread(runnable.forget());
-    }
+    NS_DispatchToCurrentThread(runnable.forget());
   }
   return mAvailabilityRunnable;
 }

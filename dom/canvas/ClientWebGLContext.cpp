@@ -6,6 +6,7 @@
 #include "ClientWebGLContext.h"
 
 #include "mozilla/layers/CompositorBridgeChild.h"
+#include "mozilla/layers/ImageBridgeChild.h"
 #include "mozilla/layers/LayerTransactionChild.h"
 #include "mozilla/layers/TextureClientSharedSurface.h"
 #include "TexUnpackBlob.h"
@@ -356,6 +357,206 @@ ClientWebGLContext::Run(Args&&... aArgs) const {
 
 // ------------------------- Composition, etc -------------------------
 
+void ClientWebGLContext::UpdateLastUseIndex() {
+  static CheckedInt<uint64_t> sIndex = 0;
+
+  sIndex++;
+
+  // should never happen with 64-bit; trying to handle this would be riskier
+  // than not handling it as the handler code would never get exercised.
+  if (!sIndex.isValid())
+    MOZ_CRASH("Can't believe it's been 2^64 transactions already!");
+  mLastUseIndex = sIndex.value();
+}
+
+static uint8_t gWebGLLayerUserData;
+
+class WebGLContextUserData : public LayerUserData {
+ public:
+  explicit WebGLContextUserData(HTMLCanvasElement* canvas) : mCanvas(canvas) {}
+
+  /* PreTransactionCallback gets called by the Layers code every time the
+   * WebGL canvas is going to be composited.
+   */
+  static void PreTransactionCallback(void* data) {
+    ClientWebGLContext* webgl = static_cast<ClientWebGLContext*>(data);
+
+    // Prepare the context for composition
+    webgl->BeginComposition();
+  }
+
+  /** DidTransactionCallback gets called by the Layers code everytime the WebGL
+   * canvas gets composite, so it really is the right place to put actions that
+   * have to be performed upon compositing
+   */
+  static void DidTransactionCallback(void* data) {
+    ClientWebGLContext* webgl = static_cast<ClientWebGLContext*>(data);
+
+    // Clean up the context after composition
+    webgl->EndComposition();
+  }
+
+ private:
+  RefPtr<HTMLCanvasElement> mCanvas;
+};
+
+already_AddRefed<layers::Layer> ClientWebGLContext::GetCanvasLayer(
+    nsDisplayListBuilder* builder, Layer* oldLayer, LayerManager* manager) {
+  if (!mResetLayer && oldLayer && oldLayer->HasUserData(&gWebGLLayerUserData)) {
+    RefPtr<layers::Layer> ret = oldLayer;
+    return ret.forget();
+  }
+
+  RefPtr<CanvasLayer> canvasLayer = manager->CreateCanvasLayer();
+  if (!canvasLayer) {
+    NS_WARNING("CreateCanvasLayer returned null!");
+    return nullptr;
+  }
+
+  WebGLContextUserData* userData = nullptr;
+  if (builder->IsPaintingToWindow() && mCanvasElement) {
+    userData = new WebGLContextUserData(mCanvasElement);
+  }
+
+  canvasLayer->SetUserData(&gWebGLLayerUserData, userData);
+
+  CanvasRenderer* canvasRenderer = canvasLayer->CreateOrGetCanvasRenderer();
+  if (!InitializeCanvasRenderer(builder, canvasRenderer)) return nullptr;
+
+  uint32_t flags = HasAlphaSupport() ? 0 : Layer::CONTENT_OPAQUE;
+  canvasLayer->SetContentFlags(flags);
+
+  mResetLayer = false;
+
+  return canvasLayer.forget();
+}
+
+bool ClientWebGLContext::UpdateWebRenderCanvasData(nsDisplayListBuilder* aBuilder,
+                                                   WebRenderCanvasData* aCanvasData) {
+  CanvasRenderer* renderer = aCanvasData->GetCanvasRenderer();
+
+  if (!mResetLayer && renderer) {
+    return true;
+  }
+
+  renderer = aCanvasData->CreateCanvasRenderer();
+  if (!InitializeCanvasRenderer(aBuilder, renderer)) {
+    // Clear CanvasRenderer of WebRenderCanvasData
+    aCanvasData->ClearCanvasRenderer();
+    return false;
+  }
+
+  MOZ_ASSERT(renderer);
+  mResetLayer = false;
+  return true;
+}
+
+mozilla::dom::PWebGLChild*
+ClientWebGLContext::GetWebGLChild() { return mWebGLChild; }
+
+bool ClientWebGLContext::InitializeCanvasRenderer(nsDisplayListBuilder* aBuilder,
+                                                  CanvasRenderer* aRenderer) {
+  const FuncScope funcScope(this, "<InitializeCanvasRenderer>");
+  if (IsContextLost()) return false;
+
+  Maybe<ICRData> icrData =
+    Run<RPROC(InitializeCanvasRenderer)>(GetCompositorBackendType());
+
+  if(!icrData) {
+    return false;
+  }
+
+  mHWSupportsAlpha = icrData->supportsAlpha;
+
+  CanvasInitializeData data;
+  if (aBuilder->IsPaintingToWindow() && mCanvasElement) {
+    // Make the layer tell us whenever a transaction finishes (including
+    // the current transaction), so we can clear our invalidation state and
+    // start invalidating again. We need to do this for the layer that is
+    // being painted to a window (there shouldn't be more than one at a time,
+    // and if there is, flushing the invalidation state more often than
+    // necessary is harmless).
+
+    // The layer will be destroyed when we tear down the presentation
+    // (at the latest), at which time this userData will be destroyed,
+    // releasing the reference to the element.
+    // The userData will receive DidTransactionCallbacks, which flush the
+    // the invalidation state to indicate that the canvas is up to date.
+    data.mPreTransCallback = WebGLContextUserData::PreTransactionCallback;
+    data.mPreTransCallbackData = this;
+    data.mDidTransCallback = WebGLContextUserData::DidTransactionCallback;
+    data.mDidTransCallbackData = this;
+  }
+
+  data.mSize = DrawingBufferSize();
+  data.mHasAlpha = mOptions.alpha;
+  data.mIsGLAlphaPremult = icrData->isPremultAlpha || !mHWSupportsAlpha;
+
+  aRenderer->Initialize(data);
+  aRenderer->SetDirty();
+  return true;
+}
+
+layers::LayersBackend
+ClientWebGLContext::GetCompositorBackendType() const {
+  if (mCanvasElement) {
+    return mCanvasElement->GetCompositorBackendType();
+  } else if (mOffscreenCanvas) {
+    return mOffscreenCanvas->GetCompositorBackendType();
+  }
+
+  return LayersBackend::LAYERS_NONE;
+}
+
+mozilla::dom::Document* ClientWebGLContext::GetOwnerDoc() const {
+  MOZ_ASSERT(mCanvasElement);
+  if (!mCanvasElement) {
+    return nullptr;
+  }
+  return mCanvasElement->OwnerDoc();
+}
+
+void ClientWebGLContext::Commit() {
+  if (mOffscreenCanvas) {
+    mOffscreenCanvas->CommitFrameToCompositor();
+  }
+}
+
+void ClientWebGLContext::GetCanvas(
+    Nullable<dom::OwningHTMLCanvasElementOrOffscreenCanvas>& retval) {
+  if (mCanvasElement) {
+    MOZ_RELEASE_ASSERT(!mOffscreenCanvas, "GFX: Canvas is offscreen.");
+
+    if (mCanvasElement->IsInNativeAnonymousSubtree()) {
+      retval.SetNull();
+    } else {
+      retval.SetValue().SetAsHTMLCanvasElement() = mCanvasElement;
+    }
+  } else if (mOffscreenCanvas) {
+    retval.SetValue().SetAsOffscreenCanvas() = mOffscreenCanvas;
+  } else {
+    retval.SetNull();
+  }
+}
+
+void ClientWebGLContext::GetContextAttributes(
+    dom::Nullable<dom::WebGLContextAttributes>& retval) {
+  retval.SetNull();
+  const FuncScope funcScope(this, "getContextAttributes");
+  if (IsContextLost()) return;
+
+  dom::WebGLContextAttributes& result = retval.SetValue();
+
+  result.mAlpha.Construct(mOptions.alpha);
+  result.mDepth = mOptions.depth;
+  result.mStencil = mOptions.stencil;
+  result.mAntialias = mOptions.antialias;
+  result.mPremultipliedAlpha = mOptions.premultipliedAlpha;
+  result.mPreserveDrawingBuffer = mOptions.preserveDrawingBuffer;
+  result.mFailIfMajorPerformanceCaveat = mOptions.failIfMajorPerformanceCaveat;
+  result.mPowerPreference = mOptions.powerPreference;
+}
+
 NS_IMETHODIMP
 ClientWebGLContext::SetDimensions(int32_t signedWidth, int32_t signedHeight) {
   const FuncScope funcScope(this, "<SetDimensions>");
@@ -479,103 +680,6 @@ ClientWebGLContext::SetContextOptions(JSContext* cx, JS::Handle<JS::Value> optio
   Run<RPROC(SetContextOptions)>(newOpts);
 
   return NS_OK;
-}
-
-RefPtr<SharedSurfaceTextureClient>
-ClientWebGLContext::GetScreenTextureClient() {
-  MOZ_ASSERT_UNREACHABLE("TODO: Get SharedSurfaceTextureClient that represents gl->Front from host");
-  return nullptr;
-}
-
-#if defined(MOZ_WIDGET_ANDROID)
-already_AddRefed<layers::SharedSurfaceTextureClient>
-ClientWebGLContext::GetVRFrame() {
-  if (!gl) return nullptr;
-
-  EnsureVRReady();
-
-  // Create a custom GLScreenBuffer for VR.
-  if (!mVRScreen) {
-    auto caps = gl->Screen()->mCaps;
-    mVRScreen = GLScreenBuffer::Create(gl, gfx::IntSize(1, 1), caps);
-
-    RefPtr<ImageBridgeChild> imageBridge = ImageBridgeChild::GetSingleton();
-    if (imageBridge) {
-      TextureFlags flags = TextureFlags::ORIGIN_BOTTOM_LEFT;
-      UniquePtr<gl::SurfaceFactory> factory =
-          gl::GLScreenBuffer::CreateFactory(gl, caps, imageBridge.get(), flags);
-      mVRScreen->Morph(std::move(factory));
-    }
-  }
-
-  // Swap buffers as though composition has occurred.
-  // We will then share the resulting front buffer to be submitted to the VR
-  // compositor.
-  BeginComposition(mVRScreen.get());
-  EndComposition();
-
-  if (IsContextLost()) return nullptr;
-
-  RefPtr<SharedSurfaceTextureClient> sharedSurface = mVRScreen->Front();
-  if (!sharedSurface || !sharedSurface->Surf()) return nullptr;
-
-  // Make sure that the WebGL buffer is committed to the attached SurfaceTexture
-  // on Android.
-  sharedSurface->Surf()->ProducerAcquire();
-  sharedSurface->Surf()->Commit();
-  sharedSurface->Surf()->ProducerRelease();
-
-  return sharedSurface.forget();
-}
-#else
-already_AddRefed<layers::SharedSurfaceTextureClient>
-ClientWebGLContext::GetVRFrame() {
-  RefPtr<SharedSurfaceTextureClient> sharedSurface = GetScreenTextureClient();
-  if (!sharedSurface) return nullptr;
-
-  EnsureVRReady();
-
-  /**
-   * Swap buffers as though composition has occurred.
-   * We will then share the resulting front buffer to be submitted to the VR
-   * compositor.
-   */
-  BeginComposition();
-  EndComposition();
-
-  return sharedSurface.forget();
-}
-
-#endif  // ifdefined(MOZ_WIDGET_ANDROID)
-
-void ClientWebGLContext::EnsureVRReady() {
-  if (mVRReady) {
-    return;
-  }
-
-  // Make not composited canvases work with WebVR. See bug #1492554
-  // WebGLContext::InitializeCanvasRenderer is only called when the 2D
-  // compositor renders a WebGL canvas for the first time. This causes canvases
-  // not added to the DOM not to work properly with WebVR. Here we mimic what
-  // InitializeCanvasRenderer does internally as a workaround.
-  const auto imageBridge = ImageBridgeChild::GetSingleton();
-  if (imageBridge) {
-    const auto caps = gl->Screen()->mCaps;
-    auto flags = TextureFlags::ORIGIN_BOTTOM_LEFT;
-    if (!IsPremultAlpha() && mOptions.alpha) {
-      flags |= TextureFlags::NON_PREMULTIPLIED;
-    }
-    auto factory =
-        gl::GLScreenBuffer::CreateFactory(gl, caps, imageBridge.get(), flags);
-    gl->Screen()->Morph(std::move(factory));
-#if defined(MOZ_WIDGET_ANDROID)
-    // On Android we are using a different GLScreenBuffer for WebVR, so we need
-    // a resize here because PresentScreenBuffer() may not be called for the
-    // gl->Screen() after we set the new factory.
-    gl->Screen()->Resize(DrawingBufferSize());
-#endif
-    mVRReady = true;
-  }
 }
 
 // ------------------------- GL State -------------------------
@@ -750,6 +854,7 @@ ClientWebGLContext::CheckFramebufferStatus(GLenum target) {
 void
 ClientWebGLContext::Clear(GLbitfield mask) {
   Run<RPROC(Clear)>(mask);
+  Invalidate();
 }
 
 void
@@ -939,7 +1044,7 @@ ClientWebGLContext::GetBufferSubData(GLenum target, GLintptr srcByteOffset,
   uint8_t* bytes;
   size_t byteLen;
   if (!ValidateArrayBufferView(dstData, dstElemOffset, dstElemCountOverride,
-                               &bytes, &byteLen)) {
+                               LOCAL_GL_INVALID_VALUE, &bytes, &byteLen)) {
     return;
   }
 
@@ -989,8 +1094,8 @@ void ClientWebGLContext::BufferData(GLenum target, const dom::ArrayBufferView& s
   const FuncScope funcScope(this, "bufferData");
   uint8_t* bytes;
   size_t byteLen;
-  if (!ValidateArrayBufferView(src, srcElemOffset, srcElemCountOverride, &bytes,
-                               &byteLen)) {
+  if (!ValidateArrayBufferView(src, srcElemOffset, srcElemCountOverride,
+                               LOCAL_GL_INVALID_VALUE, &bytes, &byteLen)) {
     return;
   }
 
@@ -1014,8 +1119,8 @@ void ClientWebGLContext::BufferSubData(GLenum target, WebGLsizeiptr dstByteOffse
   const FuncScope funcScope(this, "bufferSubData");
   uint8_t* bytes;
   size_t byteLen;
-  if (!ValidateArrayBufferView(src, srcElemOffset, srcElemCountOverride, &bytes,
-                               &byteLen)) {
+  if (!ValidateArrayBufferView(src, srcElemOffset, srcElemCountOverride,
+                               LOCAL_GL_INVALID_VALUE, &bytes, &byteLen)) {
     return;
   }
 
@@ -1037,6 +1142,7 @@ ClientWebGLContext::BlitFramebuffer(GLint srcX0, GLint srcY0, GLint srcX1, GLint
                 GLbitfield mask, GLenum filter) {
   Run<RPROC(BlitFramebuffer)>(srcX0, srcY0, srcX1, srcY1, dstX0, dstY0, dstX1,
                               dstY1, mask, filter);
+  Invalidate();
 }
 
 void
@@ -1245,7 +1351,7 @@ ClientWebGLContext::TexImage2D(GLenum target, GLint level, GLenum internalFormat
     return;
   }
 
-  MaybeWebGLTexUnpackVariant blob = AsBlob(src, FuncScopeId::texImage2D);
+  MaybeWebGLTexUnpackVariant&& blob = std::move(AsBlob(src, FuncScopeId::texImage2D));
   if (!blob) {
     return;
   }
@@ -1269,7 +1375,7 @@ ClientWebGLContext::TexSubImage2D(GLenum target, GLint level, GLint xOffset, GLi
     return;
   }
 
-  MaybeWebGLTexUnpackVariant blob = AsBlob(src, FuncScopeId::texSubImage2D);
+  MaybeWebGLTexUnpackVariant&& blob = std::move(AsBlob(src, FuncScopeId::texSubImage2D));
   if (!blob) {
     return;
   }
@@ -1288,7 +1394,8 @@ ClientWebGLContext::TexImage3D(GLenum target, GLint level, GLenum internalFormat
                 const TexImageSource& src) {
   const FuncScope scope(this, FuncScopeId::texImage3D);
   const uint8_t funcDims = 3;
-  MaybeWebGLTexUnpackVariant blob = AsBlob(src, FuncScopeId::texImage3D);
+
+  MaybeWebGLTexUnpackVariant&& blob = std::move(AsBlob(src, FuncScopeId::texImage3D));
   if (!blob) {
     return;
   }
@@ -1305,7 +1412,8 @@ ClientWebGLContext::TexSubImage3D(GLenum target, GLint level, GLint xOffset, GLi
                    const TexImageSource& src) {
   const FuncScope scope(this, FuncScopeId::texSubImage3D);
   const uint8_t funcDims = 3;
-  MaybeWebGLTexUnpackVariant blob = AsBlob(src, FuncScopeId::texSubImage3D);
+
+  MaybeWebGLTexUnpackVariant&& blob = std::move(AsBlob(src, FuncScopeId::texSubImage3D));
   if (!blob) {
     return;
   }
@@ -1781,6 +1889,7 @@ ClientWebGLContext::VertexAttribPointer(GLuint index, GLint size, GLenum type,
 void
 ClientWebGLContext::DrawArrays(GLenum mode, GLint first, GLsizei count) {
   Run<RPROC(DrawArraysInstanced)>(mode, first, count, 1, false);
+  Invalidate();
 }
 
 void
@@ -1788,6 +1897,7 @@ ClientWebGLContext::DrawElements(GLenum mode, GLsizei count, GLenum type,
                   WebGLintptr byteOffset) {
   Run<RPROC(DrawElementsInstanced)>(mode, count, type, byteOffset, 1,
                                     FuncScopeId::drawElements, false);
+  Invalidate();
 }
 
 // ------------------------------ Readback -------------------------------
@@ -1827,7 +1937,7 @@ ClientWebGLContext::ReadPixels(GLint x, GLint y, GLsizei width, GLsizei height,
   uint8_t* bytes;
   size_t byteLen;
   if (!ValidateArrayBufferView(dstData, dstElemOffset, 0,
-                               &bytes, &byteLen)) {
+                               LOCAL_GL_INVALID_VALUE, &bytes, &byteLen)) {
     return;
   }
 
@@ -1877,6 +1987,7 @@ void
 ClientWebGLContext::DrawArraysInstanced(GLenum mode, GLint first, GLsizei count,
                     GLsizei primcount, bool aFromExtension) {
   Run<RPROC(DrawArraysInstanced)>(mode, first, count, primcount, aFromExtension);
+  Invalidate();
 }
 
 void
@@ -1886,6 +1997,7 @@ ClientWebGLContext::DrawElementsInstanced(GLenum mode, GLsizei count, GLenum typ
                       bool aFromExtension) {
   Run<RPROC(DrawElementsInstanced)>(mode, count, type, offset,
                                     primcount, aFuncId, aFromExtension);
+  Invalidate();
 }
 
 void
@@ -1937,24 +2049,28 @@ void
 ClientWebGLContext::ClearBufferfv(GLenum buffer, GLint drawBuffer, const Float32ListU& list,
                    GLuint srcElemOffset) {
   Run<RPROC(ClearBufferfvImpl)>(buffer, drawBuffer, ToNsTArray(list), srcElemOffset);
+  Invalidate();
 }
 
 void
 ClientWebGLContext::ClearBufferiv(GLenum buffer, GLint drawBuffer, const Int32ListU& list,
                    GLuint srcElemOffset) {
   Run<RPROC(ClearBufferivImpl)>(buffer, drawBuffer, ToNsTArray(list), srcElemOffset);
+  Invalidate();
 }
 
 void
 ClientWebGLContext::ClearBufferuiv(GLenum buffer, GLint drawBuffer, const Uint32ListU& list,
                     GLuint srcElemOffset) {
   Run<RPROC(ClearBufferuivImpl)>(buffer, drawBuffer, ToNsTArray(list), srcElemOffset);
+  Invalidate();
 }
 
 void
 ClientWebGLContext::ClearBufferfi(GLenum buffer, GLint drawBuffer, GLfloat depth,
               GLint stencil) {
   Run<RPROC(ClearBufferfi)>(buffer, drawBuffer, depth, stencil);
+  Invalidate();
 }
 
 // -------------------------------- Sampler -------------------------------

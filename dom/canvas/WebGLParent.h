@@ -8,13 +8,17 @@
 
 #include "mozilla/GfxMessageUtils.h"
 #include "mozilla/dom/PWebGLParent.h"
-#include "mozilla/WeakPtr.h"
 #include "mozilla/dom/WebGLCrossProcessCommandQueue.h"
 #include "mozilla/dom/WebGLErrorQueue.h"
+#include "mozilla/WeakPtr.h"
 
 namespace mozilla {
 
 class HostWebGLContext;
+
+namespace layers {
+class SharedSurfaceTextureClient;
+}
 
 namespace dom {
 
@@ -28,6 +32,8 @@ class WebGLParent
   Create(WebGLVersion aVersion,
          UniquePtr<mozilla::HostWebGLCommandSink>&& aCommandSink,
          UniquePtr<mozilla::HostWebGLErrorSource>&& aErrorSource);
+
+  already_AddRefed<layers::SharedSurfaceTextureClient> GetVRFrame();
 
  protected:
   friend PWebGLParent;
