@@ -195,7 +195,7 @@ class nsICanvasRenderingContextInternal : public nsISupports,
   virtual void OnMemoryPressure() {}
 
   virtual bool
-  UpdateAsyncHandle(LayerTransactionChild* aLayerTransaction,
+  UpdateCompositableHandle(LayerTransactionChild* aLayerTransaction,
                     CompositableHandle aHandle) {
     return false;
   }

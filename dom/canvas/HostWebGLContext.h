@@ -68,7 +68,6 @@ protected:
 
   UniquePtr<HostWebGLCommandSink> mCommandSink;
   UniquePtr<HostWebGLErrorSource> mErrorSource;
-  RefPtr<layers::CompositableHost> mCompositableHost;
 
   // The host-side of an object ID map for types for which the client
   // generates the IDs.  (This is the majority of the types of objects that
@@ -81,7 +80,7 @@ protected:
     using RefType = RefPtr<ObjectType>;
     using AlreadyAddRefedType = already_AddRefed<ObjectType>;
 
-    IdType Insert(RefType&& aObj, const IdType& aId) {
+    virtual IdType Insert(RefType&& aObj, const IdType& aId) {
       // asynchronous contructors must never fail
       MOZ_ASSERT(aId && aObj &&
                  ((aObj->Id() == aId.Id()) || (aObj->Id() == 0)));
@@ -107,7 +106,10 @@ protected:
         return;
       }
       MOZ_ASSERT(it->value()->Id() == aId.Id());
-      it->value()->mId = 0;
+
+      // NB: We leave it->value()->Id() as is because it may be resurrected
+      // if the WebGLContext still holds a reference to it and later returns it.
+
       mMap.remove(it);
     }
 
@@ -128,7 +130,7 @@ protected:
 
     HostGenObjectIdMap() : mNextId(1) {}
 
-    IdType Insert(RefType&& aObj, const IdType& aId) {
+    IdType Insert(RefType&& aObj, const IdType& aId) override {
       MOZ_ASSERT((!aId) && aObj && (aObj->Id() == 0));
       uint64_t curId = mNextId;
       ++mNextId;
@@ -139,8 +141,6 @@ protected:
     }
 
    private:
-    using IdMap = HashMap<WebGLId<ObjectType>, RefPtr<ObjectType>>;
-    IdMap mMap;
     uint64_t mNextId;
   };
 
@@ -215,10 +215,20 @@ protected:
   // Host-side methods.  Calls in the client are forwarded to the host.
   // -------------------------------------------------------------------------
 
-  // ------------------------- Creation/Destruction -------------------------
  public:
+  // ------------------------- Creation/Destruction -------------------------
+  // When the client releases its handle to this, we release ours.  Note that
+  // we may later ressurrect the object if the WebGLContext or some other
+  // internal class still holds a reference to it.  In that case, we will still
+  // keep the old ID.
+  template<typename WebGLType>
+  void ReleaseWebGLObject(const WebGLId<WebGLType>& o) {
+    Remove(o);
+  }
 
   // ------------------------- Composition -------------------------
+  void Present();
+
   Maybe<ICRData>
   InitializeCanvasRenderer(layers::LayersBackend backend);
 
@@ -241,7 +251,6 @@ protected:
 
   bool IsEnabled(GLenum cap);
 
-  // TODO:
   MaybeWebGLVariant GetParameterImpl(GLenum pname);
 
   void AttachShader(const WebGLId<WebGLProgram>& progId,

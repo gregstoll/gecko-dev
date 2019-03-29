@@ -100,6 +100,10 @@ class GLScreenBuffer;
 class MozFramebuffer;
 }  // namespace gl
 
+namespace layers {
+class CompositableHost;
+}
+
 namespace webgl {
 class AvailabilityRunnable;
 struct CachedDrawFetchLimits;
@@ -254,6 +258,10 @@ class WebGLContext : public SupportsWeakPtr<WebGLContext> {
   // lifetime
   HostWebGLContext* mHost;
 
+  RefPtr<layers::CompositableHost> mCompositableHost;
+
+  layers::LayersBackend mBackend;
+
   struct DoSetDimensionsData {
     nsresult result;
     bool maybeLoseOldContext;
@@ -273,6 +281,8 @@ class WebGLContext : public SupportsWeakPtr<WebGLContext> {
     return { mOptions, mOptionsFrozen, mResetLayer,
              result.maybeLoseOldContext, result.result };
   }
+
+  void SetCompositableHost(RefPtr<layers::CompositableHost>& aCompositableHost);
 
   NS_IMETHOD InitializeWithDrawTarget(nsIDocShell*,
                                       NotNull<gfx::DrawTarget*>) {
@@ -409,12 +419,11 @@ class WebGLContext : public SupportsWeakPtr<WebGLContext> {
     return mOptions.preserveDrawingBuffer;
   }
 
+  // Prepare the context for capture before compositing
   bool PresentScreenBuffer(gl::GLScreenBuffer* const screen = nullptr);
 
-  // Prepare the context for capture before compositing
-  void BeginComposition(gl::GLScreenBuffer* const screen = nullptr);
-
-  void EndComposition() { }
+  // Present to compositor
+  bool Present();
 
   // a number that increments every time we have an event that causes
   // all context resources to be lost.
@@ -433,6 +442,7 @@ class WebGLContext : public SupportsWeakPtr<WebGLContext> {
   void Commit();
 
  private:
+
   gfx::IntSize DrawingBufferSize();
 
  public:

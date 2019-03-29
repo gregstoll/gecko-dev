@@ -82,13 +82,6 @@ void WebGL2Context::CopyBufferSubData(GLenum readTarget, GLenum writeTarget,
   writeBuffer->ResetLastUpdateFenceId();
 }
 
-Maybe<ipc::Shmem>
-ClientWebGLContext::MaybeAllocateShmem(size_t nBytes) {
-  // TODO: Allocate a shmem if nBytes is above some threshold
-  MOZ_ASSERT_UNREACHABLE("TODO:");
-  return Nothing();
-}
-
 Maybe<nsTArray<uint8_t>>
 WebGL2Context::GetBufferSubData(GLenum target, GLintptr srcByteOffset,
                                 size_t byteLen,

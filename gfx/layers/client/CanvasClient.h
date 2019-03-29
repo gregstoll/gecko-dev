@@ -23,6 +23,8 @@
 #include "mozilla/gfx/Point.h"  // for IntSize
 #include "mozilla/gfx/Types.h"  // for SurfaceFormat
 
+class nsICanvasRenderingContextInternal;
+
 namespace mozilla {
 namespace layers {
 
@@ -31,6 +33,7 @@ class ShareableCanvasRenderer;
 class CompositableForwarder;
 class ShadowableLayer;
 class SharedSurfaceTextureClient;
+class OOPCanvasRenderer;
 
 /**
  * Compositable client for 2d and webgl canvas.
@@ -49,6 +52,7 @@ class CanvasClient : public CompositableClient {
     CanvasClientGLContext,
     CanvasClientTypeShSurf,
     CanvasClientAsync,  // webgl on workers
+    CanvasClientTypeOOP,  // webgl in remote process
   };
   static already_AddRefed<CanvasClient> CreateCanvasClient(
       CanvasClientType aType, CompositableForwarder* aFwd, TextureFlags aFlags);
@@ -177,14 +181,39 @@ class CanvasClientBridge final : public CanvasClient {
 
   virtual void UpdateAsync(AsyncCanvasRenderer* aRenderer) override;
 
-  void SetLayer(ShadowableLayer* aLayer) {
-    mLayer = aLayer;
-    Connect();
-  }
+  void SetLayer(ShadowableLayer* aLayer) { mLayer = aLayer; }
 
  protected:
   CompositableHandle mAsyncHandle;
   ShadowableLayer* mLayer;
+};
+
+/**
+ * Used for WebGL instances that perform all composition in the host process.
+ */
+class CanvasClientOOP final : public CanvasClient {
+ public:
+  CanvasClientOOP(CompositableForwarder* aLayerForwarder,
+                  TextureFlags aFlags);
+  ~CanvasClientOOP();
+
+  TextureInfo GetTextureInfo() const override {
+    return TextureInfo(CompositableType::IMAGE);
+  }
+
+  virtual void Update(gfx::IntSize aSize,
+                      ShareableCanvasRenderer* aCanvasRenderer) override;
+
+  virtual void UpdateAsync(AsyncCanvasRenderer* aRenderer) override {
+    MOZ_ASSERT_UNREACHABLE("Illegal to call UpdateAsync on CanvasClientOOP");
+  }
+
+  void SetLayer(ShadowableLayer* aLayer, OOPCanvasRenderer* aRenderer);
+
+ protected:
+  nsICanvasRenderingContextInternal* mCanvasContext = nullptr;
+  ShadowableLayer* mLayer = nullptr;
+  CompositableHandle mHandle;
 };
 
 }  // namespace layers

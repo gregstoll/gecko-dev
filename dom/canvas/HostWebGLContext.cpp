@@ -107,7 +107,11 @@ HostWebGLContext::RunCommandsForDuration(TimeDuration aDuration) {
 
 void
 HostWebGLContext::SetCompositableHost(RefPtr<CompositableHost>& aCompositableHost) {
-  mCompositableHost = aCompositableHost;
+  mContext->SetCompositableHost(aCompositableHost);
+}
+
+void HostWebGLContext::Present() {
+  mContext->Present();
 }
 
 WebGLId<WebGLFramebuffer>

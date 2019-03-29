@@ -23,6 +23,9 @@ class Array {
   T mArr[Length];
 
  public:
+  using ElementType = T;
+  using CArrayType = T[Length];
+
   Array() {}
 
   template <typename... Args>
@@ -76,6 +79,9 @@ class Array {
     return const_reverse_iterator(begin());
   }
   const_reverse_iterator crend() const { return rend(); }
+
+  operator CArrayType&() { return mArr; }
+  operator const CArrayType&() const { return mArr; }
 };
 
 template <typename T>

@@ -25,6 +25,8 @@ class nsITimerCallback;
 
 namespace mozilla {
 
+class ClientWebGLContext;
+
 namespace layers {
 class AsyncCanvasRenderer;
 class CanvasRenderer;
@@ -32,6 +34,7 @@ class CanvasLayer;
 class Image;
 class Layer;
 class LayerManager;
+class OOPCanvasRenderer;
 class SharedSurfaceTextureClient;
 class WebRenderCanvasData;
 }  // namespace layers
@@ -331,6 +334,8 @@ class HTMLCanvasElement final : public nsGenericHTMLElement,
 
   AsyncCanvasRenderer* GetAsyncCanvasRenderer();
 
+  layers::OOPCanvasRenderer* GetOOPCanvasRenderer();
+
   PWebGLChild* GetWebGLChild();
 
  protected:
@@ -363,6 +368,8 @@ class HTMLCanvasElement final : public nsGenericHTMLElement,
                                           const nsAttrValueOrString& aValue,
                                           bool aNotify) override;
 
+  ClientWebGLContext* GetClientWebGLContext();
+
   bool mResetLayer;
   bool mMaybeModified;  // we fetched the context, so we may have written to the
                         // canvas
@@ -372,6 +379,7 @@ class HTMLCanvasElement final : public nsGenericHTMLElement,
   nsTArray<WeakPtr<FrameCaptureListener>> mRequestedFrameListeners;
   RefPtr<RequestedFrameRefreshObserver> mRequestedFrameRefreshObserver;
   RefPtr<AsyncCanvasRenderer> mAsyncCanvasRenderer;
+  RefPtr<layers::OOPCanvasRenderer> mOOPCanvasRenderer;
   RefPtr<OffscreenCanvas> mOffscreenCanvas;
   RefPtr<HTMLCanvasElementObserver> mContextObserver;
 

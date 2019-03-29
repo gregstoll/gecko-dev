@@ -5,9 +5,11 @@
 
 #include "ClientWebGLContext.h"
 
+#include "mozilla/ipc/Shmem.h"
 #include "mozilla/layers/CompositorBridgeChild.h"
 #include "mozilla/layers/ImageBridgeChild.h"
 #include "mozilla/layers/LayerTransactionChild.h"
+#include "mozilla/layers/OOPCanvasRenderer.h"
 #include "mozilla/layers/TextureClientSharedSurface.h"
 #include "TexUnpackBlob.h"
 #include "WebGLContextEndpoint.h"
@@ -217,9 +219,9 @@ void ClientWebGLContext::DrainErrorQueue() {
 }
 
 bool
-ClientWebGLContext::UpdateAsyncHandle(LayerTransactionChild* aLayerTransaction,
+ClientWebGLContext::UpdateCompositableHandle(LayerTransactionChild* aLayerTransaction,
                                       CompositableHandle aHandle) {
-  return mWebGLChild ? mWebGLChild->SendUpdateAsyncHandle(aLayerTransaction, aHandle) : false;
+  return mWebGLChild ? mWebGLChild->SendUpdateCompositableHandle(aLayerTransaction, aHandle) : false;
 }
 
 void ClientWebGLContext::PostWarning(const nsCString& aWarning)
@@ -400,6 +402,19 @@ class WebGLContextUserData : public LayerUserData {
   RefPtr<HTMLCanvasElement> mCanvas;
 };
 
+void ClientWebGLContext::BeginComposition() {
+  Run<RPROC(Present)>();
+}
+
+// Clean up the context after captured for compositing
+void ClientWebGLContext::EndComposition() {
+  // Mark ourselves as no longer invalidated.
+  MarkContextClean();
+  UpdateLastUseIndex();
+  
+  // Host-side EndComposition is a no-op
+}
+
 already_AddRefed<layers::Layer> ClientWebGLContext::GetCanvasLayer(
     nsDisplayListBuilder* builder, Layer* oldLayer, LayerManager* manager) {
   if (!mResetLayer && oldLayer && oldLayer->HasUserData(&gWebGLLayerUserData)) {
@@ -488,9 +503,18 @@ bool ClientWebGLContext::InitializeCanvasRenderer(nsDisplayListBuilder* aBuilder
     data.mDidTransCallbackData = this;
   }
 
+  MOZ_ASSERT(mCanvasElement);   // TODO: What to do here?  Is this about OffscreenCanvas?
+
+  data.mOOPRenderer = mCanvasElement->GetOOPCanvasRenderer();
+  MOZ_ASSERT(data.mOOPRenderer);
+  MOZ_ASSERT(!data.mOOPRenderer->mContext);
+  data.mOOPRenderer->mContext = this;
+
+
   data.mSize = DrawingBufferSize();
-  data.mHasAlpha = mOptions.alpha;
-  data.mIsGLAlphaPremult = icrData->isPremultAlpha || !mHWSupportsAlpha;
+  // TODO: Do I need these?
+//  data.mHasAlpha = mOptions.alpha;
+//  data.mIsGLAlphaPremult = icrData->isPremultAlpha || !mHWSupportsAlpha;
 
   aRenderer->Initialize(data);
   aRenderer->SetDirty();
@@ -682,6 +706,168 @@ ClientWebGLContext::SetContextOptions(JSContext* cx, JS::Handle<JS::Value> optio
   return NS_OK;
 }
 
+
+Maybe<mozilla::ipc::Shmem>
+ClientWebGLContext::MaybeAllocateShmem(size_t nBytes) {
+  if (nBytes > sMaxSizeInlineData) {
+    return Nothing();
+  }
+
+  mozilla::ipc::Shmem shmem;
+  if (!mWebGLChild->AllocUnsafeShmem(nBytes, SharedMemory::TYPE_BASIC, &shmem)) {
+    return Nothing();
+  }
+
+  return Some(shmem);
+}
+
+// ------------------------- Client WebGL Objects -------------------------
+template <typename WebGLType>
+RefPtr<ClientWebGLObject<WebGLType>>&&
+ClientWebGLContext::EnsureWebGLObject(const WebGLId<WebGLType>& id) {
+
+}
+
+struct MaybeWebGLVariantMatcher {
+  MaybeWebGLVariantMatcher(ClientWebGLContext* cxt, JSContext* cx,
+                           ErrorResult* rv)
+    : mCxt(cxt), mCx(cx), mRv(rv) {}
+
+  JS::Value match(int32_t x) { return JS::NumberValue(x); }
+  JS::Value match(int64_t x) { return JS::NumberValue(x); }
+  JS::Value match(uint32_t x) { return JS::NumberValue(x); }
+  JS::Value match(uint64_t x) { return JS::NumberValue(x); }
+  JS::Value match(float x) { return JS::Float32Value(x); }
+  JS::Value match(double x) { return JS::DoubleValue(x); }
+  JS::Value match(bool x) { return JS::BooleanValue(x); }
+  JS::Value match(const nsCString& x) { return StringValue(mCx, x.BeginReading(), *mRv); }
+  JS::Value match(const nsString& x) { return StringValue(mCx, x, *mRv); }
+  JS::Value match(const WebGLShaderPrecisionFormat& x) { 
+    MOZ_ASSERT_UNREACHABLE("Should not convert WebGLShaderPrecisionFormat to JS::Value");
+    return JS::NullValue();
+  }
+
+  template<size_t Length>
+  JS::Value match(const Array<int32_t, Length>& x) {
+    JSObject* obj = dom::Int32Array::Create(mCx, mCxt, x);
+    if (!obj) {
+      *mRv = NS_ERROR_OUT_OF_MEMORY;
+      mCxt->EnqueueErrorOutOfMemory("ToJSValue: Out of memory.");
+    }
+    return JS::ObjectOrNullValue(obj);
+  }
+
+  template<size_t Length>
+  JS::Value match(const Array<uint32_t, Length>& x) {
+    JSObject* obj = dom::Uint32Array::Create(mCx, mCxt, x);
+    if (!obj) {
+      *mRv = NS_ERROR_OUT_OF_MEMORY;
+      mCxt->EnqueueErrorOutOfMemory("ToJSValue: Out of memory.");
+    }
+    return JS::ObjectOrNullValue(obj);
+  }
+
+  template<size_t Length>
+  JS::Value match(const Array<float, Length>& x) {
+    JSObject* obj = dom::Float32Array::Create(mCx, mCxt, x);
+    if (!obj) {
+      *mRv = NS_ERROR_OUT_OF_MEMORY;
+      mCxt->EnqueueErrorOutOfMemory("ToJSValue: Out of memory.");
+    }
+    return JS::ObjectOrNullValue(obj);
+  }
+
+  template<size_t Length>
+  JS::Value match(const Array<bool, Length>& x) {
+    JS::Rooted<JS::Value> obj(mCx);
+    if (!dom::ToJSValue(mCx, x, &obj)) {
+      *mRv = NS_ERROR_OUT_OF_MEMORY;
+      mCxt->EnqueueErrorOutOfMemory("ToJSValue: Out of memory.");
+    }
+    return obj;
+  }
+
+  JS::Value match(const nsTArray<uint32_t>& x) {
+    JSObject* obj =
+      dom::Uint32Array::Create(mCx, mCxt, x.Length(), &x[0]);
+    if (!obj) {
+      *mRv = NS_ERROR_OUT_OF_MEMORY;
+      mCxt->EnqueueErrorOutOfMemory("ToJSValue: Out of memory.");
+    }
+    return JS::ObjectOrNullValue(obj);
+  }
+
+  JS::Value match(const nsTArray<int32_t>& x) {
+    JSObject* obj =
+      dom::Int32Array::Create(mCx, mCxt, x.Length(), &x[0]);
+    if (!obj) {
+      *mRv = NS_ERROR_OUT_OF_MEMORY;
+      mCxt->EnqueueErrorOutOfMemory("ToJSValue: Out of memory.");
+    }
+    return JS::ObjectOrNullValue(obj);
+  }
+
+  JS::Value match(const nsTArray<float>& x) {
+    JSObject* obj =
+      dom::Float32Array::Create(mCx, mCxt, x.Length(), &x[0]);
+    if (!obj) {
+      *mRv = NS_ERROR_OUT_OF_MEMORY;
+      mCxt->EnqueueErrorOutOfMemory("ToJSValue: Out of memory.");
+    }
+    return JS::ObjectOrNullValue(obj);
+  }
+
+  JS::Value match(const nsTArray<bool>& x) {
+    JS::Rooted<JS::Value> obj(mCx);
+    if (!dom::ToJSValue(mCx, &x[0], x.Length(), &obj)) {
+      *mRv = NS_ERROR_OUT_OF_MEMORY;
+      mCxt->EnqueueErrorOutOfMemory("ToJSValue: Out of memory.");
+    }
+    return obj;
+  }
+
+  template<typename WebGLClass>
+  JS::Value match(const WebGLId<WebGLClass>& x) {
+    return mCxt->WebGLObjectAsJSValue(mCx, mCxt->EnsureWebGLObject(x), *mRv);
+  }
+
+ private:
+  // Create a JS::Value from a C string
+  JS::Value StringValue(JSContext* cx, const char* chars, ErrorResult& rv) {
+    JSString* str = JS_NewStringCopyZ(cx, chars);
+    if (!str) {
+      rv.Throw(NS_ERROR_OUT_OF_MEMORY);
+      return JS::NullValue();
+    }
+
+    return JS::StringValue(str);
+  }
+
+  // Create a JS::Value from an nsAString
+  JS::Value StringValue(JSContext* cx, const nsAString& str, ErrorResult& er) {
+    JSString* jsStr = JS_NewUCStringCopyN(cx, str.BeginReading(), str.Length());
+    if (!jsStr) {
+      er.Throw(NS_ERROR_OUT_OF_MEMORY);
+      return JS::NullValue();
+    }
+
+    return JS::StringValue(jsStr);
+  }
+
+  ClientWebGLContext* mCxt;
+  JSContext* mCx;
+  ErrorResult* mRv;
+};
+
+JS::Value
+ClientWebGLContext::ToJSValue(JSContext* cx, const MaybeWebGLVariant& aVariant,
+                              ErrorResult& rv) const {
+  if (!aVariant) {
+    return JS::NullValue();
+  }
+  return aVariant.ref().match(MaybeWebGLVariantMatcher(const_cast<ClientWebGLContext*>(this), cx, &rv));
+}
+
 // ------------------------- GL State -------------------------
 bool
 ClientWebGLContext::IsContextLost() const {
@@ -854,6 +1040,8 @@ ClientWebGLContext::CheckFramebufferStatus(GLenum target) {
 void
 ClientWebGLContext::Clear(GLbitfield mask) {
   Run<RPROC(Clear)>(mask);
+  // TODO: We need to invalidate if the target was the screen buffer.
+  // As of right now we don't know so I'm being conservative.
   Invalidate();
 }
 
@@ -1142,6 +1330,9 @@ ClientWebGLContext::BlitFramebuffer(GLint srcX0, GLint srcY0, GLint srcX1, GLint
                 GLbitfield mask, GLenum filter) {
   Run<RPROC(BlitFramebuffer)>(srcX0, srcY0, srcX1, srcY1, dstX0, dstY0, dstX1,
                               dstY1, mask, filter);
+
+  // TODO: We need to invalidate if the target was the screen buffer.
+  // As of right now we don't know so I'm being conservative.
   Invalidate();
 }
 
@@ -1889,6 +2080,8 @@ ClientWebGLContext::VertexAttribPointer(GLuint index, GLint size, GLenum type,
 void
 ClientWebGLContext::DrawArrays(GLenum mode, GLint first, GLsizei count) {
   Run<RPROC(DrawArraysInstanced)>(mode, first, count, 1, false);
+  // TODO: We need to invalidate if the target was the screen buffer.
+  // As of right now we don't know so I'm being conservative.
   Invalidate();
 }
 
@@ -1897,6 +2090,8 @@ ClientWebGLContext::DrawElements(GLenum mode, GLsizei count, GLenum type,
                   WebGLintptr byteOffset) {
   Run<RPROC(DrawElementsInstanced)>(mode, count, type, byteOffset, 1,
                                     FuncScopeId::drawElements, false);
+  // TODO: We need to invalidate if the target was the screen buffer.
+  // As of right now we don't know so I'm being conservative.
   Invalidate();
 }
 
@@ -1987,6 +2182,8 @@ void
 ClientWebGLContext::DrawArraysInstanced(GLenum mode, GLint first, GLsizei count,
                     GLsizei primcount, bool aFromExtension) {
   Run<RPROC(DrawArraysInstanced)>(mode, first, count, primcount, aFromExtension);
+  // TODO: We need to invalidate if the target was the screen buffer.
+  // As of right now we don't know so I'm being conservative.
   Invalidate();
 }
 
@@ -1997,6 +2194,8 @@ ClientWebGLContext::DrawElementsInstanced(GLenum mode, GLsizei count, GLenum typ
                       bool aFromExtension) {
   Run<RPROC(DrawElementsInstanced)>(mode, count, type, offset,
                                     primcount, aFuncId, aFromExtension);
+  // TODO: We need to invalidate if the target was the screen buffer.
+  // As of right now we don't know so I'm being conservative.
   Invalidate();
 }
 
@@ -2049,6 +2248,8 @@ void
 ClientWebGLContext::ClearBufferfv(GLenum buffer, GLint drawBuffer, const Float32ListU& list,
                    GLuint srcElemOffset) {
   Run<RPROC(ClearBufferfvImpl)>(buffer, drawBuffer, ToNsTArray(list), srcElemOffset);
+  // TODO: We need to invalidate if the target was the screen buffer.
+  // As of right now we don't know so I'm being conservative.
   Invalidate();
 }
 
@@ -2056,6 +2257,8 @@ void
 ClientWebGLContext::ClearBufferiv(GLenum buffer, GLint drawBuffer, const Int32ListU& list,
                    GLuint srcElemOffset) {
   Run<RPROC(ClearBufferivImpl)>(buffer, drawBuffer, ToNsTArray(list), srcElemOffset);
+  // TODO: We need to invalidate if the target was the screen buffer.
+  // As of right now we don't know so I'm being conservative.
   Invalidate();
 }
 
@@ -2063,6 +2266,8 @@ void
 ClientWebGLContext::ClearBufferuiv(GLenum buffer, GLint drawBuffer, const Uint32ListU& list,
                     GLuint srcElemOffset) {
   Run<RPROC(ClearBufferuivImpl)>(buffer, drawBuffer, ToNsTArray(list), srcElemOffset);
+  // TODO: We need to invalidate if the target was the screen buffer.
+  // As of right now we don't know so I'm being conservative.
   Invalidate();
 }
 
@@ -2070,6 +2275,8 @@ void
 ClientWebGLContext::ClearBufferfi(GLenum buffer, GLint drawBuffer, GLfloat depth,
               GLint stencil) {
   Run<RPROC(ClearBufferfi)>(buffer, drawBuffer, depth, stencil);
+  // TODO: We need to invalidate if the target was the screen buffer.
+  // As of right now we don't know so I'm being conservative.
   Invalidate();
 }
 

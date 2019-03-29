@@ -47,7 +47,7 @@ void DrainWebGLError(nsWeakPtr aWeakContext);
  * an ID and a ref-count.
  */
 template<typename WebGLType>
-class ClientWebGL : public WebGLId<WebGLType>, public nsWrapperCache {
+class ClientWebGLObject : public WebGLId<WebGLType>, public nsWrapperCache {
  public:
   ClientWebGLContext* GetParentObject() const { return mContext; }
 
@@ -57,11 +57,11 @@ class ClientWebGL : public WebGLId<WebGLType>, public nsWrapperCache {
   }
 
  protected:
-  ClientWebGL(uint64_t aId, RefPtr<ClientWebGLContext>&& aContext)
+  ClientWebGLObject(uint64_t aId, RefPtr<ClientWebGLContext>&& aContext)
     : WebGLId<WebGLType>(aId), mContext(std::move(aContext)),
       mGeneration(mContext->Generation()) {}
 
-  virtual ~ClientWebGL() {};
+  virtual ~ClientWebGLObject() {};
 
   RefPtr<ClientWebGLContext> mContext;
   uint64_t mGeneration;
@@ -70,12 +70,12 @@ class ClientWebGL : public WebGLId<WebGLType>, public nsWrapperCache {
 // Every WebGL type with a client version exposed to JS needs to use this macro
 // to associate its C++ type with the JS binding interface.
 #define DEFINE_WEBGL_CLIENT_TYPE_2(_WebGLType, _WebGLBindingType)             \
-class ClientWebGL##_WebGLType : public ClientWebGL<WebGL##_WebGLType> {       \
+class ClientWebGL##_WebGLType : public ClientWebGLObject<WebGL##_WebGLType> {   \
  public:                                                                      \
   NS_INLINE_DECL_CYCLE_COLLECTING_NATIVE_REFCOUNTING(ClientWebGL##_WebGLType) \
   NS_DECL_CYCLE_COLLECTION_SCRIPT_HOLDER_NATIVE_CLASS(ClientWebGL##_WebGLType)  \
   ClientWebGL##_WebGLType(uint64_t aId, RefPtr<ClientWebGLContext>&& aContext)  \
-    : ClientWebGL<WebGL##_WebGLType>(aId, std::move(aContext)) {}             \
+    : ClientWebGLObject<WebGL##_WebGLType>(aId, std::move(aContext)) {}         \
   JSObject* WrapObject(JSContext* cx, JS::Handle<JSObject*> givenProto) override {  \
     return dom::WebGL##_WebGLBindingType##_Binding::Wrap(cx, this, givenProto); \
   }                                                                             \
@@ -217,25 +217,33 @@ class ClientWebGLContext
  public:
   template<typename ObjectType>
   using ClientObjectIdMap =
-    HashMap<WebGLId<ObjectType>, RefPtr<ClientWebGL<ObjectType>>>;
+    HashMap<WebGLId<ObjectType>, RefPtr<ClientWebGLObject<ObjectType>>>;
 
  public:
+  JS::Value ToJSValue(JSContext* cx, const MaybeWebGLVariant& aVariant,
+                      ErrorResult& rv) const;
+
+ protected:
+  friend struct MaybeWebGLVariantMatcher;
+
   template <typename WebGLObjectType>
   JS::Value
   WebGLObjectAsJSValue(JSContext* cx, RefPtr<WebGLObjectType>&& object,
                        ErrorResult& rv) const;
+
   template <typename WebGLObjectType>
   JS::Value
   WebGLObjectAsJSValue(JSContext* cx, const WebGLObjectType*,
                        ErrorResult& rv) const;
+
   template <typename WebGLObjectType>
   JSObject*
   WebGLObjectAsJSObject(JSContext* cx, const WebGLObjectType*,
                         ErrorResult& rv) const;
 
-  JS::Value ToJSValue(JSContext* cx, const MaybeWebGLVariant& aVariant,
-                      ErrorResult& rv) const;
-
+  template <typename WebGLType>
+  RefPtr<ClientWebGLObject<WebGLType>>&&
+  EnsureWebGLObject(const WebGLId<WebGLType>& id);
 
   // -------------------------------------------------------------------------
   // Binary data access/conversion for IPC
@@ -519,7 +527,7 @@ class ClientWebGLContext
                             layers::WebRenderCanvasData* aCanvasData) override;
 
   bool
-  UpdateAsyncHandle(LayerTransactionChild* aLayerTransaction,
+  UpdateCompositableHandle(LayerTransactionChild* aLayerTransaction,
                     CompositableHandle aHandle);
 
   // ------
@@ -1454,7 +1462,6 @@ class ClientWebGLContext
 
   bool
   IsQuery(const WebGLId<WebGLQuery>& query, bool aFromExtension = false) const {
-    // DLP: TODO: Extension?
     return query != WebGLId<WebGLQuery>::Invalid();
   }
 
@@ -1796,6 +1803,8 @@ class ClientWebGLContext
   bool mOptionsFrozen = false;
   WebGLContextOptions mOptions;
   WebGLPixelStore mPixelStore;
+
+  static const size_t sMaxSizeInlineData = 1024;  // 1K
 };
 
 template <typename WebGLObjectType>

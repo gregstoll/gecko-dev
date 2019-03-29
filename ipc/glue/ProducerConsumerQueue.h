@@ -1030,6 +1030,7 @@ struct IPDLParamTraits<mozilla::ipc::Consumer> :
   typedef mozilla::ipc::Consumer paramType;
 };
 
+// ---------------------------------------------------------------
 
 template<typename Arg>
 struct PcqParamTraits<PcqTypedArg<Arg>> {
@@ -1063,6 +1064,8 @@ struct PcqParamTraits<PcqTypedArg<Arg>> {
   }
 };
 
+// ---------------------------------------------------------------
+
 /**
  * True for types that can be (de)serialized by memcpy.
  */
@@ -1095,6 +1098,8 @@ struct PcqParamTraits {
     return sizeof(Arg);
   }
 };
+
+// ---------------------------------------------------------------
 
 template<>
 struct PcqParamTraits<nsACString> {
@@ -1243,13 +1248,17 @@ struct PcqParamTraits<nsString> : public PcqParamTraits<nsAString> {
   using ParamType = nsString;
 };
 
-// TODO: Make this more efficient for IsTriviallySerializable element types.
-// NB: There may be alignment issues with that, which are not a problem but
-// may result in padding being written into the queue (which means it needs
-// to be added to MinSize)
+// ---------------------------------------------------------------
+
+template<typename NSTArrayType,
+         bool = IsTriviallySerializable<typename NSTArrayType::elem_type>::value>
+struct NSArrayPcqParamTraits;
+
+// For ElementTypes that are !IsTriviallySerializable
 template<typename ElementType>
-struct PcqParamTraits<nsTArray<ElementType>> {
+struct NSArrayPcqParamTraits<nsTArray<ElementType>, false> {
   using ParamType = nsTArray<ElementType>;
+  using ElementType = ElementType;
 
   static PcqStatus Write(ProducerView& aProducerView, const ParamType& aArg) {
     size_t arrayLen = aArg.Length();
@@ -1291,64 +1300,127 @@ struct PcqParamTraits<nsTArray<ElementType>> {
       ret += aView.MinSizeParam(&aArg[i]);
     }
     return ret;
+  }
+};
+
+// For ElementTypes that are IsTriviallySerializable
+template<typename ElementType>
+struct NSArrayPcqParamTraits<nsTArray<ElementType>, true> {
+  using ParamType = nsTArray<ElementType>;
+  using ElementType = ElementType;
+
+  // TODO: Are there alignment issues?
+
+  static PcqStatus Write(ProducerView& aProducerView, const ParamType& aArg) {
+    size_t arrayLen = aArg.Length();
+    PcqStatus status = aProducerView.WriteParam(arrayLen);
+    status =
+      IsSuccess(status) ? aProducerView.Write(&aArg[0], aArg.Length() * sizeof(ElementType)) : status;
+    return status;
+  }
+
+  static PcqStatus Read(ConsumerView& aConsumerView, ParamType* aArg) {
+    size_t arrayLen;
+    PcqStatus status = aConsumerView.ReadParam(&arrayLen);
+    if (!IsSuccess(status)) {
+      return status;
+    }
+
+    if (aArg && !aArg->AppendElements(arrayLen)) {
+      return PcqStatus::PcqFatalError;
+    }
+
+    status =
+      IsSuccess(status) ? aConsumerView.Read(aArg->Elements(), arrayLen * sizeof(ElementType)) : status;
+    return status;
+  }
+
+  template<typename View>
+  static size_t MinSize(View& aView, const ParamType* aArg) {
+    size_t ret = aView.template MinSizeParam<size_t>(nullptr);
+    if (!aArg) {
+      return ret;
+    }
+
+    ret += aArg->Length() * sizeof(ElementType);
+    return ret;
+  }
+};
+
+template<typename ElementType>
+struct PcqParamTraits<nsTArray<ElementType>>
+  : public NSArrayPcqParamTraits<nsTArray<ElementType>> {
+  using ParamType = nsTArray<ElementType>;
+};
+
+// ---------------------------------------------------------------
+
+template<typename ArrayType,
+         bool = IsTriviallySerializable<typename ArrayType::ElementType>::value>
+struct ArrayPcqParamTraits;
+
+// For ElementTypes that are !IsTriviallySerializable
+template<typename ElementType, size_t Length>
+struct ArrayPcqParamTraits<Array<ElementType, Length>, false> {
+  using ParamType = Array<ElementType, Length>;
+  using ElementType = ElementType;
+
+  static PcqStatus Write(ProducerView& aProducerView, const ParamType& aArg) {
+    PcqStatus status = PcqStatus::Success;
+    for(size_t i=0; i<Length; ++i) {
+      status = IsSuccess(status) ? aProducerView.WriteParam(aArg[i]) : status;
+    }
+    return status;
+  }
+
+  static PcqStatus Read(ConsumerView& aConsumerView, ParamType* aArg) {
+    PcqStatus status = PcqStatus::Success;
+    for(size_t i=0; i<Length; ++i) {
+      ElementType* elt = aArg ? (&((*aArg)[i])) : nullptr;
+      status =
+        IsSuccess(status) ? aConsumerView.ReadParam(elt) : status;
+    }
+    return status;
+  }
+
+  template<typename View>
+  static size_t MinSize(View& aView, const ParamType* aArg) {
+    for(size_t i=0; i<Length; ++i) {
+      ret += aView.MinSizeParam(&((*aArg)[i]));
+    }
+    return ret;
+  }
+};
+
+// For ElementTypes that are IsTriviallySerializable
+template<typename ElementType, size_t Length>
+struct ArrayPcqParamTraits<Array<ElementType, Length>, true> {
+  using ParamType = Array<ElementType, Length>;
+  using ElementType = ElementType;
+
+  static PcqStatus Write(ProducerView& aProducerView, const ParamType& aArg) {
+    return
+      aProducerView.Write(aArg.begin(), sizeof(ElementType[Length]));
+  }
+
+  static PcqStatus Read(ConsumerView& aConsumerView, ParamType* aArg) {
+    return
+      aConsumerView.Read(aArg->begin(), sizeof(ElementType[Length]));
+  }
+
+  template<typename View>
+  static size_t MinSize(View& aView, const ParamType* aArg) {
+    return sizeof(ElementType[Length]);
   }
 };
 
 template<typename ElementType, size_t Length>
-struct IsTriviallySerializable<Array<ElementType,Length>> : IsTriviallySerializable<ElementType> {};
-
-#if 0
-// TODO: If the PcqParamTraits framework were better then I could maybe subclass a 
-// TriviallySerializablePcqParamTraits (the current default PcqParamTraits)
-// and add these methods for the case where the ElementType is not trivially serializable.
-template<typename ElementType, size_t Length,
-         typename = typename EnableIf<!mozilla::ipc::template IsTriviallySerializable<ElementType>::value>::Type>
-struct PcqParamTraits<Array<ElementType,Length>> {
+struct PcqParamTraits<Array<ElementType, Length>>
+  : public ArrayPcqParamTraits<Array<ElementType, Length>> {
   using ParamType = Array<ElementType, Length>;
-
-  static PcqStatus Write(ProducerView& aProducerView, const ParamType& aArg) {
-    size_t arrayLen = aArg.Length();
-    PcqStatus status = aProducerView.WriteParam(arrayLen);
-    for(size_t i=0; i<aArg.Length(); ++i) {
-      status = IsSuccess(status) ? aProducerView.WriteParam(aArg[i]) : status;
-    }
-    return status;
-  }
-
-  static PcqStatus Read(ConsumerView& aConsumerView, ParamType* aArg) {
-    size_t arrayLen;
-    PcqStatus status = aConsumerView.ReadParam(&arrayLen);
-    if (!IsSuccess(status)) {
-      return status;
-    }
-
-    if (aArg && !aArg->AppendElements(arrayLen)) {
-      return PcqStatus::PcqFatalError;
-    }
-
-    for(size_t i=0; i<arrayLen; ++i) {
-      ElementType* elt = aArg ? (&aArg->ElementAt(i)) : nullptr;
-      status =
-        IsSuccess(status) ? aConsumerView.ReadParam(elt) : status;
-    }
-    return status;
-  }
-
-  template<typename View>
-  static size_t MinSize(View& aView, const ParamType* aArg) {
-    size_t ret = aView.template MinSizeParam<size_t>(nullptr);
-    if (!aArg) {
-      return ret;
-    }
-
-    size_t arrayLen = aArg->Length();
-    for(size_t i=0; i<arrayLen; ++i) {
-      ret += aView.MinSizeParam(&aArg[i]);
-    }
-    return ret;
-  }
 };
-#endif
+
+// ---------------------------------------------------------------
 
 template<typename ElementType>
 struct PcqParamTraits<Maybe<ElementType>> {
@@ -1388,6 +1460,8 @@ struct PcqParamTraits<Maybe<ElementType>> {
   }
 };
 
+// ---------------------------------------------------------------
+
 template<typename TypeA, typename TypeB>
 struct PcqParamTraits<Pair<TypeA,TypeB>> {
   using ParamType = Pair<TypeA,TypeB>;
@@ -1410,6 +1484,8 @@ struct PcqParamTraits<Pair<TypeA,TypeB>> {
       aView.MinSizeParam(aArg ? aArg->second() : nullptr);
   }
 };
+
+// ---------------------------------------------------------------
 
 // C++ does not allow this struct with a templated method to be local to
 // another struct (PcqParamTraits<Variant<...>>) so we put it here.

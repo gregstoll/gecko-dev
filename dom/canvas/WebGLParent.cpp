@@ -116,7 +116,7 @@ mozilla::ipc::IPCResult WebGLParent::Recv__delete__() {
 void WebGLParent::ActorDestroy(ActorDestroyReason aWhy) { mHost = nullptr; }
 
 mozilla::ipc::IPCResult
-WebGLParent::RecvUpdateAsyncHandle(layers::PLayerTransactionParent* aLayerTransaction,
+WebGLParent::RecvUpdateCompositableHandle(layers::PLayerTransactionParent* aLayerTransaction,
                                    const CompositableHandle& aHandle) {
   auto layerTrans = static_cast<layers::LayerTransactionParent*>(aLayerTransaction);
   RefPtr<layers::CompositableHost> compositableHost(layerTrans->FindCompositable(aHandle));

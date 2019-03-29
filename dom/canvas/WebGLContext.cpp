@@ -9,6 +9,7 @@
 #include <queue>
 
 #include "AccessCheck.h"
+#include "CompositableHost.h"
 #include "gfxConfig.h"
 #include "gfxContext.h"
 #include "gfxCrashReporterUtils.h"
@@ -124,6 +125,7 @@ WebGLContext::WebGLContext()
       mMaxAcceptableFBStatusInvals(
           gfxPrefs::WebGLMaxAcceptableFBStatusInvals()),
       mHost(nullptr),
+      mBackend(LayersBackend::LAYERS_NONE),
       mDataAllocGLCallCount(0),
       mBypassShaderValidation(false),
       mEmptyTFO(0),
@@ -653,7 +655,7 @@ WebGLContext::DoSetDimensions(int32_t signedWidth, int32_t signedHeight) {
     if (IsContextLost()) return { NS_OK, false };
 
     // If we've already drawn, we should commit the current buffer.
-    PresentScreenBuffer(gl->Screen());
+    PresentScreenBuffer();
 
     if (IsContextLost()) {
       GenerateWarning("WebGL context was lost due to swap failure.");
@@ -860,6 +862,11 @@ WebGLContext::DoSetDimensions(int32_t signedWidth, int32_t signedHeight) {
 
   gl->ResetSyncCallCount("WebGLContext Initialization");
   return { NS_OK, true };
+}
+
+void WebGLContext::SetCompositableHost(RefPtr<layers::CompositableHost>& aCompositableHost)
+{
+  mCompositableHost = aCompositableHost;
 }
 
 void ClientWebGLContext::LoseOldestWebGLContextIfLimitExceeded() {
@@ -1080,7 +1087,7 @@ void WebGLContext::BlitBackbufferToCurDriverFB() const {
 }
 
 Maybe<ICRData>
-WebGLContext::InitializeCanvasRenderer(layers::LayersBackend backend) 
+WebGLContext::InitializeCanvasRenderer(layers::LayersBackend backend)
 {
   if (!gl) {
     return Nothing();
@@ -1107,10 +1114,12 @@ WebGLContext::InitializeCanvasRenderer(layers::LayersBackend backend)
   UniquePtr<gl::SurfaceFactory> factory =
     gl::GLScreenBuffer::CreateFactory(gl, gl->Caps(), nullptr, backend,
                                       gl->IsANGLE(), flags);
+  mBackend = backend;
 
   if (!factory) {
     // Absolutely must have a factory here, so create a basic one
     factory = MakeUnique<gl::SurfaceFactory_Basic>(gl, gl->Caps(), flags);
+    mBackend = LayersBackend::LAYERS_BASIC;
   }
 
   gl->Screen()->Morph(std::move(factory));
@@ -1124,6 +1133,8 @@ WebGLContext::InitializeCanvasRenderer(layers::LayersBackend backend)
 bool WebGLContext::PresentScreenBuffer(GLScreenBuffer* const targetScreen) {
   const FuncScope funcScope(*this, "<PresentScreenBuffer>");
   if (IsContextLost()) return false;
+
+  mDrawCallsSinceLastFlush = 0;
 
   if (!mShouldPresent) return false;
 
@@ -1171,20 +1182,57 @@ bool WebGLContext::PresentScreenBuffer(GLScreenBuffer* const targetScreen) {
   return true;
 }
 
-// Prepare the context for capture before compositing
-void WebGLContext::BeginComposition(GLScreenBuffer* const screen) {
-  // Present our screenbuffer, if needed.
-  PresentScreenBuffer(screen);
-  mDrawCallsSinceLastFlush = 0;
-}
+bool WebGLContext::Present() {
+  if (!mCompositableHost) {
+    return false;
+  }
 
-// Clean up the context after captured for compositing
-void ClientWebGLContext::EndComposition() {
-  // Mark ourselves as no longer invalidated.
-  MarkContextClean();
-  UpdateLastUseIndex();
-  
-  // Host-side EndComposition is a no-op
+  if (!PresentScreenBuffer()) {
+    return false;
+  }
+
+  // Set the CompositableHost to use the front buffer as the display,
+  TextureFlags flags = TextureFlags::ORIGIN_BOTTOM_LEFT;
+  if ((!IsPremultAlpha()) && mOptions.alpha) {
+    flags |= TextureFlags::NON_PREMULTIPLIED;
+  }
+
+  const auto& screen = gl->Screen();
+  if (!screen->Front()->Surf()) {
+    GenerateWarning("Present failed due to missing front buffer. Losing context.");
+    ForceLoseContext();
+    return false;
+  }
+
+  if (mBackend == LayersBackend::LAYERS_NONE) {
+    GenerateWarning("Present was not given a valid compositor layer type. Losing context.");
+    ForceLoseContext();
+    return false;
+  }
+
+  // TODO: I probably need to hold onto screen->Front()->Surf() somehow
+  layers::SurfaceDescriptor surfaceDescriptor;
+  screen->Front()->Surf()->ToSurfaceDescriptor(&surfaceDescriptor);
+  wr::MaybeExternalImageId noExternalImageId = Nothing();
+  RefPtr<TextureHost> host =
+    TextureHost::Create(surfaceDescriptor, null_t(), nullptr,
+                        mBackend, flags, noExternalImageId);
+
+  if (!host) {
+    GenerateWarning("Present failed to create TextuteHost. Losing context.");
+    ForceLoseContext();
+    return false;
+  }
+
+  AutoTArray<CompositableHost::TimedTexture, 1> textures;
+  CompositableHost::TimedTexture* t = textures.AppendElement();
+  t->mTexture = host;
+  t->mTimeStamp = TimeStamp::Now();
+  t->mPictureRect = nsIntRect(nsIntPoint(0, 0), nsIntSize(host->GetSize()));
+  t->mFrameID = 0;
+  t->mProducerID = 0;
+  mCompositableHost->UseTextureHost(textures);
+  return true;
 }
 
 void WebGLContext::DummyReadFramebufferOperation() {
@@ -1840,22 +1888,14 @@ WebGLContext::GetVRFrame() {
   if (!mVRScreen) {
     auto caps = gl->Screen()->mCaps;
     mVRScreen = GLScreenBuffer::Create(gl, gfx::IntSize(1, 1), caps);
-
-    // DLP: TODO: !!! Android
-    RefPtr<ImageBridgeChild> imageBridge = ImageBridgeChild::GetSingleton();
-    if (imageBridge) {
-      TextureFlags flags = TextureFlags::ORIGIN_BOTTOM_LEFT;
-      UniquePtr<gl::SurfaceFactory> factory =
-          gl::GLScreenBuffer::CreateFactory(gl, caps, imageBridge.get(), flags);
-      mVRScreen->Morph(std::move(factory));
-    }
   }
+
+  MOZ_ASSERT(mVRScreen);
 
   // Swap buffers as though composition has occurred.
   // We will then share the resulting front buffer to be submitted to the VR
   // compositor.
-  BeginComposition(mVRScreen.get());
-  EndComposition();
+  PresentScreenBuffer(mVRScreen.get());
 
   if (IsContextLost()) return nullptr;
 
@@ -1881,8 +1921,7 @@ WebGLContext::GetVRFrame() {
    * We will then share the resulting front buffer to be submitted to the VR
    * compositor.
    */
-  BeginComposition();
-  EndComposition();
+  PresentScreenBuffer();
 
   gl::GLScreenBuffer* screen = gl->Screen();
   if (!screen) return nullptr;
@@ -1905,24 +1944,21 @@ void WebGLContext::EnsureVRReady() {
   // compositor renders a WebGL canvas for the first time. This causes canvases
   // not added to the DOM not to work properly with WebVR. Here we mimic what
   // InitializeCanvasRenderer does internally as a workaround.
-  const auto imageBridge = ImageBridgeChild::GetSingleton();
-  if (imageBridge) {
-    const auto caps = gl->Screen()->mCaps;
-    auto flags = TextureFlags::ORIGIN_BOTTOM_LEFT;
-    if (!IsPremultAlpha() && mOptions.alpha) {
-      flags |= TextureFlags::NON_PREMULTIPLIED;
-    }
-    auto factory =
-        gl::GLScreenBuffer::CreateFactory(gl, caps, imageBridge.get(), flags);
-    gl->Screen()->Morph(std::move(factory));
-#if defined(MOZ_WIDGET_ANDROID)
-    // On Android we are using a different GLScreenBuffer for WebVR, so we need
-    // a resize here because PresentScreenBuffer() may not be called for the
-    // gl->Screen() after we set the new factory.
-    gl->Screen()->Resize(DrawingBufferSize());
-#endif
-    mVRReady = true;
+  const auto caps = gl->Screen()->mCaps;
+  auto flags = TextureFlags::ORIGIN_BOTTOM_LEFT;
+  if (!IsPremultAlpha() && mOptions.alpha) {
+    flags |= TextureFlags::NON_PREMULTIPLIED;
   }
+  auto factory =
+    gl::GLScreenBuffer::CreateFactory(gl, caps, nullptr, flags);
+  gl->Screen()->Morph(std::move(factory));
+#if defined(MOZ_WIDGET_ANDROID)
+  // On Android we are using a different GLScreenBuffer for WebVR, so we need
+  // a resize here because PresentScreenBuffer() may not be called for the
+  // gl->Screen() after we set the new factory.
+  gl->Screen()->Resize(DrawingBufferSize());
+#endif
+  mVRReady = true;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

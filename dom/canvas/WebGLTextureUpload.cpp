@@ -227,7 +227,7 @@ static MaybeWebGLTexUnpackVariant&& FromImageBitmap(
 static MaybeWebGLTexUnpackVariant&&
 FromImageData(ClientWebGLContext* webgl, TexImageTarget target, uint32_t width,
               uint32_t height, uint32_t depth, const dom::ImageData& imageData) {
-  dom::Uint32Array scopedArr;
+  dom::Uint8ClampedArray scopedArr;
   DebugOnly<bool> inited = scopedArr.Init(imageData.GetDataObject());
   MOZ_ASSERT(inited);
   scopedArr.ComputeLengthAndData();

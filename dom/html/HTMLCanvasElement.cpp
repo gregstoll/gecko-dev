@@ -26,6 +26,7 @@
 #include "mozilla/EventDispatcher.h"
 #include "mozilla/gfx/Rect.h"
 #include "mozilla/layers/AsyncCanvasRenderer.h"
+#include "mozilla/layers/OOPCanvasRenderer.h"
 #include "mozilla/layers/WebRenderCanvasRenderer.h"
 #include "mozilla/layers/WebRenderUserData.h"
 #include "mozilla/MouseEvents.h"
@@ -1295,6 +1296,16 @@ AsyncCanvasRenderer* HTMLCanvasElement::GetAsyncCanvasRenderer() {
   return mAsyncCanvasRenderer;
 }
 
+layers::OOPCanvasRenderer* HTMLCanvasElement::GetOOPCanvasRenderer() {
+  if (!mOOPCanvasRenderer) {
+    ClientWebGLContext* context = GetClientWebGLContext();
+    MOZ_ASSERT(context);
+    mOOPCanvasRenderer = new OOPCanvasRenderer(context);
+  }
+
+  return mOOPCanvasRenderer;
+}
+
 layers::LayersBackend HTMLCanvasElement::GetCompositorBackendType() const {
   nsIWidget* docWidget = nsContentUtils::WidgetForDocument(OwnerDoc());
   if (docWidget) {
@@ -1420,15 +1431,19 @@ void HTMLCanvasElement::InvalidateFromAsyncCanvasRenderer(
   element->InvalidateCanvasContent(nullptr);
 }
 
-PWebGLChild*
-HTMLCanvasElement::GetWebGLChild() {
+ClientWebGLContext*
+HTMLCanvasElement::GetClientWebGLContext() {
   if (GetCurrentContextType() != CanvasContextType::WebGL1 &&
       GetCurrentContextType() != CanvasContextType::WebGL2) {
     return nullptr;
   }
 
-  ClientWebGLContext* webgl =
-    static_cast<ClientWebGLContext*>(GetContextAtIndex(0));
+  return static_cast<ClientWebGLContext*>(GetContextAtIndex(0));
+}
+
+PWebGLChild*
+HTMLCanvasElement::GetWebGLChild() {
+  ClientWebGLContext* webgl = GetClientWebGLContext();
   if (!webgl) {
     return nullptr;
   }

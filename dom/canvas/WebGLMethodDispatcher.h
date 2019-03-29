@@ -33,6 +33,8 @@ DEFINE_SYNC(HostWebGLContext::InitializeCanvasRenderer)
 DEFINE_SYNC(HostWebGLContext::SetDimensionsImpl)
 DEFINE_SYNC(HostWebGLContext::OnMemoryPressure)
 DEFINE_SYNC(HostWebGLContext::GetSupportedExtensionsImpl)
+DEFINE_SYNC(HostWebGLContext::Present)
+
 DEFINE_SYNC(HostWebGLContext::GetParameterImpl)
 DEFINE_ASYNC(HostWebGLContext::AttachShader)
 DEFINE_ASYNC(HostWebGLContext::BindAttribLocationImpl)

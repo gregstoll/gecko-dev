@@ -45,7 +45,7 @@ class WebGLParent
   bool RunCommandQueue();
 
   mozilla::ipc::IPCResult
-  RecvUpdateAsyncHandle(layers::PLayerTransactionParent* aLayerTransaction,
+  RecvUpdateCompositableHandle(layers::PLayerTransactionParent* aLayerTransaction,
                         const CompositableHandle& aHandle);
 
   mozilla::ipc::IPCResult Recv__delete__() override;
