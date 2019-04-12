@@ -16,6 +16,7 @@
 #include "WebGLFormats.h"
 #include "WebGLTexelConversions.h"
 #include "WebGLTexture.h"
+#include "ProducerConsumerQueue.h"
 
 namespace mozilla {
 namespace webgl {
@@ -266,7 +267,7 @@ static uint32_t FallbackOnZero(uint32_t val, uint32_t fallback) {
 TexUnpackBlob::TexUnpackBlob(const WebGLPixelStore& pixelStore, TexImageTarget target,
                              uint32_t rowLength, uint32_t width,
                              uint32_t height, uint32_t depth,
-                             gfxAlphaType srcAlphaType, BlobType blobType)
+                             gfxAlphaType srcAlphaType)
     : mAlignment(pixelStore.mUnpackAlignment),
       mRowLength(rowLength),
       mImageHeight(FallbackOnZero(
@@ -286,8 +287,7 @@ TexUnpackBlob::TexUnpackBlob(const WebGLPixelStore& pixelStore, TexImageTarget t
       mSrcAlphaType(srcAlphaType)
 
       ,
-      mNeedsExactUpload(false)
-      , mBlobType(blobType) {
+      mNeedsExactUpload(false) {
   MOZ_ASSERT_IF(!IsTarget3D(target), mDepth == 1);
 }
 
@@ -405,7 +405,7 @@ TexUnpackBytes::TexUnpackBytes(const WebGLPixelStore& pixelStore, TexImageTarget
                                size_t availBytes)
     : TexUnpackBlob(pixelStore, target,
                     FallbackOnZero(pixelStore.mUnpackRowLength, width),
-                    width, height, depth, gfxAlphaType::NonPremult, BlobType::Bytes),
+                    width, height, depth, gfxAlphaType::NonPremult),
       mIsClientData(isClientData),
       mPtr(ptr),
       mAvailBytes(availBytes) {}
@@ -581,21 +581,20 @@ bool TexUnpackBytes::TexOrSubImage(bool isSubImage, bool needsRespec,
 ////////////////////////////////////////////////////////////////////////////////
 // TexUnpackImage
 
-TexUnpackImage::TexUnpackImage(const ClientWebGLContext* webgl, TexImageTarget target,
+TexUnpackImage::TexUnpackImage(const WebGLContext* webgl, TexImageTarget target,
+                               uint32_t rowLength,
                                uint32_t width, uint32_t height, uint32_t depth,
                                layers::Image* image, gfxAlphaType srcAlphaType)
-    : TexUnpackBlob(webgl->GetPixelStore(), target, image->GetSize().width, width, height, depth,
-                    srcAlphaType, BlobType::Image),
-      mImage(image) {}
+    : TexUnpackBlob(webgl->GetPixelStore(), target, rowLength, width, height, depth,
+                    srcAlphaType)
+    , mImage(image) {}
 
 TexUnpackImage::~TexUnpackImage() {}
 
 bool TexUnpackImage::Validate(WebGLContext* webgl,
                               const webgl::PackingInfo& pi) {
   if (!ValidatePIForDOM(webgl, pi)) return false;
-
-  const auto fullRows = mImage->GetSize().height;
-  return ValidateUnpackPixels(webgl, fullRows, 0, this);
+  return ValidateUnpackPixels(webgl, mImage->GetSize().height, 0, this);
 }
 
 bool TexUnpackImage::TexOrSubImage(bool isSubImage, bool needsRespec,
@@ -741,8 +740,19 @@ TexUnpackSurface::TexUnpackSurface(const ClientWebGLContext* webgl,
                                    uint32_t height, uint32_t depth,
                                    gfx::DataSourceSurface* surf,
                                    gfxAlphaType srcAlphaType)
-    : TexUnpackBlob(webgl->GetPixelStore(), target, surf->GetSize().width, width, height, depth,
-                    srcAlphaType, BlobType::Surface),
+    : TexUnpackBlob(webgl->GetPixelStore(), target,
+                    surf->GetSize().width, width, height, depth,
+                    srcAlphaType),
+      mSurf(surf) {}
+
+TexUnpackSurface::TexUnpackSurface(const WebGLContext* webgl,
+                                   TexImageTarget target, uint32_t width,
+                                   uint32_t height, uint32_t depth,
+                                   gfx::DataSourceSurface* surf,
+                                   gfxAlphaType srcAlphaType)
+    : TexUnpackBlob(webgl->GetPixelStore(), target,
+                    surf->GetSize().width, width, height, depth,
+                    srcAlphaType),
       mSurf(surf) {}
 
 //////////
@@ -895,26 +905,195 @@ bool TexUnpackSurface::TexOrSubImage(
   return true;
 }
 
+//////////
+
+/* static */ mozilla::ipc::PcqStatus
+TexUnpackBytes::Read(mozilla::ipc::ConsumerView& aView,
+                     UniquePtr<webgl::TexUnpackBytes>* aTexBytes) {
+  MOZ_ASSERT_UNREACHABLE("TODO: Read as TexUnpackBytes");
+}
+
+mozilla::ipc::PcqStatus
+TexUnpackBytes::Write(mozilla::ipc::ProducerView& aView) {
+  MOZ_ASSERT_UNREACHABLE("TODO: Write as TexUnpackBytes");
+}
+
+size_t TexUnpackBytes::Size() const {
+  MOZ_ASSERT_UNREACHABLE("TODO:");
+}
+
+mozilla::ipc::PcqStatus
+TexUnpackSurface::Write(mozilla::ipc::ProducerView& aView) {
+  MOZ_ASSERT_UNREACHABLE("TODO: Write as TexUnpackBytes");
+}
+
+size_t TexUnpackSurface::Size() const {
+  MOZ_ASSERT_UNREACHABLE("TODO:");
+}
+
 }  // namespace webgl
 
 //////////
 
-UniquePtr<webgl::TexUnpackBytes>&&
-PcqTexUnpack::TakeBlob(WebGLContext* aContext) {
-  UniquePtr<webgl::TexUnpackBytes> ret;
-  if (!mMaybeBlob) {
-    return std::move(ret);
+enum TexUnpackType { NoType, BytesType, ImageType, SurfaceType, PboType };
+
+struct TexUnpackWriteMatcher {
+  PcqStatus match(UniquePtr<webgl::TexUnpackBytes>& o) {
+    PcqStatus status = mView.WriteParam(TexUnpackType::BytesType);
+    return IsSuccess(status) ? WriteTexUnpack(o) : status;
   }
 
-  if (mMaybeBlob.ref().is<UniquePtr<webgl::TexUnpackBytes>>()) {
-    if (!aContext->ValidateNullPixelUnpackBuffer()) {
-      return std::move(ret);
+  PcqStatus match(UniquePtr<webgl::TexUnpackSurface>& o) {
+    PcqStatus status = mView.WriteParam(TexUnpackType::SurfaceType);
+    return IsSuccess(status) ? WriteTexUnpack(o) : status;
+  }
+
+  PcqStatus match(WebGLTexImageData& o) {
+    PcqStatus status = mView.WriteParam(TexUnpackType::ImageType);
+    return IsSuccess(status) ? mView.WriteParam(o) : status; 
+  }
+
+  PcqStatus match(WebGLTexPboOffset& o) {
+    PcqStatus status = mView.WriteParam(TexUnpackType::PboType);
+    return IsSuccess(status) ? mView.WriteParam(o) : status; 
+  }
+
+  ProducerView& mView;
+
+ private:
+  template<typename T>
+  PcqStatus WriteTexUnpack(UniquePtr<T>& o) {
+    PcqStatus status = mView.WriteParam(static_cast<bool>(o));
+    if ((!IsSuccess(status)) || (!o)) {
+      return status;
     }
-    return std::move(mMaybeBlob.ref().as<UniquePtr<webgl::TexUnpackBytes>>());
+    status = o->Write(mView);
+    if (IsSuccess(status)) {
+      o.reset();
+    }
+    return status;
+  }
+};
+
+PcqStatus PcqTexUnpack::Write(ProducerView& aProducerView) {
+  if (!mMaybeBlob) {
+    return aProducerView.WriteParam(TexUnpackType::NoType);
   }
 
-  MOZ_ASSERT_UNREACHABLE("TODO: Handle PBO case");
-  return std::move(ret);
+  return mMaybeBlob.ref().match(TexUnpackWriteMatcher { aProducerView });
+}
+
+/* static */
+PcqStatus PcqTexUnpack::Read(PcqTexUnpack* aPcqTexUnpack,
+                             ConsumerView& aConsumerView) {
+  if (aPcqTexUnpack) {
+    aPcqTexUnpack->mMaybeBlob = Nothing();
+  }
+
+  TexUnpackType unpackType;
+  PcqStatus status = aConsumerView.ReadParam(&unpackType);
+  if (!IsSuccess(status)) {
+    return status;
+  }
+
+  switch(unpackType) {
+    case TexUnpackType::NoType:
+      return status;
+
+    // Both of these types deserialize to Bytes
+    case TexUnpackType::BytesType:
+    case TexUnpackType::SurfaceType: {
+      UniquePtr<webgl::TexUnpackBytes> texBytes;
+      status =
+        webgl::TexUnpackBytes::Read(aConsumerView,
+                                    aPcqTexUnpack ? &texBytes : nullptr);
+      if (IsSuccess(status) && aPcqTexUnpack) {
+        aPcqTexUnpack->mMaybeBlob = AsSomeVariant(std::move(texBytes));
+      }
+      return status;
+    }
+
+    case TexUnpackType::ImageType: {
+      WebGLTexImageData texImage;
+      status =
+        aConsumerView.ReadParam(aPcqTexUnpack ? &texImage : nullptr);
+      if (IsSuccess(status) && aPcqTexUnpack) {
+        aPcqTexUnpack->mMaybeBlob = AsSomeVariant(texImage);
+      }
+      return status;
+    }
+
+    case TexUnpackType::PboType: {
+      WebGLTexPboOffset texPbo;
+      status =
+        aConsumerView.ReadParam(aPcqTexUnpack ? &texPbo : nullptr);
+      if (IsSuccess(status) && aPcqTexUnpack) {
+        aPcqTexUnpack->mMaybeBlob = AsSomeVariant(texPbo);
+      }
+      return status;
+    }
+  }
+
+  MOZ_ASSERT_UNREACHABLE("Illegal unpack enum value");
+  return PcqStatus::PcqFatalError;
+}
+
+size_t PcqTexUnpack::MinSize() const {
+  if (!mMaybeBlob) {
+    return sizeof(TexUnpackType);
+  }
+
+  struct Matcher {
+    size_t match(const UniquePtr<webgl::TexUnpackBytes>& o) {
+      return sizeof(bool) + (o ? o->Size() : 0);
+    }
+    size_t match(const UniquePtr<webgl::TexUnpackSurface>& o) {
+      return sizeof(bool) + (o ? o->Size() : 0);
+    }
+    size_t match(const WebGLTexImageData& o) { return sizeof(o); }
+    size_t match(const WebGLTexPboOffset& o) { return sizeof(o); }
+  };
+
+  return sizeof(TexUnpackType) + mMaybeBlob.ref().match(Matcher());
+}
+
+UniquePtr<webgl::TexUnpackBlob>
+PcqTexUnpack::TakeBlob(WebGLContext* aContext) {
+  if (!mMaybeBlob) {
+    return nullptr;
+  }
+
+  struct Matcher {
+    UniquePtr<webgl::TexUnpackBlob>
+    match(UniquePtr<webgl::TexUnpackBytes>& o) {
+      if (!mContext->ValidateNullPixelUnpackBuffer()) {
+        return nullptr;
+      }
+      return std::move(o);
+    }
+
+    UniquePtr<webgl::TexUnpackBlob>
+    match(UniquePtr<webgl::TexUnpackSurface>& o) {
+      MOZ_ASSERT_UNREACHABLE("TakeBlob requires a TexUnpackBytes or WebGLTexPboOffset");
+      return nullptr;
+    }
+
+    UniquePtr<webgl::TexUnpackBlob>
+    match(WebGLTexImageData& o) {
+      return mContext->TexUnpackBytesFromTexImageData(o);
+    }
+
+    UniquePtr<webgl::TexUnpackBlob>
+    match(WebGLTexPboOffset& o) {
+      return mContext->TexUnpackBytesFromTexPboOffset(o.mTarget, o.mWidth,
+        o.mHeight, o.mDepth, o.mPboOffset,
+        o.mHasExpectedImageSize ? Some(o.mExpectedImageSize) : Nothing());
+    }
+
+    WebGLContext* mContext;
+  };
+
+  return mMaybeBlob.ref().match(Matcher { aContext });
 }
 
 }  // namespace mozilla

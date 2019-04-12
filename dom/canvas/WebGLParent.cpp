@@ -51,7 +51,7 @@ WebGLParent::BeginCommandQueueDrain() {
   WeakPtr<WebGLParent> weakThis = this;
   mRunCommandsRunnable =
     NS_NewRunnableFunction("RunWebGLCommands",
-                           [&weakThis]() { MaybeRunCommandQueue(weakThis); });
+                           [weakThis]() { MaybeRunCommandQueue(weakThis); });
   if (!mRunCommandsRunnable) {
     MOZ_ASSERT_UNREACHABLE("Failed to create RunWebGLCommands Runnable");
     return false;
@@ -62,9 +62,11 @@ WebGLParent::BeginCommandQueueDrain() {
 }
 
 /* static */ bool
-WebGLParent::MaybeRunCommandQueue(WeakPtr<WebGLParent> weakWebGLParent) {
+WebGLParent::MaybeRunCommandQueue(const WeakPtr<WebGLParent>& weakWebGLParent) {
   // We don't have to worry about WebGLParent being deleted from under us
-  // as its not thread-safe so we must be the only thread using it.
+  // as its not thread-safe so we must be the only thread using it.  In fact,
+  // WeakRef cannot atomically promote to a RefPtr so it is not thread safe
+  // either.
   if (weakWebGLParent) {
     // This will re-issue the task if the queue is still running.
     return weakWebGLParent->RunCommandQueue();
@@ -97,14 +99,8 @@ WebGLParent::RunCommandQueue() {
 
   // Re-issue the task
   MOZ_ASSERT(mRunCommandsRunnable);
-  if (NS_FAILED(NS_DispatchToCurrentThread(mRunCommandsRunnable))) {
-    MOZ_ASSERT_UNREACHABLE("WebGLParent::RunCommandQueue task failed to  "
-                           "reissue.  Marking context as failed.");
-    Unused << SendQueueFailed();
-    mRunCommandsRunnable = nullptr;
-    return false;
-  }
-
+  MOZ_ASSERT(MessageLoop::current());
+  MessageLoop::current()->PostTask(do_AddRef(mRunCommandsRunnable));
   return true;
 }
 

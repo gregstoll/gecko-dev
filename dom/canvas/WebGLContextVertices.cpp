@@ -184,8 +184,7 @@ void WebGLContext::DisableVertexAttribArray(GLuint index) {
 }
 
 MaybeWebGLVariant
-WebGLContext::GetVertexAttrib(JSContext* cx, GLuint index,
-                              GLenum pname, ErrorResult& rv) {
+WebGLContext::GetVertexAttrib(GLuint index, GLenum pname) {
   const FuncScope funcScope(*this, "getVertexAttrib");
   if (IsContextLost()) return Nothing();
 

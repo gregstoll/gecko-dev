@@ -307,9 +307,13 @@ static EGLDisplay GetAndInitDisplayForAccelANGLE(
     //       will live longer than the ANGLE display so we're fine.
   });
 
+#if 0
+  // TODO: I don't see how this can be forced on but the system is quite
+  // cryptic so I may be wrong.
   if (gfxConfig::IsForcedOnByUser(Feature::D3D11_HW_ANGLE)) {
     return GetAndInitDisplay(egl, LOCAL_EGL_D3D11_ONLY_DISPLAY_ANGLE);
   }
+#endif
 
   if (d3d11ANGLE.IsEnabled()) {
     ret = GetAndInitDisplay(egl, LOCAL_EGL_D3D11_ELSE_D3D9_DISPLAY_ANGLE);

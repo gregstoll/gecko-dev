@@ -20,6 +20,9 @@ namespace mozilla {
 class ClientWebGLExtensionBase
   : public nsWrapperCache {
  public:
+  NS_INLINE_DECL_CYCLE_COLLECTING_NATIVE_REFCOUNTING(ClientWebGLExtensionBase)
+  NS_DECL_CYCLE_COLLECTION_SCRIPT_HOLDER_NATIVE_CLASS(ClientWebGLExtensionBase)
+
   ClientWebGLExtensionBase(RefPtr<ClientWebGLContext> aClient)
     : mContext(aClient)
   {}
@@ -37,14 +40,12 @@ class ClientWebGLExtensionBase
  protected:                                                                   \
   virtual ~Client##_Extension() {}                                            \
  public:                                                                      \
-  NS_INLINE_DECL_CYCLE_COLLECTING_NATIVE_REFCOUNTING(Client##_Extension)      \
-  NS_DECL_CYCLE_COLLECTION_SCRIPT_HOLDER_NATIVE_CLASS(Client##_Extension)     \
   virtual JSObject* WrapObject(JSContext* cx,                                 \
                                JS::Handle<JSObject*> givenProto) override;    \
   Client##_Extension(RefPtr<ClientWebGLContext> aClient);
 
 // To be used for implementations of ClientWebGLExtensionBase
-#define DEFINE_WEBGL_EXTENSION_GOOP(_Extension, _WebGLBindingType)            \
+#define DEFINE_WEBGL_EXTENSION_GOOP(_WebGLBindingType, _Extension)            \
 JSObject* Client##_Extension::WrapObject(JSContext* cx,                       \
                                        JS::Handle<JSObject*> givenProto) {    \
   return dom::_WebGLBindingType##_Binding::Wrap(cx, this, givenProto);        \
@@ -59,13 +60,9 @@ class Client##_Extension : public ClientWebGLExtensionBase {                  \
  protected:                                                                   \
   virtual ~Client##_Extension() {}                                            \
  public:                                                                      \
-  NS_INLINE_DECL_CYCLE_COLLECTING_NATIVE_REFCOUNTING(Client##_Extension)      \
-  NS_DECL_CYCLE_COLLECTION_SCRIPT_HOLDER_NATIVE_CLASS(Client##_Extension)     \
   virtual JSObject* WrapObject(JSContext* cx,                                 \
                                JS::Handle<JSObject*> givenProto) override;    \
-  Client##_Extension(RefPtr<ClientWebGLContext> aClient)                      \
-    : ClientWebGLExtensionBase(aClient)                                       \
-  {}                                                                          \
+  Client##_Extension(RefPtr<ClientWebGLContext> aClient);                     \
 };
 
 ////

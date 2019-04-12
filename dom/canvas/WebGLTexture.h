@@ -212,21 +212,21 @@ class WebGLTexture final : public WebGLRefCountedObject<WebGLTexture>,
 
   void TexImage(TexImageTarget target, GLint level, GLenum internalFormat,
                 GLsizei width, GLsizei height, GLsizei depth, GLint border,
-                const webgl::PackingInfo& pi, UniquePtr<webgl::TexUnpackBytes>&& src);
+                const webgl::PackingInfo& pi, UniquePtr<webgl::TexUnpackBlob>&& src);
   void TexSubImage(TexImageTarget target, GLint level, GLint xOffset,
                    GLint yOffset, GLint zOffset, GLsizei width, GLsizei height,
                    GLsizei depth, const webgl::PackingInfo& pi,
-                   UniquePtr<webgl::TexUnpackBytes>&& src);
+                   UniquePtr<webgl::TexUnpackBlob>&& src);
 
  protected:
   void TexImage(TexImageTarget target, GLint level,
                 GLenum internalFormat, const webgl::PackingInfo& pi,
-                UniquePtr<webgl::TexUnpackBytes>&& blob);
+                UniquePtr<webgl::TexUnpackBlob>&& blob);
 
   void TexSubImage(TexImageTarget target, GLint level,
                    GLint xOffset, GLint yOffset, GLint zOffset,
                    const webgl::PackingInfo& pi,
-                   UniquePtr<webgl::TexUnpackBytes>&& blob);
+                   UniquePtr<webgl::TexUnpackBlob>&& blob);
 
  public:
   void CompressedTexImage(TexImageTarget target, GLint level,

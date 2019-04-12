@@ -19,17 +19,17 @@
 #include "WebGLErrorQueue.h"
 #include "WebGLShaderPrecisionFormat.h"
 
-#define WEBGL_BRIDGE_LOG_(lvl, ...)   MOZ_LOG(mozilla::ipc::gWebGLBridgeLog, lvl, (__VA_ARGS__))
+#ifndef WEBGL_BRIDGE_LOG_
+#define WEBGL_BRIDGE_LOG_(lvl, ...)   MOZ_LOG(mozilla::gWebGLBridgeLog, lvl, (__VA_ARGS__))
 #define WEBGL_BRIDGE_LOGD(...)        WEBGL_BRIDGE_LOG_(LogLevel::Debug, __VA_ARGS__)
 #define WEBGL_BRIDGE_LOGE(...)        WEBGL_BRIDGE_LOG_(LogLevel::Error, __VA_ARGS__)
+#endif // WEBGL_BRIDGE_LOG_
 
 namespace mozilla {
 
 class HostWebGLCommandSink;
 
-namespace ipc {
 extern LazyLogModule gWebGLBridgeLog;
-}
 
 namespace layers {
 class CompositableHost;
@@ -66,6 +66,7 @@ protected:
                    UniquePtr<HostWebGLCommandSink>&& aCommandSink,
                    UniquePtr<HostWebGLErrorSource>&& aErrorSource);
 
+  // These are null only if we are running single-process WebGL
   UniquePtr<HostWebGLCommandSink> mCommandSink;
   UniquePtr<HostWebGLErrorSource> mErrorSource;
 
@@ -113,7 +114,7 @@ protected:
       mMap.remove(it);
     }
 
-   private:
+   protected:
     using IdMap = HashMap<WebGLId<ObjectType>, RefPtr<ObjectType>>;
     IdMap mMap;
   };
@@ -123,20 +124,26 @@ protected:
   template <typename ObjectType>
   class HostGenObjectIdMap : public ObjectIdMap<ObjectType> {
    public:
-    using IdType = typename ObjectIdMap<ObjectType>::IdType;
-    using RefType = typename ObjectIdMap<ObjectType>::RefType;
-    using AlreadyAddRefedType =
-      typename ObjectIdMap<ObjectType>::AlreadyAddRefedType;
+    using BaseType = ObjectIdMap<ObjectType>;
+    using IdType = typename BaseType::IdType;
+    using RefType = typename BaseType::RefType;
+    using AlreadyAddRefedType = typename BaseType::AlreadyAddRefedType;
 
     HostGenObjectIdMap() : mNextId(1) {}
 
+    // Generate or resurrect aObj.
     IdType Insert(RefType&& aObj, const IdType& aId) override {
-      MOZ_ASSERT((!aId) && aObj && (aObj->Id() == 0));
-      uint64_t curId = mNextId;
-      ++mNextId;
-      aObj->mId = curId;
+      MOZ_ASSERT((!aId) && aObj);
+      uint64_t curId;
+      if (aObj->Id()) {
+        curId = aObj->Id();
+      } else {
+        curId = mNextId;
+        ++mNextId;
+        aObj->mId = curId;
+      }
       IdType ret(curId);
-      Unused << mMap.put(ret, std::move(aObj));
+      Unused << BaseType::mMap.put(ret, std::move(aObj));
       return ret;
     }
 
@@ -178,6 +185,8 @@ protected:
   DEFINE_OBJECT_ID_MAP(TransformFeedback);
   DEFINE_OBJECT_ID_MAP(VertexArray);
 
+#undef DEFINE_OBJECT_ID_MAP
+
   // Defines a host-side Object ID Map (host generates the IDs) and a few
   // convenient methods that forward to them.
 #define DEFINE_HOST_GEN_OBJECT_ID_MAP(_WebGLType)                             \
@@ -187,6 +196,9 @@ protected:
   DEFINE_HOST_GEN_OBJECT_ID_MAP(Buffer);
   DEFINE_HOST_GEN_OBJECT_ID_MAP(Texture);
   DEFINE_HOST_GEN_OBJECT_ID_MAP(UniformLocation);
+
+#undef DEFINE_HOST_GEN_OBJECT_ID_MAP
+#undef DECLARE_OBJECT_ID_MAP_FUNCS
 
   template<typename T>
   nsTArray<WebGLId<T>>
@@ -236,11 +248,17 @@ protected:
   SetContextOptions(const WebGLContextOptions& options);
 
   SetDimensionsData
-  SetDimensionsImpl(int32_t signedWidth, int32_t signedHeight);
+  SetDimensions(int32_t signedWidth, int32_t signedHeight);
+
+  gfx::IntSize DrawingBufferSize();
 
   void SetCompositableHost(RefPtr<layers::CompositableHost>& aCompositableHost);
 
   void OnMemoryPressure();
+
+  void AllowContextRestore();
+
+  void DidRefresh();
 
   // ------------------------- GL State -------------------------
   bool IsContextLost() const;
@@ -251,12 +269,12 @@ protected:
 
   bool IsEnabled(GLenum cap);
 
-  MaybeWebGLVariant GetParameterImpl(GLenum pname);
+  MaybeWebGLVariant GetParameter(GLenum pname);
 
   void AttachShader(const WebGLId<WebGLProgram>& progId,
                const WebGLId<WebGLShader>& shaderId);
 
-  void BindAttribLocationImpl(const WebGLId<WebGLProgram>& progId, GLuint location,
+  void BindAttribLocation(const WebGLId<WebGLProgram>& progId, GLuint location,
                          const nsString& name);
 
   void BindFramebuffer(GLenum target, const WebGLId<WebGLFramebuffer>& fb);
@@ -289,17 +307,17 @@ protected:
 
   void CompileShader(const WebGLId<WebGLShader>& shaderId);
 
-  WebGLId<WebGLFramebuffer>
-  CreateFramebufferImpl(const WebGLId<WebGLFramebuffer>& aId);
+  void
+  CreateFramebuffer(const WebGLId<WebGLFramebuffer>& aId);
 
-  WebGLId<WebGLProgram>
-  CreateProgramImpl(const WebGLId<WebGLProgram>& aId);
+  void
+  CreateProgram(const WebGLId<WebGLProgram>& aId);
 
-  WebGLId<WebGLRenderbuffer>
-  CreateRenderbufferImpl(const WebGLId<WebGLRenderbuffer>& aId);
+  void
+  CreateRenderbuffer(const WebGLId<WebGLRenderbuffer>& aId);
 
-  WebGLId<WebGLShader>
-  CreateShaderImpl(GLenum aType, const WebGLId<WebGLShader>& aId);
+  void
+  CreateShader(GLenum aType, const WebGLId<WebGLShader>& aId);
 
   void CullFace(GLenum face);
 
@@ -336,54 +354,54 @@ protected:
   void FrontFace(GLenum mode);
 
   Maybe<WebGLActiveInfo>
-  GetActiveAttribImpl(const WebGLId<WebGLProgram>& progId, GLuint index);
+  GetActiveAttrib(const WebGLId<WebGLProgram>& progId, GLuint index);
 
   Maybe<WebGLActiveInfo>
-  GetActiveUniformImpl(const WebGLId<WebGLProgram>& progId, GLuint index);
+  GetActiveUniform(const WebGLId<WebGLProgram>& progId, GLuint index);
 
   Maybe<nsTArray<WebGLId<WebGLShader>>>
-  GetAttachedShadersImpl(const WebGLId<WebGLProgram>& progId);
+  GetAttachedShaders(const WebGLId<WebGLProgram>& progId);
 
   GLint
-  GetAttribLocationImpl(const WebGLId<WebGLProgram>& progId, const nsString& name);
+  GetAttribLocation(const WebGLId<WebGLProgram>& progId, const nsString& name);
 
   MaybeWebGLVariant
-  GetBufferParameterImpl(GLenum target, GLenum pname);
+  GetBufferParameter(GLenum target, GLenum pname);
 
   GLenum GetError();
 
   MaybeWebGLVariant
-  GetFramebufferAttachmentParameterImpl(GLenum target,
+  GetFramebufferAttachmentParameter(GLenum target,
                                         GLenum attachment,
                                         GLenum pname);
 
   MaybeWebGLVariant
-  GetProgramParameterImpl(const WebGLId<WebGLProgram>& progId, GLenum pname);
+  GetProgramParameter(const WebGLId<WebGLProgram>& progId, GLenum pname);
 
   nsString
-  GetProgramInfoLogImpl(const WebGLId<WebGLProgram>& progId);
+  GetProgramInfoLog(const WebGLId<WebGLProgram>& progId);
 
   MaybeWebGLVariant
-  GetRenderbufferParameterImpl(GLenum target, GLenum pname);
+  GetRenderbufferParameter(GLenum target, GLenum pname);
 
   MaybeWebGLVariant
-  GetShaderParameterImpl(const WebGLId<WebGLShader>& shaderId, GLenum pname);
+  GetShaderParameter(const WebGLId<WebGLShader>& shaderId, GLenum pname);
 
   MaybeWebGLVariant
-  GetShaderPrecisionFormatImpl(GLenum shadertype, GLenum precisiontype);
+  GetShaderPrecisionFormat(GLenum shadertype, GLenum precisiontype);
 
   nsString
-  GetShaderInfoLogImpl(const WebGLId<WebGLShader>& shaderId);
+  GetShaderInfoLog(const WebGLId<WebGLShader>& shaderId);
 
   nsString
-  GetShaderSourceImpl(const WebGLId<WebGLShader>& shaderId);
+  GetShaderSource(const WebGLId<WebGLShader>& shaderId);
 
   MaybeWebGLVariant
-  GetUniformImpl(const WebGLId<WebGLProgram>& progId,
+  GetUniform(const WebGLId<WebGLProgram>& progId,
                  const WebGLId<WebGLUniformLocation>& locId);
 
   WebGLId<WebGLUniformLocation>
-  GetUniformLocationImpl(const WebGLId<WebGLProgram>& progId,
+  GetUniformLocation(const WebGLId<WebGLProgram>& progId,
                          const nsString& name);
 
   void Hint(GLenum target, GLenum mode);
@@ -392,7 +410,7 @@ protected:
 
   void LinkProgram(const WebGLId<WebGLProgram>& progId);
 
-  void PixelStorei(GLenum pname, GLint param);
+  WebGLPixelStore PixelStorei(GLenum pname, GLint param);
 
   void PolygonOffset(GLfloat factor, GLfloat units);
 
@@ -401,7 +419,7 @@ protected:
   void Scissor(GLint x, GLint y, GLsizei width, GLsizei height);
 
   void
-  ShaderSourceImpl(const WebGLId<WebGLShader>& shaderId, const nsString& source);
+  ShaderSource(const WebGLId<WebGLShader>& shaderId, const nsString& source);
 
   void
   StencilFunc(GLenum func, GLint ref, GLuint mask);
@@ -435,7 +453,7 @@ protected:
                   WebGLintptr offset, WebGLsizeiptr size);
 
   WebGLId<WebGLBuffer>
-  CreateBufferImpl();
+  CreateBuffer();
 
   void
   DeleteBuffer(const WebGLId<WebGLBuffer>& buf);
@@ -446,15 +464,15 @@ protected:
                     GLsizeiptr size);
 
   Maybe<nsTArray<uint8_t>>
-  GetBufferSubDataImpl(GLenum target, GLintptr srcByteOffset,
+  GetBufferSubData(GLenum target, GLintptr srcByteOffset,
                        size_t byteLen, bool useShmem);
 
   void
-  BufferDataImpl(GLenum target, const RawBuffer<>& data,
+  BufferData(GLenum target, const RawBuffer<>& data,
                  GLenum usage);
 
   void
-  BufferSubDataImpl(GLenum target, WebGLsizeiptr dstByteOffset,
+  BufferSubData(GLenum target, WebGLsizeiptr dstByteOffset,
                     const RawBuffer<>& srcData);
 
   // -------------------------- Framebuffer Objects --------------------------
@@ -469,11 +487,11 @@ protected:
                           GLint layer);
 
   void
-  InvalidateFramebufferImpl(GLenum target,
+  InvalidateFramebuffer(GLenum target,
                         const nsTArray<GLenum>& attachments);
 
   void
-  InvalidateSubFramebufferImpl(GLenum target,
+  InvalidateSubFramebuffer(GLenum target,
                            const nsTArray<GLenum>& attachments,
                            GLint x, GLint y,
                            GLsizei width, GLsizei height);
@@ -482,7 +500,7 @@ protected:
 
   // ----------------------- Renderbuffer objects -----------------------
   Maybe<nsTArray<int32_t>>
-  GetInternalformatParameterImpl(GLenum target, GLenum internalformat,
+  GetInternalformatParameter(GLenum target, GLenum internalformat,
                                  GLenum pname);
 
   void
@@ -496,7 +514,7 @@ protected:
   void
   BindTexture(GLenum texTarget, const WebGLId<WebGLTexture>& tex);
 
-  WebGLId<WebGLTexture> CreateTextureImpl();
+  WebGLId<WebGLTexture> CreateTexture();
 
   void DeleteTexture(const WebGLId<WebGLTexture>& tex);
 
@@ -513,20 +531,20 @@ protected:
              GLsizei depth, FuncScopeId aFuncId);
 
   void
-  TexImageImpl(uint8_t funcDims, GLenum target, GLint level,
+  TexImage(uint8_t funcDims, GLenum target, GLint level,
            GLenum internalFormat, GLsizei width, GLsizei height,
            GLsizei depth, GLint border, GLenum unpackFormat,
            GLenum unpackType, PcqTexUnpack&& src,
            FuncScopeId aFuncId);
 
   void
-  TexSubImageImpl(uint8_t funcDims, GLenum target, GLint level, GLint xOffset,
+  TexSubImage(uint8_t funcDims, GLenum target, GLint level, GLint xOffset,
               GLint yOffset, GLint zOffset, GLsizei width, GLsizei height,
               GLsizei depth, GLenum unpackFormat, GLenum unpackType,
               PcqTexUnpack&& src, FuncScopeId aFuncId);
 
   void
-  CompressedTexImageImpl(uint8_t funcDims, GLenum target, GLint level,
+  CompressedTexImage(uint8_t funcDims, GLenum target, GLint level,
                      GLenum internalFormat, GLsizei width, GLsizei height,
                      GLsizei depth, GLint border,
                      PcqTexUnpack&& src,
@@ -534,7 +552,7 @@ protected:
                      FuncScopeId aFuncId);
 
   void
-  CompressedTexSubImageImpl(uint8_t funcDims, GLenum target, GLint level,
+  CompressedTexSubImage(uint8_t funcDims, GLenum target, GLint level,
                         GLint xOffset, GLint yOffset, GLint zOffset,
                         GLsizei width, GLsizei height, GLsizei depth,
                         GLenum unpackFormat, PcqTexUnpack&& src,
@@ -548,7 +566,7 @@ protected:
                   FuncScopeId aFuncId);
 
   MaybeWebGLVariant
-  GetTexParameterImpl(GLenum texTarget, GLenum pname);
+  GetTexParameter(GLenum texTarget, GLenum pname);
 
   void
   TexParameter_base(GLenum texTarget, GLenum pname, const FloatOrInt& param);
@@ -561,7 +579,7 @@ protected:
   ValidateProgram(const WebGLId<WebGLProgram>& progId);
 
   GLint
-  GetFragDataLocationImpl(const WebGLId<WebGLProgram>& progId,
+  GetFragDataLocation(const WebGLId<WebGLProgram>& progId,
                           const nsString& name);
 
   // ------------------------ Uniforms and attributes ------------------------
@@ -617,28 +635,28 @@ protected:
                       bool aFromExtension = false);
 
   MaybeWebGLVariant
-  GetIndexedParameterImpl(GLenum target, GLuint index);
+  GetIndexedParameter(GLenum target, GLuint index);
 
   MaybeWebGLVariant
-  GetUniformIndicesImpl(const WebGLId<WebGLProgram>& progId,
+  GetUniformIndices(const WebGLId<WebGLProgram>& progId,
                         const nsTArray<nsString>& uniformNames);
 
   MaybeWebGLVariant
-  GetActiveUniformsImpl(const WebGLId<WebGLProgram>& progId,
+  GetActiveUniforms(const WebGLId<WebGLProgram>& progId,
                     const nsTArray<GLuint>& uniformIndices,
                     GLenum pname);
 
   GLuint
-  GetUniformBlockIndexImpl(const WebGLId<WebGLProgram>& progId,
+  GetUniformBlockIndex(const WebGLId<WebGLProgram>& progId,
                            const nsString& uniformBlockName);
 
   MaybeWebGLVariant
-  GetActiveUniformBlockParameterImpl(const WebGLId<WebGLProgram>& progId,
+  GetActiveUniformBlockParameter(const WebGLId<WebGLProgram>& progId,
                                      GLuint uniformBlockIndex,
                                      GLenum pname);
 
   nsString
-  GetActiveUniformBlockNameImpl(const WebGLId<WebGLProgram>& progId,
+  GetActiveUniformBlockName(const WebGLId<WebGLProgram>& progId,
                                 GLuint uniformBlockIndex);
 
   void
@@ -653,7 +671,7 @@ protected:
   DisableVertexAttribArray(GLuint index);
 
   MaybeWebGLVariant
-  GetVertexAttribImpl(GLuint index, GLenum pname);
+  GetVertexAttrib(GLuint index, GLenum pname);
 
   WebGLsizeiptr
   GetVertexAttribOffset(GLuint index, GLenum pname);  
@@ -665,13 +683,13 @@ protected:
 
   // --------------------------- Buffer Operations --------------------------
   void
-  ClearBufferfvImpl(GLenum buffer, GLint drawBuffer, const nsTArray<float>& src,
+  ClearBufferfv(GLenum buffer, GLint drawBuffer, const nsTArray<float>& src,
                     GLuint srcElemOffset);
   void
-  ClearBufferivImpl(GLenum buffer, GLint drawBuffer, const nsTArray<int32_t>& src,
+  ClearBufferiv(GLenum buffer, GLint drawBuffer, const nsTArray<int32_t>& src,
                     GLuint srcElemOffset);
   void
-  ClearBufferuivImpl(GLenum buffer, GLint drawBuffer, const nsTArray<uint32_t>& src,
+  ClearBufferuiv(GLenum buffer, GLint drawBuffer, const nsTArray<uint32_t>& src,
                      GLuint srcElemOffset);
   void
   ClearBufferfi(GLenum buffer, GLint drawBuffer, GLfloat depth,
@@ -688,8 +706,8 @@ protected:
               GLenum format, GLenum type, size_t byteLen, bool useShmem);
 
   // ----------------------------- Sampler -----------------------------------
-  WebGLId<WebGLSampler>
-  CreateSamplerImpl(const WebGLId<WebGLSampler>& aId);
+  void
+  CreateSampler(const WebGLId<WebGLSampler>& aId);
 
   void
   DeleteSampler(const WebGLId<WebGLSampler>& aId);
@@ -706,12 +724,12 @@ protected:
                     GLenum pname, GLfloat param);
 
   MaybeWebGLVariant
-  GetSamplerParameterImpl(const WebGLId<WebGLSampler>& samplerId,
+  GetSamplerParameter(const WebGLId<WebGLSampler>& samplerId,
                           GLenum pname);
 
   // ------------------------------- GL Sync ---------------------------------
   WebGLId<WebGLSync>
-  FenceSyncImpl(const WebGLId<WebGLSync>& aId, GLenum condition,
+  FenceSync(const WebGLId<WebGLSync>& aId, GLenum condition,
                 GLbitfield flags);
 
   void
@@ -726,11 +744,11 @@ protected:
            GLint64 timeout);
 
   MaybeWebGLVariant
-  GetSyncParameterImpl(const WebGLId<WebGLSync>& sync, GLenum pname);
+  GetSyncParameter(const WebGLId<WebGLSync>& sync, GLenum pname);
 
   // -------------------------- Transform Feedback ---------------------------
-  WebGLId<WebGLTransformFeedback>
-  CreateTransformFeedbackImpl(const WebGLId<WebGLTransformFeedback>& aId);
+  void
+  CreateTransformFeedback(const WebGLId<WebGLTransformFeedback>& aId);
 
   void
   DeleteTransformFeedback(const WebGLId<WebGLTransformFeedback>& tf);
@@ -751,12 +769,12 @@ protected:
   ResumeTransformFeedback();
 
   void
-  TransformFeedbackVaryingsImpl(const WebGLId<WebGLProgram>& prog,
+  TransformFeedbackVaryings(const WebGLId<WebGLProgram>& prog,
                                 const nsTArray<nsString>& varyings,
                                 GLenum bufferMode);
 
   Maybe<WebGLActiveInfo>
-  GetTransformFeedbackVaryingImpl(const WebGLId<WebGLProgram>& prog,
+  GetTransformFeedbackVarying(const WebGLId<WebGLProgram>& prog,
                                   GLuint index);
 
   // ------------------------------ Debug ------------------------------------
@@ -774,20 +792,20 @@ protected:
   // -------------------------------------------------------------------------
 
   // Misc. Extensions
-  void EnableExtensionImpl(dom::CallerType callerType, WebGLExtensionID ext);
+  void EnableExtension(dom::CallerType callerType, WebGLExtensionID ext);
 
   const Maybe<ExtensionSets>
-  GetSupportedExtensionsImpl();
+  GetSupportedExtensions();
 
   void
-  DrawBuffersImpl(const nsTArray<GLenum>& buffers,
+  DrawBuffers(const nsTArray<GLenum>& buffers,
                   bool aFromExtension = false);
 
   Maybe<nsTArray<nsString>>
-  GetASTCExtensionSupportedProfilesImpl() const;
+  GetASTCExtensionSupportedProfiles() const;
 
   nsString
-  GetTranslatedShaderSourceImpl(const WebGLId<WebGLShader>& shader) const;
+  GetTranslatedShaderSource(const WebGLId<WebGLShader>& shader) const;
 
   void
   LoseContext(bool isSimulated = true);
@@ -796,15 +814,15 @@ protected:
   RestoreContext();
 
   MaybeWebGLVariant
-  MOZDebugGetParameterImpl(GLenum pname) const;
+  MOZDebugGetParameter(GLenum pname) const;
 
   // VertexArrayObjectEXT
   void
   BindVertexArray(const WebGLId<WebGLVertexArray>& array,
                   bool aFromExtension = false);
 
-  WebGLId<WebGLVertexArray>
-  CreateVertexArrayImpl(const WebGLId<WebGLVertexArray>& aId,
+  void
+  CreateVertexArray(const WebGLId<WebGLVertexArray>& aId,
                         bool aFromExtension = false);
 
   void
@@ -822,9 +840,13 @@ protected:
                         FuncScopeId aFuncId = FuncScopeId::drawElementsInstanced,
                         bool aFromExtension = false);
 
+  void
+  DrawRangeElements(GLenum mode, GLuint start, GLuint end, GLsizei count,
+                    GLenum type, WebGLintptr byteOffset);
+
   // GLQueryEXT
-  WebGLId<WebGLQuery>
-  CreateQueryImpl(const WebGLId<WebGLQuery>& aId,
+  void
+  CreateQuery(const WebGLId<WebGLQuery>& aId,
                   bool aFromExtension = false) const;
 
   void
@@ -841,11 +863,11 @@ protected:
   QueryCounter(const WebGLId<WebGLQuery>& query, GLenum target) const;
 
   MaybeWebGLVariant
-  GetQueryImpl(GLenum target, GLenum pname,
+  GetQuery(GLenum target, GLenum pname,
                bool aFromExtension = false) const;
 
   MaybeWebGLVariant
-  GetQueryParameterImpl(const WebGLId<WebGLQuery>& query, GLenum pname,
+  GetQueryParameter(const WebGLId<WebGLQuery>& query, GLenum pname,
                         bool aFromExtension = false) const;
 
   // -------------------------------------------------------------------------

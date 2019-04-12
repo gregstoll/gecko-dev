@@ -7,33 +7,18 @@
 #ifndef MOZILLA_LAYERS_OOPCANVASRENDERER_H_
 #define MOZILLA_LAYERS_OOPCANVASRENDERER_H_
 
-#include "LayersTypes.h"
-#include "mozilla/gfx/Point.h"  // for IntSize
-#include "mozilla/Mutex.h"
-#include "nsCOMPtr.h"  // for nsCOMPtr
+#include "nsISupportsImpl.h"
 
 class nsICanvasRenderingContextInternal;
-class nsIInputStream;
-class nsISerialEventTarget;
 
 namespace mozilla {
-
-namespace gfx {
-class DataSourceSurface;
-}
-
-namespace gl {
-class GLContext;
-}
 
 namespace dom {
 class HTMLCanvasElement;
 }
 
 namespace layers {
-
 class CanvasClient;
-class TextureClient;
 
 /**
  * This renderer works with WebGL running in the host process.  It does
@@ -46,59 +31,6 @@ class OOPCanvasRenderer final {
  public:
   OOPCanvasRenderer(nsICanvasRenderingContextInternal* aContext)
     : mContext(aContext) {}
-
-#if 0
-  void NotifyElementAboutAttributesChanged();
-  void NotifyElementAboutInvalidation();
-
-  void SetCanvasClient(CanvasClient* aClient);
-
-  void SetWidth(uint32_t aWidth) { mWidth = aWidth; }
-
-  void SetHeight(uint32_t aHeight) { mHeight = aHeight; }
-
-  void SetIsAlphaPremultiplied(bool aIsAlphaPremultiplied) {
-    mIsAlphaPremultiplied = aIsAlphaPremultiplied;
-  }
-
-  // Active thread means the thread which spawns GLContext.
-  void SetActiveEventTarget();
-  void ResetActiveEventTarget();
-
-  // This will readback surface and return the surface
-  // in the DataSourceSurface.
-  // Can be called in main thread only.
-  already_AddRefed<gfx::DataSourceSurface> GetSurface();
-
-  // For SharedSurface_Basic case, before the frame sending to the compositor,
-  // we readback it to a texture client because SharedSurface_Basic cannot
-  // shared. We don't want to readback it again here, so just copy the content
-  // of that texture client here to avoid readback again.
-  void CopyFromTextureClient(TextureClient* aClient);
-
-  // Readback current WebGL's content and convert it to InputStream. This
-  // function called GetSurface implicitly and GetSurface handles only get
-  // called in the main thread. So this function can be called in main thread.
-  nsresult GetInputStream(const char* aMimeType,
-                          const char16_t* aEncoderOptions,
-                          nsIInputStream** aStream);
-
-  gfx::IntSize GetSize() const { return gfx::IntSize(mWidth, mHeight); }
-
-  CompositableHandle GetCanvasClientAsyncHandle() const {
-    return mCanvasClientAsyncHandle;
-  }
-
-  CanvasClient* GetCanvasClient() const { return mCanvasClient; }
-
-  already_AddRefed<nsISerialEventTarget> GetActiveEventTarget();
-
-  // Only accessed in active thread.
-  // We need to keep a reference to the context around here, otherwise the
-  // canvas' surface texture destructor will deref and destroy it too early
-  // Only accessed in active thread.
-  RefPtr<gl::GLContext> mGLContext;
-#endif
 
   dom::HTMLCanvasElement* mHTMLCanvasElement = nullptr;
 
@@ -113,30 +45,6 @@ class OOPCanvasRenderer final {
 
  private:
   ~OOPCanvasRenderer() {}
-
-#if 0
-  // Readback current WebGL's content and return it as DataSourceSurface.
-  already_AddRefed<gfx::DataSourceSurface> UpdateTarget();
-
-  bool mIsAlphaPremultiplied;
-
-  uint32_t mWidth;
-  uint32_t mHeight;
-  CompositableHandle mCanvasClientAsyncHandle;
-
-  // When backend is LAYER_BASIC and SharedSurface type is Basic.
-  // CanvasClient will readback the GLContext to a TextureClient
-  // in order to send frame to compositor. To avoid readback again,
-  // we copy from this TextureClient to this mSurfaceForBasic directly
-  // by calling CopyFromTextureClient().
-  RefPtr<gfx::DataSourceSurface> mSurfaceForBasic;
-
-  // Protect non thread-safe objects.
-  Mutex mMutex;
-
-  // Can be accessed in any thread, need protect by mutex.
-  nsCOMPtr<nsISerialEventTarget> mActiveEventTarget;
-#endif
 };
 
 }  // namespace layers

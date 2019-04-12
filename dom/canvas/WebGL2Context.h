@@ -99,6 +99,19 @@ class WebGL2Context : public WebGLContext {
                              GLintptr offset, GLsizei instanceCount);
   */
 
+  void DrawRangeElements(GLenum mode, GLuint start, GLuint end, GLsizei count,
+                         GLenum type, WebGLintptr byteOffset) {
+    const FuncScope funcScope(*this, "drawRangeElements");
+    if (IsContextLost()) return;
+
+    if (end < start) {
+      ErrorInvalidValue("end must be >= start.");
+      return;
+    }
+
+    DrawElementsInstanced(mode, count, type, byteOffset, 1);
+  }
+
   // ------------------------------------------------------------------------
   // Multiple Render Targets - WebGL2ContextMRTs.cpp
   /* Implemented in WebGLContext

@@ -75,7 +75,6 @@ UniquePtr<SurfaceFactory> GLScreenBuffer::CreateFactory(
     GLContext* gl, const SurfaceCaps& caps, LayersIPCChannel* ipcChannel,
     layers::LayersBackend backend, bool useANGLE,
     const layers::TextureFlags& flags) {
-
   const bool useGl =
       !gfxPrefs::WebGLForceLayersReadback() &&
       (backend == layers::LayersBackend::LAYERS_OPENGL ||
@@ -116,11 +115,14 @@ UniquePtr<SurfaceFactory> GLScreenBuffer::CreateFactory(
     // Ensure devices initialization. SharedSurfaceANGLE and
     // SharedSurfaceD3D11Interop use them. The devices are lazily initialized
     // with WebRender to reduce memory usage.
-    gfxPlatform::GetPlatform()->EnsureDevicesInitialized();
+    if (XRE_IsContentProcess()) {
+      gfxPlatform::GetPlatform()->EnsureDevicesInitialized();
+    }
 
     // Enable surface sharing only if ANGLE and compositing devices
     // are both WARP or both not WARP
     gfx::DeviceManagerDx* dm = gfx::DeviceManagerDx::Get();
+    MOZ_ASSERT(dm);
     if (gl->IsANGLE() && (gl->IsWARP() == dm->IsWARP()) &&
         dm->TextureSharingWorks()) {
       factory =

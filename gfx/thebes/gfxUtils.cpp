@@ -17,6 +17,7 @@
 #include "mozilla/dom/ImageEncoder.h"
 #include "mozilla/dom/WorkerPrivate.h"
 #include "mozilla/dom/WorkerRunnable.h"
+#include "mozilla/ipc/CrossProcessSemaphore.h"
 #include "mozilla/gfx/2D.h"
 #include "mozilla/gfx/DataSurfaceHelpers.h"
 #include "mozilla/gfx/Logging.h"
@@ -1360,11 +1361,13 @@ nsresult gfxUtils::GetInputStream(gfx::DataSourceSurface* aSurface,
       format, encoder, aEncoderOptions, outStream);
 }
 
-class GetFeatureStatusRunnable final : public dom::WorkerMainThreadRunnable {
+class GetFeatureStatusWorkerRunnable final
+    : public dom::WorkerMainThreadRunnable {
  public:
-  GetFeatureStatusRunnable(dom::WorkerPrivate* workerPrivate,
-                           const nsCOMPtr<nsIGfxInfo>& gfxInfo, int32_t feature,
-                           nsACString& failureId, int32_t* status)
+  GetFeatureStatusWorkerRunnable(dom::WorkerPrivate* workerPrivate,
+                                 const nsCOMPtr<nsIGfxInfo>& gfxInfo,
+                                 int32_t feature, nsACString& failureId,
+                                 int32_t* status)
       : WorkerMainThreadRunnable(workerPrivate,
                                  NS_LITERAL_CSTRING("GFX :: GetFeatureStatus")),
         mGfxInfo(gfxInfo),
@@ -1383,7 +1386,7 @@ class GetFeatureStatusRunnable final : public dom::WorkerMainThreadRunnable {
   nsresult GetNSResult() const { return mNSResult; }
 
  protected:
-  ~GetFeatureStatusRunnable() {}
+  ~GetFeatureStatusWorkerRunnable() {}
 
  private:
   nsCOMPtr<nsIGfxInfo> mGfxInfo;
@@ -1397,11 +1400,19 @@ class GetFeatureStatusRunnable final : public dom::WorkerMainThreadRunnable {
 nsresult gfxUtils::ThreadSafeGetFeatureStatus(
     const nsCOMPtr<nsIGfxInfo>& gfxInfo, int32_t feature, nsACString& failureId,
     int32_t* status) {
-  if (!NS_IsMainThread()) {
+  // In a content process, we must call this on the main thread.
+  // In a composition process (parent or GPU), this needs to be called on the
+  // compositor thread.
+  bool assumeIsCompositionProcess = XRE_IsGPUProcess() || XRE_IsParentProcess();
+  MOZ_ASSERT(!assumeIsCompositionProcess || NS_IsInCompositorThread());
+
+  // Content-process non-main-thread case:
+  if ((!assumeIsCompositionProcess) && (!NS_IsMainThread())) {
     dom::WorkerPrivate* workerPrivate = dom::GetCurrentThreadWorkerPrivate();
 
-    RefPtr<GetFeatureStatusRunnable> runnable = new GetFeatureStatusRunnable(
-        workerPrivate, gfxInfo, feature, failureId, status);
+    RefPtr<GetFeatureStatusWorkerRunnable> runnable =
+        new GetFeatureStatusWorkerRunnable(workerPrivate, gfxInfo, feature,
+                                           failureId, status);
 
     ErrorResult rv;
     runnable->Dispatch(dom::WorkerStatus::Canceling, rv);
@@ -1411,8 +1422,25 @@ nsresult gfxUtils::ThreadSafeGetFeatureStatus(
       // exception.  Ah, well.
       return rv.StealNSResult();
     }
-
     return runnable->GetNSResult();
+  }
+
+  // Compositor-process non-main-thread case
+  if (assumeIsCompositionProcess && (!NS_IsMainThread())) {
+    nsresult rv;
+    // We can't use NS_DISPATCH_SYNC because the compositor thread does not
+    // run a task queue.
+    // TODO: What happened to the non-xp semaphore???
+    CrossProcessSemaphore* sem =
+        CrossProcessSemaphore::Create("GetFeatureStatusSem", 0);
+    NS_DispatchToMainThread(NS_NewRunnableFunction(
+        "GetFeatureStatusMain", [&]() {
+          rv = gfxInfo->GetFeatureStatus(feature, failureId, status);
+          sem->Signal();
+        }));
+    sem->Wait();
+    delete sem;
+    return rv;
   }
 
   return gfxInfo->GetFeatureStatus(feature, failureId, status);

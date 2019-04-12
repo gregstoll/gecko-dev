@@ -41,7 +41,7 @@ class WebGLParent
   WebGLParent(UniquePtr<HostWebGLContext>&& aHost);
 
   bool BeginCommandQueueDrain();
-  static bool MaybeRunCommandQueue(WeakPtr<WebGLParent> weakWebGLParent);
+  static bool MaybeRunCommandQueue(const WeakPtr<WebGLParent>& weakWebGLParent);
   bool RunCommandQueue();
 
   mozilla::ipc::IPCResult

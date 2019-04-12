@@ -22,6 +22,14 @@
 #include "mozilla/Logging.h"
 #include "WebGLCrossProcessCommandQueue.h"
 
+#ifndef WEBGL_BRIDGE_LOG_
+#define WEBGL_BRIDGE_LOG_(lvl, ...)   MOZ_LOG(mozilla::gWebGLBridgeLog, lvl, (__VA_ARGS__))
+#define WEBGL_BRIDGE_LOGV(...)        WEBGL_BRIDGE_LOG_(LogLevel::Verbose, __VA_ARGS__)
+#define WEBGL_BRIDGE_LOGD(...)        WEBGL_BRIDGE_LOG_(LogLevel::Debug, __VA_ARGS__)
+#define WEBGL_BRIDGE_LOGI(...)        WEBGL_BRIDGE_LOG_(LogLevel::Info, __VA_ARGS__)
+#define WEBGL_BRIDGE_LOGE(...)        WEBGL_BRIDGE_LOG_(LogLevel::Error, __VA_ARGS__)
+#endif // WEBGL_BRIDGE_LOG_
+
 namespace mozilla {
 
 namespace dom {
@@ -37,54 +45,118 @@ class TexUnpackBlob;
 class TexUnpackBytes;
 }
 
+extern LazyLogModule gWebGLBridgeLog;
+
 class ClientWebGLExtensionBase;
 class ClientWebGLErrorSink;
 
 void DrainWebGLError(nsWeakPtr aWeakContext);
+
+class ClientWebGLRefCount
+  : public nsWrapperCache {
+ public:
+  NS_INLINE_DECL_CYCLE_COLLECTING_NATIVE_REFCOUNTING_VIRTUAL(ClientWebGLRefCount)
+  NS_DECL_CYCLE_COLLECTION_SCRIPT_HOLDER_NATIVE_CLASS(ClientWebGLRefCount)
+ protected:
+  virtual ~ClientWebGLRefCount() {}
+};
 
 /**
  * The client-side representation of WebGL types is little more than
  * an ID and a ref-count.
  */
 template<typename WebGLType>
-class ClientWebGLObject : public WebGLId<WebGLType>, public nsWrapperCache {
+class ClientWebGLObject
+  : public WebGLId<WebGLType>
+  , public ClientWebGLRefCount {
  public:
-  ClientWebGLContext* GetParentObject() const { return mContext; }
+  ClientWebGLContext* GetParentObject() const { return GetContext(); }
 
   bool IsValidForContext(ClientWebGLContext* aContext) const {
-    return (mContext == aContext) &&
-           (mGeneration == mContext->Generation());
+    auto context = GetContext();
+    return context && (context == aContext) &&
+           (mGeneration == aContext->Generation());
+  }
+
+  MozExternalRefCountType AddRef() override {
+    if (mLogMe) {
+      WEBGL_BRIDGE_LOGD("[%p] AddRefing WebGLObject %d from %d to %d", this,
+        (int)WebGLId<WebGLType>::Id(),
+                static_cast<int32_t>(mRefCnt), static_cast<int32_t>(mRefCnt)+1);
+    }
+    return ClientWebGLRefCount::AddRef();
+  }
+
+  MozExternalRefCountType Release() override {
+    // If we are deleting the object, let the host know that it can, too.
+    if (mLogMe) {
+      WEBGL_BRIDGE_LOGD("[%p] Releasing WebGLObject %d from %d to %d", this,
+        (int)WebGLId<WebGLType>::Id(),
+                static_cast<int32_t>(mRefCnt), static_cast<int32_t>(mRefCnt)-1);
+    }
+
+    auto context = GetContext();
+    // If the context is still around then it has a reference to us that we
+    // should release it also via ReleaseWebGLObject when it is the last one
+    // left (so, this call would be going from 2 to 1).  If the context is
+    // gone then so is that reference, so we delete when we go from 1 to 0.
+    int32_t refCountToDeleteAt = context ? 2 : 1;
+
+    if (static_cast<int32_t>(mRefCnt) == refCountToDeleteAt) {
+      // Must release first to avoid an infinite loop
+      bool ret = ClientWebGLRefCount::Release();
+      if (context) {
+        // This will release us again.
+        context->ReleaseWebGLObject(this);
+      }
+      return ret;
+    }
+    return ClientWebGLRefCount::Release();
+  }
+
+  ClientWebGLObject(uint64_t aId, ClientWebGLContext* aContext)
+      : WebGLId<WebGLType>(aId), mGeneration(aContext->Generation()), mLogMe(sLogMe) {
+    if (mLogMe) {
+      WEBGL_BRIDGE_LOGD("[%p] Created WebGLObject %d", this, WebGLId<WebGLType>::Id());
+    }
+    mContext = do_GetWeakReference(aContext);
+    sLogMe = false;
   }
 
  protected:
-  ClientWebGLObject(uint64_t aId, RefPtr<ClientWebGLContext>&& aContext)
-    : WebGLId<WebGLType>(aId), mContext(std::move(aContext)),
-      mGeneration(mContext->Generation()) {}
+  ClientWebGLContext* GetContext() const {
+    nsCOMPtr<nsICanvasRenderingContextInternal> ret = do_QueryReferent(mContext);
+    if (!ret) {
+      return nullptr;
+    }
+    return static_cast<ClientWebGLContext*>(ret.get());
+  }
 
   virtual ~ClientWebGLObject() {};
 
-  RefPtr<ClientWebGLContext> mContext;
+  nsWeakPtr mContext;
   uint64_t mGeneration;
+  bool mLogMe;
+  static bool sLogMe;
 };
+
+template<typename WebGLType>
+bool ClientWebGLObject<WebGLType>::sLogMe = true;
+
 
 // Every WebGL type with a client version exposed to JS needs to use this macro
 // to associate its C++ type with the JS binding interface.
 #define DEFINE_WEBGL_CLIENT_TYPE_2(_WebGLType, _WebGLBindingType)             \
-class ClientWebGL##_WebGLType : public ClientWebGLObject<WebGL##_WebGLType> {   \
+class ClientWebGL##_WebGLType : public ClientWebGLObject<WebGL##_WebGLType> { \
  public:                                                                      \
-  NS_INLINE_DECL_CYCLE_COLLECTING_NATIVE_REFCOUNTING(ClientWebGL##_WebGLType) \
-  NS_DECL_CYCLE_COLLECTION_SCRIPT_HOLDER_NATIVE_CLASS(ClientWebGL##_WebGLType)  \
-  ClientWebGL##_WebGLType(uint64_t aId, RefPtr<ClientWebGLContext>&& aContext)  \
-    : ClientWebGLObject<WebGL##_WebGLType>(aId, std::move(aContext)) {}         \
+  ClientWebGL##_WebGLType(uint64_t aId, ClientWebGLContext* aContext)         \
+    : ClientWebGLObject<WebGL##_WebGLType>(aId, aContext) {}                  \
   JSObject* WrapObject(JSContext* cx, JS::Handle<JSObject*> givenProto) override {  \
     return dom::WebGL##_WebGLBindingType##_Binding::Wrap(cx, this, givenProto); \
-  }                                                                             \
+  }                                                                           \
  protected:                                                                   \
   virtual ~ClientWebGL##_WebGLType() {};                                      \
-};                                                                            \
-inline RefPtr<ClientWebGL##_WebGLType>&&                                      \
-MakeWebGLObject(const WebGLId<WebGL##_WebGLType>& id, RefPtr<ClientWebGLContext>&& aContext) \
-{ return std::move(RefPtr<ClientWebGL##_WebGLType>(new ClientWebGL##_WebGLType(id.Id(), std::move(aContext)))); }
+};
 
 // Usually, the JS binding name is the same as the WebGL type name
 #define DEFINE_WEBGL_CLIENT_TYPE(_WebGLType)         \
@@ -102,6 +174,9 @@ DEFINE_WEBGL_CLIENT_TYPE(Texture)
 DEFINE_WEBGL_CLIENT_TYPE(TransformFeedback)
 DEFINE_WEBGL_CLIENT_TYPE(UniformLocation)
 DEFINE_WEBGL_CLIENT_TYPE_2(VertexArray, VertexArrayObject)
+
+#undef DEFINE_WEBGL_CLIENT_TYPE
+#undef DEFINE_WEBGL_CLIENT_TYPE_2
 
 ////////////////////////////////////
 
@@ -242,8 +317,67 @@ class ClientWebGLContext
                         ErrorResult& rv) const;
 
   template <typename WebGLType>
-  RefPtr<ClientWebGLObject<WebGLType>>&&
-  EnsureWebGLObject(const WebGLId<WebGLType>& id);
+  RefPtr<ClientWebGLObject<WebGLType>>
+  EnsureWebGLObject(const WebGLId<WebGLType>& aId);
+
+  template <typename WebGLType>
+  RefPtr<ClientWebGLObject<WebGLType>>
+  Make(const WebGLId<WebGLType>& aId);
+
+  template <typename WebGLType>
+  WebGLId<WebGLType> GenerateId();
+
+#define DEFINE_GENERATEID(_TYPE)                                               \
+  typename WebGLId<WebGL##_TYPE>::IdType mId##_TYPE = 1;                       \
+  template <> WebGLId<WebGL##_TYPE>                                            \
+  GenerateId<WebGL##_TYPE>() { return WebGLId<WebGL##_TYPE>(mId##_TYPE++); }
+
+  // All but Buffer, Texture and UniformLocation
+  DEFINE_GENERATEID(Framebuffer)
+  DEFINE_GENERATEID(Program)
+  DEFINE_GENERATEID(Renderbuffer)
+  DEFINE_GENERATEID(Sampler)
+  DEFINE_GENERATEID(Shader)
+  DEFINE_GENERATEID(Sync)
+  DEFINE_GENERATEID(TransformFeedback)
+  DEFINE_GENERATEID(Query)
+  DEFINE_GENERATEID(VertexArray)
+
+#undef DEFINE_GENERATEID
+
+
+ public:
+  // Define the client ID map and accessors for the given type 
+#define DEFINE_CLIENTWEBGLOBJECT_MAP(_TYPE)                                   \
+  ClientObjectIdMap<WebGL##_TYPE> m##_TYPE##Map;                              \
+  bool Insert(RefPtr<ClientWebGLObject<WebGL##_TYPE>>& aObj) {                \
+    MOZ_ASSERT(aObj->Id());  return m##_TYPE##Map.put(*aObj, aObj); }         \
+  RefPtr<ClientWebGLObject<WebGL##_TYPE>> Find(const WebGLId<WebGL##_TYPE>& aId) {  \
+    auto it = m##_TYPE##Map.lookup(aId); return it ? it->value() : nullptr; } \
+  void Remove(const WebGLId<WebGL##_TYPE>& aId) { m##_TYPE##Map.remove(aId); }
+
+  // Annoying but, since we don't want to include the WebGLMethodDispatcher
+  // in this header due to its size, we can't define ReleaseWebGLObject as
+  // a template method.  We expand the template with macros instead.
+#define DECLARE_CLIENTWEBGLOBJECT(_TYPE)                 \
+  DEFINE_CLIENTWEBGLOBJECT_MAP(_TYPE)                    \
+  void ReleaseWebGLObject(const WebGLId<WebGL##_TYPE>* aId);
+
+  DECLARE_CLIENTWEBGLOBJECT(Buffer)
+  DECLARE_CLIENTWEBGLOBJECT(Framebuffer)
+  DECLARE_CLIENTWEBGLOBJECT(Program)
+  DECLARE_CLIENTWEBGLOBJECT(Query)
+  DECLARE_CLIENTWEBGLOBJECT(Renderbuffer)
+  DECLARE_CLIENTWEBGLOBJECT(Sampler)
+  DECLARE_CLIENTWEBGLOBJECT(Shader)
+  DECLARE_CLIENTWEBGLOBJECT(Sync)
+  DECLARE_CLIENTWEBGLOBJECT(Texture)
+  DECLARE_CLIENTWEBGLOBJECT(TransformFeedback)
+  DECLARE_CLIENTWEBGLOBJECT(UniformLocation)
+  DECLARE_CLIENTWEBGLOBJECT(VertexArray)
+
+#undef DECLARE_CLIENTWEBGLOBJECT
+#undef DEFINE_CLIENTWEBGLOBJECT_MAP
 
   // -------------------------------------------------------------------------
   // Binary data access/conversion for IPC
@@ -323,17 +457,17 @@ class ClientWebGLContext
     return ret;
   }
 
-  MaybeWebGLTexUnpackVariant&& From(TexImageTarget target, GLsizei rawWidth,
+  MaybeWebGLTexUnpackVariant From(TexImageTarget target, GLsizei rawWidth,
                                     GLsizei rawHeight, GLsizei rawDepth,
                                     GLint border, const TexImageSource& src);
 
-  MaybeWebGLTexUnpackVariant&& FromDomElem(TexImageTarget target,
+  MaybeWebGLTexUnpackVariant ClientFromDomElem(TexImageTarget target,
                                               uint32_t width, uint32_t height,
                                               uint32_t depth,
                                               const dom::Element& elem,
                                               ErrorResult* const out_error);
 
-  MaybeWebGLTexUnpackVariant&& FromCompressed(
+  MaybeWebGLTexUnpackVariant FromCompressed(
       TexImageTarget target, GLsizei rawWidth, GLsizei rawHeight,
       GLsizei rawDepth, GLint border, const TexImageSource& src,
       const Maybe<GLsizei>& expectedImageSize);
@@ -359,7 +493,7 @@ class ClientWebGLContext
     }
 
     FuncScope(const ClientWebGLContext* webgl, FuncScopeId aId)
-      : mWebGL(webgl), mFuncName(FuncScopeNames[aId]), mId(aId) {
+      : mWebGL(webgl), mFuncName(GetFuncScopeName(aId)), mId(aId) {
       mWebGL->mFuncScope = this;
     }
 
@@ -473,29 +607,12 @@ class ClientWebGLContext
   // nsICanvasRenderingContextInternal / nsAPostRefreshObserver
   // -------------------------------------------------------------------------
  public:
-  void
-  DidRefresh() override;
   already_AddRefed<layers::Layer>
   GetCanvasLayer(nsDisplayListBuilder* builder, layers::Layer* oldLayer,
                  layers::LayerManager* manager) override;
-  int32_t
-  GetHeight() override;
-  UniquePtr<uint8_t[]>
-  GetImageBuffer(int32_t* out_format) override;
-  bool
-  GetIsOpaque() override;
-  NS_IMETHOD
-  GetInputStream(const char* mimeType, const char16_t* encoderOptions,
-                 nsIInputStream** out_stream) override;
-  already_AddRefed<mozilla::gfx::SourceSurface>
-  GetSurfaceSnapshot(gfxAlphaType* out_alphaType) override;
-  int32_t
-  GetWidth() override;
   bool
   InitializeCanvasRenderer(nsDisplayListBuilder* aBuilder,
                            layers::CanvasRenderer* aRenderer) override;
-  NS_IMETHOD
-  InitializeWithDrawTarget(nsIDocShell*, NotNull<gfx::DrawTarget*>) override;
   // Note that 'clean' here refers to its invalidation state, not the
   // contents of the buffer.
   bool
@@ -510,18 +627,10 @@ class ClientWebGLContext
   void
   OnMemoryPressure() override;
   NS_IMETHOD
-  Redraw(const gfxRect&) override;
-  NS_IMETHOD
-  Reset() override;
-  NS_IMETHOD
   SetContextOptions(JSContext* cx, JS::Handle<JS::Value> options,
                     ErrorResult& aRvForDictionaryInit) override;
   NS_IMETHOD
   SetDimensions(int32_t width, int32_t height) override;
-  NS_IMETHOD
-  SetIsIPC(bool) override;
-  void
-  SetOpaqueValueFromOpaqueAttr(bool) override;
   bool
   UpdateWebRenderCanvasData(nsDisplayListBuilder* aBuilder,
                             layers::WebRenderCanvasData* aCanvasData) override;
@@ -529,6 +638,45 @@ class ClientWebGLContext
   bool
   UpdateCompositableHandle(LayerTransactionChild* aLayerTransaction,
                     CompositableHandle aHandle);
+
+  // ------
+
+  int32_t GetWidth() override { return DrawingBufferWidth(); }
+  int32_t GetHeight() override { return DrawingBufferHeight(); }
+
+  NS_IMETHOD InitializeWithDrawTarget(nsIDocShell*,
+                                      NotNull<gfx::DrawTarget*>) override {
+    return NS_ERROR_NOT_IMPLEMENTED;
+  }
+
+  NS_IMETHOD Reset() override {
+    /* (InitializeWithSurface) */
+    return NS_ERROR_NOT_IMPLEMENTED;
+  }
+
+  UniquePtr<uint8_t[]> GetImageBuffer(int32_t* out_format) override;
+  NS_IMETHOD GetInputStream(const char* mimeType,
+                            const char16_t* encoderOptions,
+                            nsIInputStream** out_stream) override;
+
+  already_AddRefed<mozilla::gfx::SourceSurface> GetSurfaceSnapshot(
+      gfxAlphaType* out_alphaType) override;
+
+  void SetOpaqueValueFromOpaqueAttr(bool) override{};
+  bool GetIsOpaque() override { return !mOptions.alpha; }
+
+  NS_IMETHOD SetIsIPC(bool) override { return NS_ERROR_NOT_IMPLEMENTED; }
+
+  /**
+   * An abstract base class to be implemented by callers wanting to be notified
+   * that a refresh has occurred. Callers must ensure an observer is removed
+   * before it is destroyed.
+   */
+  void DidRefresh() override;
+
+  NS_IMETHOD Redraw(const gfxRect&) override {
+    return NS_ERROR_NOT_IMPLEMENTED;
+  }
 
   // ------
 
@@ -563,9 +711,10 @@ class ClientWebGLContext
 
  private:
   gfx::IntSize DrawingBufferSize();
-  bool HasAlphaSupport() { return mHWSupportsAlpha; }
+  bool HasAlphaSupport() { return mSurfaceInfo.supportsAlpha; }
+  void AllowContextRestore();
 
-  bool mHWSupportsAlpha = false;
+  ICRData mSurfaceInfo;
 
   // -------------------------------------------------------------------------
   // Client-side helper methods.  Dispatch to a Host method.
@@ -687,27 +836,15 @@ class ClientWebGLContext
 
   void CompileShader(const WebGLId<WebGLShader>& shaderId);
 
-  WebGLId<WebGLFramebuffer>
-  CreateFramebufferImpl(const WebGLId<WebGLFramebuffer>& aId);
-
-  WebGLId<WebGLProgram>
-  CreateProgramImpl(const WebGLId<WebGLProgram>& aId);
-
-  WebGLId<WebGLRenderbuffer>
-  CreateRenderbufferImpl(const WebGLId<WebGLRenderbuffer>& aId);
-
-  WebGLId<WebGLShader>
-  CreateShaderImpl(GLenum aType, const WebGLId<WebGLShader>& aId);
-
   void CullFace(GLenum face);
 
-  void DeleteFramebuffer(const WebGLId<WebGLFramebuffer>& fb);
+  void DeleteFramebuffer(const WebGLId<WebGLFramebuffer>& aFb);
 
-  void DeleteProgram(const WebGLId<WebGLProgram>& prog);
+  void DeleteProgram(const WebGLId<WebGLProgram>& aProg);
 
-  void DeleteRenderbuffer(const WebGLId<WebGLRenderbuffer>& rb);
+  void DeleteRenderbuffer(const WebGLId<WebGLRenderbuffer>& aRb);
 
-  void DeleteShader(const WebGLId<WebGLShader>& shader);
+  void DeleteShader(const WebGLId<WebGLShader>& aShader);
 
   void DepthFunc(GLenum func);
 
@@ -750,7 +887,7 @@ class ClientWebGLContext
   void Scissor(GLint x, GLint y, GLsizei width, GLsizei height);
 
   void
-  ShaderSourceImpl(const WebGLId<WebGLShader>& shaderId, const nsString& source);
+  ShaderSource(const WebGLId<WebGLShader>& shaderId, const nsString& source);
 
   void
   StencilFunc(GLenum func, GLint ref, GLuint mask);
@@ -787,7 +924,7 @@ class ClientWebGLContext
                   WebGLintptr offset, WebGLsizeiptr size);
 
   void
-  DeleteBuffer(const WebGLId<WebGLBuffer>& buf);
+  DeleteBuffer(const WebGLId<WebGLBuffer>& aBuf);
 
   void
   CopyBufferSubData(GLenum readTarget, GLenum writeTarget,
@@ -863,7 +1000,7 @@ class ClientWebGLContext
   void
   BindTexture(GLenum texTarget, const WebGLId<WebGLTexture>& tex);
 
-  void DeleteTexture(const WebGLId<WebGLTexture>& tex);
+  void DeleteTexture(const WebGLId<WebGLTexture>& aTex);
 
   void GenerateMipmap(GLenum texTarget);
 
@@ -1160,7 +1297,6 @@ class ClientWebGLContext
                               GLenum unpackFormat, const TexImageSource& src,
                               const Maybe<GLsizei>& expectedImageSize,
                               FuncScopeId aFuncId);
-  MaybeWebGLTexUnpackVariant&& AsBlob(const TexImageSource& aSrc, FuncScopeId aFuncId);
 
   ////////////////////////////////////
 
@@ -1393,13 +1529,13 @@ class ClientWebGLContext
 
   // -------------------------------- Drawing -------------------------------
  public:
-  void DrawRangeElements(GLenum mode, GLuint start, GLuint end, GLsizei count,
-                         GLenum type, WebGLintptr byteOffset);
-
   void DrawArrays(GLenum mode, GLint first, GLsizei count);
 
   void DrawElements(GLenum mode, GLsizei count, GLenum type,
                     WebGLintptr byteOffset);
+
+  void DrawRangeElements(GLenum mode, GLuint start, GLuint end, GLsizei count,
+                         GLenum type, WebGLintptr byteOffset);
 
   // ------------------------------ Readback -------------------------------
  public:
@@ -1458,7 +1594,7 @@ class ClientWebGLContext
   // --------------------------------- GL Query ---------------------------------
  public:
   already_AddRefed<ClientWebGLQuery>
-  CreateQuery(bool aFromExtension = false) const;
+  CreateQuery(bool aFromExtension = false);
 
   bool
   IsQuery(const WebGLId<WebGLQuery>& query, bool aFromExtension = false) const {
@@ -1676,7 +1812,7 @@ class ClientWebGLContext
   // -------------------------------------------------------------------------
  protected:
   template <size_t command, typename ... Args>
-  void DispatchAsync(const Args&... aArgs) const {
+  void DispatchAsync(Args&&... aArgs) const {
     if (mContextLost) {
       return;
     }
@@ -1688,7 +1824,7 @@ class ClientWebGLContext
   }
 
   template <size_t command, typename ReturnType, typename ... Args>
-  ReturnType DispatchSync(const Args&... aArgs) const {
+  ReturnType DispatchSync(Args&&... aArgs) const {
     if (mContextLost) {
       return ReturnType();    // TODO: ?? Is this right?
     }
@@ -1705,7 +1841,7 @@ class ClientWebGLContext
   }
 
   template <size_t command, typename ... Args>
-  void DispatchVoidSync(const Args&... aArgs) const {
+  void DispatchVoidSync(Args&&... aArgs) const {
     if (mContextLost) {
       return;
     }
@@ -1720,18 +1856,20 @@ class ClientWebGLContext
   }
 
   // Drains the error and warning queue completely.
-  void DrainErrorQueue();
+  // This is called in a recurring fashion, starting with the constructor.
+  // Other methods may call this from the main thread at any time but they
+  // should not tell the drain task to reissue.
+  void DrainErrorQueue(bool toReissue = false);
 
   friend void mozilla::DrainWebGLError(nsWeakPtr aWeakContext);
 
-  template<typename MethodType, MethodType method, size_t Id, typename ReturnType>
+  template<typename ReturnType>
   friend struct WebGLClientDispatcher;
 
-  // If we are running WebGL in this process then call the HostWebGLContetx
+  // If we are running WebGL in this process then call the HostWebGLContext
   // method directly.  Otherwise, dispatch over IPC.
   template<typename MethodType, MethodType method,
-           typename ReturnType = typename FunctionTypeTraits<MethodType>::ReturnType,
-           typename ... Args>
+           typename ReturnType, size_t Id, typename ... Args>
   ReturnType Run(Args&&... aArgs) const;
 
   UniquePtr<ClientWebGLCommandSource> mCommandSource;

@@ -97,6 +97,7 @@ SOURCES += [
 UNIFIED_SOURCES += [
     'CacheInvalidator.cpp',
     'ClientWebGLContext.cpp',
+    'ClientWebGLExtensions.cpp',
     'HostWebGLContext.cpp',
     'TexUnpackBlob.cpp',
     'WebGL1Context.cpp',
@@ -116,6 +117,7 @@ UNIFIED_SOURCES += [
     'WebGL2ContextVAOs.cpp',
     'WebGLActiveInfo.cpp',
     'WebGLBuffer.cpp',
+    'WebGLChild.cpp',
     'WebGLContext.cpp',
     'WebGLContextBuffers.cpp',
     'WebGLContextDraw.cpp',

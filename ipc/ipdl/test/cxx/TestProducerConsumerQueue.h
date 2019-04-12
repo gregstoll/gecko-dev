@@ -42,9 +42,8 @@ public:
     TestProducerConsumerQueueChild();
     virtual ~TestProducerConsumerQueueChild();
 
-protected:
-    virtual mozilla::ipc::IPCResult
-    RecvConsume(UniquePtr<Consumer>&& aConsumer) override;
+    mozilla::ipc::IPCResult
+    RecvConsume(UniquePtr<Consumer>&& aConsumer);
 
     virtual void ActorDestroy(ActorDestroyReason why) override
     {

@@ -83,42 +83,42 @@ class WebGLContextEndpoint {
   };
 
  protected:
-#define FUNC_SCOPE_NAME(_name) [FuncScopeId::_name] = #_name,
-  static constexpr const char* const FuncScopeNames[] = {
-    FUNC_SCOPE_NAME(compressedTexImage2D)
-    FUNC_SCOPE_NAME(compressedTexImage3D)
-    FUNC_SCOPE_NAME(compressedTexSubImage2D)
-    FUNC_SCOPE_NAME(compressedTexSubImage3D)
-    FUNC_SCOPE_NAME(copyTexSubImage2D)
-    FUNC_SCOPE_NAME(copyTexSubImage3D)
-    FUNC_SCOPE_NAME(drawElements)
-    FUNC_SCOPE_NAME(drawElementsInstanced)
-    FUNC_SCOPE_NAME(drawRangeElements)
-    FUNC_SCOPE_NAME(renderbufferStorage)
-    FUNC_SCOPE_NAME(renderbufferStorageMultisample)
-    FUNC_SCOPE_NAME(texImage2D)
-    FUNC_SCOPE_NAME(texImage3D)
-    FUNC_SCOPE_NAME(TexStorage2D)
-    FUNC_SCOPE_NAME(TexStorage3D)
-    FUNC_SCOPE_NAME(texSubImage2D)
-    FUNC_SCOPE_NAME(texSubImage3D)
-    FUNC_SCOPE_NAME(vertexAttrib1f)
-    FUNC_SCOPE_NAME(vertexAttrib1fv)
-    FUNC_SCOPE_NAME(vertexAttrib2f)
-    FUNC_SCOPE_NAME(vertexAttrib2fv)
-    FUNC_SCOPE_NAME(vertexAttrib3f)
-    FUNC_SCOPE_NAME(vertexAttrib3fv)
-    FUNC_SCOPE_NAME(vertexAttrib4f)
-    FUNC_SCOPE_NAME(vertexAttrib4fv)
-    FUNC_SCOPE_NAME(vertexAttribI4i)
-    FUNC_SCOPE_NAME(vertexAttribI4iv)
-    FUNC_SCOPE_NAME(vertexAttribI4ui)
-    FUNC_SCOPE_NAME(vertexAttribI4uiv)
-    FUNC_SCOPE_NAME(vertexAttribIPointer)
-    FUNC_SCOPE_NAME(vertexAttribPointer)
-  };
-#undef FUNC_SCOPE_NAME
   static const char* GetFuncScopeName(FuncScopeId aId) {
+#define FUNC_SCOPE_NAME(_name) [FuncScopeId::_name] = #_name,
+      static constexpr const char* const FuncScopeNames[] = {
+        FUNC_SCOPE_NAME(compressedTexImage2D)
+        FUNC_SCOPE_NAME(compressedTexImage3D)
+        FUNC_SCOPE_NAME(compressedTexSubImage2D)
+        FUNC_SCOPE_NAME(compressedTexSubImage3D)
+        FUNC_SCOPE_NAME(copyTexSubImage2D)
+        FUNC_SCOPE_NAME(copyTexSubImage3D)
+        FUNC_SCOPE_NAME(drawElements)
+        FUNC_SCOPE_NAME(drawElementsInstanced)
+        FUNC_SCOPE_NAME(drawRangeElements)
+        FUNC_SCOPE_NAME(renderbufferStorage)
+        FUNC_SCOPE_NAME(renderbufferStorageMultisample)
+        FUNC_SCOPE_NAME(texImage2D)
+        FUNC_SCOPE_NAME(texImage3D)
+        FUNC_SCOPE_NAME(TexStorage2D)
+        FUNC_SCOPE_NAME(TexStorage3D)
+        FUNC_SCOPE_NAME(texSubImage2D)
+        FUNC_SCOPE_NAME(texSubImage3D)
+        FUNC_SCOPE_NAME(vertexAttrib1f)
+        FUNC_SCOPE_NAME(vertexAttrib1fv)
+        FUNC_SCOPE_NAME(vertexAttrib2f)
+        FUNC_SCOPE_NAME(vertexAttrib2fv)
+        FUNC_SCOPE_NAME(vertexAttrib3f)
+        FUNC_SCOPE_NAME(vertexAttrib3fv)
+        FUNC_SCOPE_NAME(vertexAttrib4f)
+        FUNC_SCOPE_NAME(vertexAttrib4fv)
+        FUNC_SCOPE_NAME(vertexAttribI4i)
+        FUNC_SCOPE_NAME(vertexAttribI4iv)
+        FUNC_SCOPE_NAME(vertexAttribI4ui)
+        FUNC_SCOPE_NAME(vertexAttribI4uiv)
+        FUNC_SCOPE_NAME(vertexAttribIPointer)
+        FUNC_SCOPE_NAME(vertexAttribPointer)
+      };
+#undef FUNC_SCOPE_NAME
     if (static_cast<uint32_t>(aId) < static_cast<uint32_t>(arraysize(FuncScopeNames))) {
       return FuncScopeNames[aId];
     }

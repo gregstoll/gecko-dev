@@ -26,6 +26,9 @@ class HTMLVideoElement;
 
 namespace ipc {
 template<typename T> struct PcqParamTraits;
+class ConsumerView;
+class ProducerView;
+enum class PcqStatus;
 }
 
 namespace gfx {
@@ -59,14 +62,9 @@ class TexUnpackBlob {
   bool mNeedsExactUpload;
 
  protected:
-  // Info about the derived type
-  enum BlobType { Bytes, Image, Surface };
-  BlobType mBlobType;
-
   TexUnpackBlob(const WebGLPixelStore& pixelStore, TexImageTarget target,
                 uint32_t rowLength, uint32_t width, uint32_t height,
-                uint32_t depth, gfxAlphaType srcAlphaType,
-                BlobType blobType);
+                uint32_t depth, gfxAlphaType srcAlphaType);
 
   bool ConvertIfNeeded(WebGLContext* webgl, const uint32_t rowLength,
                        const uint32_t rowCount, WebGLTexelFormat srcFormat,
@@ -78,6 +76,8 @@ class TexUnpackBlob {
 
  public:
   virtual ~TexUnpackBlob() {}
+
+  virtual TexUnpackBytes* AsTexUnpackBytes() { return nullptr; }
 
   virtual bool HasData() const { return true; }
 
@@ -104,6 +104,8 @@ class TexUnpackBytes final : public TexUnpackBlob {
                  uint32_t width, uint32_t height, uint32_t depth,
                  bool isClientData, const uint8_t* ptr, size_t availBytes);
 
+  TexUnpackBytes* AsTexUnpackBytes() override { return this; }
+
   virtual bool HasData() const override { return !mIsClientData || bool(mPtr); }
 
   virtual bool Validate(WebGLContext* webgl,
@@ -114,13 +116,20 @@ class TexUnpackBytes final : public TexUnpackBlob {
                              GLint xOffset, GLint yOffset, GLint zOffset,
                              const webgl::PackingInfo& pi,
                              GLenum* const out_error) const override;
+
+  static mozilla::ipc::PcqStatus
+  Read(mozilla::ipc::ConsumerView& aView,
+       UniquePtr<webgl::TexUnpackBytes>* aTexBytes);
+  mozilla::ipc::PcqStatus Write(mozilla::ipc::ProducerView& aView);
+  size_t Size() const;
 };
 
 class TexUnpackImage final : public TexUnpackBlob {
  public:
   const RefPtr<layers::Image> mImage;
 
-  TexUnpackImage(const ClientWebGLContext* webgl, TexImageTarget target,
+  TexUnpackImage(const WebGLContext* webgl, TexImageTarget target,
+                 uint32_t rowLength,
                  uint32_t width, uint32_t height, uint32_t depth,
                  layers::Image* image, gfxAlphaType srcAlphaType);
 
@@ -144,6 +153,10 @@ class TexUnpackSurface final : public TexUnpackBlob {
                    uint32_t width, uint32_t height, uint32_t depth,
                    gfx::DataSourceSurface* surf, gfxAlphaType srcAlphaType);
 
+  TexUnpackSurface(const WebGLContext* webgl, TexImageTarget target,
+                   uint32_t width, uint32_t height, uint32_t depth,
+                   gfx::DataSourceSurface* surf, gfxAlphaType srcAlphaType);
+
   virtual bool Validate(WebGLContext* webgl,
                         const webgl::PackingInfo& pi) override;
   virtual bool TexOrSubImage(bool isSubImage, bool needsRespec,
@@ -152,6 +165,9 @@ class TexUnpackSurface final : public TexUnpackBlob {
                              GLint xOffset, GLint yOffset, GLint zOffset,
                              const webgl::PackingInfo& dstPI,
                              GLenum* const out_error) const override;
+
+  mozilla::ipc::PcqStatus Write(mozilla::ipc::ProducerView& aView);
+  size_t Size() const;
 };
 
 }  // namespace webgl
@@ -169,11 +185,22 @@ class PcqTexUnpack final {
 
   // Take the owned blob.  Returns null if the blob was already taken or if it
   // is not a TexUnpackBytes.
-  UniquePtr<webgl::TexUnpackBytes>&& TakeBlob(WebGLContext* aContext);
+  UniquePtr<webgl::TexUnpackBlob> TakeBlob(WebGLContext* aContext);
 
-  PcqTexUnpack() {}     // for PcqParamTraits and std::tuple
+  PcqTexUnpack() = default;     // for PcqParamTraits and std::tuple
+  PcqTexUnpack(PcqTexUnpack&&)= default;
+
+  mozilla::ipc::PcqStatus Write(mozilla::ipc::ProducerView& aProducerView);
+
+  static mozilla::ipc::PcqStatus
+  Read(PcqTexUnpack* aPcqTexUnpack, mozilla::ipc::ConsumerView& aConsumerView);
+
+  size_t MinSize() const;
 
  protected:
+  PcqTexUnpack(const PcqTexUnpack&) = delete;
+  PcqTexUnpack& operator=(const PcqTexUnpack&) = delete;
+
   friend mozilla::ipc::PcqParamTraits<PcqTexUnpack>;
   MaybeWebGLTexUnpackVariant mMaybeBlob;
 };

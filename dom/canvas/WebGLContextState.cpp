@@ -547,32 +547,32 @@ MaybeWebGLVariant WebGLContext::GetParameter(GLenum pname) {
     }
 
     case LOCAL_GL_ARRAY_BUFFER_BINDING: {
-      return AsSomeVariant(std::move(mBoundArrayBuffer));
+      return AsSomeVariant(mBoundArrayBuffer);
     }
 
     case LOCAL_GL_ELEMENT_ARRAY_BUFFER_BINDING: {
-      return AsSomeVariant(std::move(mBoundVertexArray->mElementArrayBuffer));
+      return AsSomeVariant(mBoundVertexArray->mElementArrayBuffer);
     }
 
     case LOCAL_GL_RENDERBUFFER_BINDING: {
-      return AsSomeVariant(std::move(mBoundRenderbuffer));
+      return AsSomeVariant(mBoundRenderbuffer);
     }
 
     // DRAW_FRAMEBUFFER_BINDING is the same as FRAMEBUFFER_BINDING.
     case LOCAL_GL_FRAMEBUFFER_BINDING: {
-      return AsSomeVariant(std::move(mBoundDrawFramebuffer));
+      return AsSomeVariant(mBoundDrawFramebuffer);
     }
 
     case LOCAL_GL_CURRENT_PROGRAM: {
-      return AsSomeVariant(std::move(mCurrentProgram));
+      return AsSomeVariant(mCurrentProgram);
     }
 
     case LOCAL_GL_TEXTURE_BINDING_2D: {
-      return AsSomeVariant(std::move(mBound2DTextures[mActiveTexture]));
+      return AsSomeVariant(mBound2DTextures[mActiveTexture]);
     }
 
     case LOCAL_GL_TEXTURE_BINDING_CUBE_MAP: {
-      return AsSomeVariant(std::move(mBoundCubeMapTextures[mActiveTexture]));
+      return AsSomeVariant(mBoundCubeMapTextures[mActiveTexture]);
     }
 
     default:

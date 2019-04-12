@@ -13,6 +13,7 @@
 #include "base/task.h"           // for NewRunnableMethod, etc
 #include "gfxPrefs.h"
 #include "mozilla/dom/TabGroup.h"
+#include "mozilla/dom/WebGLChild.h"
 #include "mozilla/layers/CompositorManagerChild.h"
 #include "mozilla/layers/ImageBridgeChild.h"
 #include "mozilla/layers/APZChild.h"
@@ -1003,8 +1004,8 @@ CompositorBridgeChild::AllocPWebGLChild(const WebGLVersion& aVersion,
 }
 
 bool CompositorBridgeChild::DeallocPWebGLChild(PWebGLChild* aActor) {
-  MOZ_CRASH("Should create PWebGLChild outside of IPDL");
-  return false;
+  delete static_cast<dom::WebGLChild*>(aActor);
+  return true;
 }
 
 void CompositorBridgeChild::WillEndTransaction() { ResetShmemCounter(); }

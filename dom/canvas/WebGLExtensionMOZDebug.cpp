@@ -41,7 +41,7 @@ MaybeWebGLVariant WebGLExtensionMOZDebug::GetParameter(GLenum pname) const {
           ret.Append(NS_ConvertUTF8toUTF16(rawExt));
         }
       }
-      return AsSomeVariant(std::move(ret));
+      return AsSomeVariant(ret);
     }
 
     case LOCAL_GL_RENDERER:
@@ -49,14 +49,14 @@ MaybeWebGLVariant WebGLExtensionMOZDebug::GetParameter(GLenum pname) const {
     case LOCAL_GL_VERSION: {
       const auto raw = (const char*)gl->fGetString(pname);
       nsString ret = NS_ConvertUTF8toUTF16(raw);
-      return AsSomeVariant(std::move(ret));
+      return AsSomeVariant(ret);
     }
 
     case dom::MOZ_debug_Binding::WSI_INFO: {
       nsCString info;
       gl->GetWSIInfo(&info);
       nsString ret = NS_ConvertUTF8toUTF16(info);
-      return AsSomeVariant(std::move(ret));
+      return AsSomeVariant(ret);
     }
 
     case dom::MOZ_debug_Binding::DOES_INDEX_VALIDATION:

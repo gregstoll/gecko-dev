@@ -72,7 +72,7 @@ extern LazyLogModule gPCQLog;
 #define PCQ_LOGD(...)        PCQ_LOG_(LogLevel::Debug, __VA_ARGS__)
 #define PCQ_LOGE(...)        PCQ_LOG_(LogLevel::Error, __VA_ARGS__)
 
-enum PcqStatus {
+enum class PcqStatus {
   // Operation was successful
   Success,
   // The operation failed because the queue isn't ready for it.
@@ -593,7 +593,7 @@ public:
    * succeed then the queue is unchanged.
    */
   template<typename ... Args>
-  PcqStatus TryInsert(const Args&... aArgs) {
+  PcqStatus TryInsert(Args&&... aArgs) {
     size_t write = mWrite->load(std::memory_order_relaxed);
     const size_t initWrite = write;
     size_t read = mRead->load(std::memory_order_acquire);
@@ -654,7 +654,7 @@ public:
   }
 
   template<typename ... Args>
-  PcqStatus TryTypedInsert(const Args&... aArgs) {
+  PcqStatus TryTypedInsert(Args&&... aArgs) {
     return TryInsert(PcqTypedArg<Args>(aArgs)...);
   }
 
@@ -678,8 +678,8 @@ protected:
   template <typename Arg>
   PcqStatus WriteObject(size_t aRead, size_t* aWrite, const Arg& arg,
                         size_t aArgSize) {
-    return Marshaller::WriteObject(mQueue, QueueBufferSize(),
-                                   aRead, aWrite, arg, aArgSize);
+    return mozilla::detail::Marshaller::WriteObject(
+      mQueue, QueueBufferSize(), aRead, aWrite, arg, aArgSize);
   }
 
   Producer(Shmem& aShmem, size_t aQueueSize) : PcqBase(aShmem, aQueueSize) {
@@ -847,8 +847,8 @@ protected:
 
   template <typename Arg>
   PcqStatus ReadObject(size_t *aRead, size_t aWrite, Arg* arg, size_t aArgSize) {
-    return Marshaller::ReadObject(mQueue, QueueBufferSize(),
-                                  aRead, aWrite, arg, aArgSize);
+    return mozilla::detail::Marshaller::ReadObject(
+      mQueue, QueueBufferSize(), aRead, aWrite, arg, aArgSize);
   }
 
   Consumer(Shmem& aShmem, size_t aQueueSize) : PcqBase(aShmem, aQueueSize) {}
@@ -1110,7 +1110,7 @@ struct PcqParamTraits<nsACString> {
     if (aArg.IsVoid()) {
       return status;
     }
-    // DLP: No idea if this includes null terminator
+
     uint32_t len = aArg.Length();
     status =
       IsSuccess(status) ? aProducerView.WriteParam(len) : status;
@@ -1132,14 +1132,14 @@ struct PcqParamTraits<nsACString> {
       return status;
     }
 
-    // DLP: No idea if this includes null terminator
     uint32_t len = 0;
     status =
       IsSuccess(status) ? aConsumerView.ReadParam(&len) : status;
     if ((len == 0) || (!IsSuccess(status))) {
       return status;
     }
-    char* buf = aArg ? new char[len] : nullptr;
+
+    char* buf = aArg ? new char[len+1] : nullptr;
     if (aArg && (!buf)) {
       return PcqStatus::PcqFatalError;
     }
@@ -1148,6 +1148,7 @@ struct PcqParamTraits<nsACString> {
     if (!IsSuccess(status)) {
       return status;
     }
+    buf[len] = '\0';
     if (aArg) {
       aArg->Adopt(buf, len);
     }
@@ -1209,7 +1210,7 @@ struct PcqParamTraits<nsAString> {
     uint32_t sizeofchar = sizeof(typename ParamType::char_type);
     typename ParamType::char_type* buf = nullptr;
     if (aArg) {
-      buf = static_cast<typename ParamType::char_type*>(malloc(len * sizeofchar));
+      buf = static_cast<typename ParamType::char_type*>(malloc((len + 1) * sizeofchar));
       if (!buf) {
         return PcqStatus::PcqFatalError;
       }
@@ -1219,6 +1220,7 @@ struct PcqParamTraits<nsAString> {
     if (!IsSuccess(status)) {
       return status;
     }
+    buf[len] = L'\0';
     if (aArg) {
       aArg->Adopt(buf, len);
     }

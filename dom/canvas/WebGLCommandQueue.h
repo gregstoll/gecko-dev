@@ -131,7 +131,7 @@ class CommandSource : public BasicSource {
   }
 
   template <typename ... Args>
-  PcqStatus InsertCommand(Command aCommand, const Args&... aArgs)
+  PcqStatus InsertCommand(Command aCommand, Args&&... aArgs)
   {
     // TODO: For the moment, this is just a spin-lock.
     // Maybe make this something more efficient.
@@ -155,9 +155,9 @@ class CommandSource : public BasicSource {
   }
 
   template <typename ... Args>
-  PcqStatus RunCommand(Command aCommand, const Args&... aArgs)
+  PcqStatus RunCommand(Command aCommand, Args&&... aArgs)
   {
-    return InsertCommand(aCommand, aArgs...);
+    return InsertCommand(aCommand, std::forward<Args>(aArgs)...);
   }
 
   // For IPDL:
@@ -414,6 +414,7 @@ template<typename Command>
 class SyncCommandSource
   : public CommandSource<Command> {
  public:
+  using BaseType = CommandSource<Command>;
   SyncCommandSource(UniquePtr<Producer>&& aProducer,
                     UniquePtr<ProducerConsumerQueue>& aResponsePcq)
     : CommandSource<Command>(std::move(aProducer))
@@ -422,19 +423,19 @@ class SyncCommandSource
   }
 
   template <typename ... Args>
-  PcqStatus RunAsyncCommand(Command aCommand, const Args&... aArgs) {
-    return this->RunCommand(aCommand, aArgs...);
+  PcqStatus RunAsyncCommand(Command aCommand, Args&&... aArgs) {
+    return this->RunCommand(aCommand, std::forward<Args>(aArgs)...);
   }
 
   template <typename ... Args>
-  PcqStatus RunVoidSyncCommand(Command aCommand, const Args&... aArgs) {
-    PcqStatus status = RunAsyncCommand(aCommand, aArgs...);
+  PcqStatus RunVoidSyncCommand(Command aCommand, Args&&... aArgs) {
+    PcqStatus status = RunAsyncCommand(aCommand, std::forward<Args>(aArgs)...);
     return IsSuccess(status) ? this->ReadSyncResponse() : status;
   }
 
   template <typename ResultType, typename ... Args>
-  PcqStatus RunSyncCommand(Command aCommand, ResultType& aReturn, const Args&... aArgs) {
-    PcqStatus status = RunVoidSyncCommand(aCommand, aArgs...);
+  PcqStatus RunSyncCommand(Command aCommand, ResultType& aReturn, Args&&... aArgs) {
+    PcqStatus status = RunVoidSyncCommand(aCommand, std::forward<Args>(aArgs)...);
     return IsSuccess(status) ? this->ReadResult(aReturn) : status;
   }
 
@@ -853,14 +854,18 @@ struct IPDLParamTraits<mozilla::SyncCommandSource<Command>>
   : public IPDLParamTraits<mozilla::CommandSource<Command>> {
  public:
   typedef mozilla::SyncCommandSource<Command> paramType;
+  typedef typename paramType::BaseType paramBaseType;
 
   static void Write(IPC::Message* aMsg, IProtocol* aActor, paramType& aParam) {
+    WriteIPDLParam(aMsg, aActor, static_cast<paramBaseType&>(aParam));
     WriteIPDLParam(aMsg, aActor, std::move(aParam.mConsumer));
   }
 
   static bool Read(const IPC::Message* aMsg, PickleIterator* aIter,
-                   IProtocol* aActor, paramType* aResult) {
-    return ReadIPDLParam(aMsg, aIter, aActor, &aResult->mConsumer);
+                   IProtocol* aActor, paramType* aParam) {
+    bool result =
+      ReadIPDLParam(aMsg, aIter, aActor, static_cast<paramBaseType*>(aParam));
+    return result && ReadIPDLParam(aMsg, aIter, aActor, &aParam->mConsumer);
   }
 };
 
@@ -869,14 +874,18 @@ struct IPDLParamTraits<mozilla::SyncCommandSink<Command>>
   : public IPDLParamTraits<mozilla::CommandSink<Command>> {
  public:
   typedef mozilla::SyncCommandSink<Command> paramType;
+  typedef typename paramType::BaseType paramBaseType;
 
   static void Write(IPC::Message* aMsg, IProtocol* aActor, paramType& aParam) {
+    WriteIPDLParam(aMsg, aActor, static_cast<paramBaseType&>(aParam));
     WriteIPDLParam(aMsg, aActor, std::move(aParam.mProducer));
   }
 
   static bool Read(const IPC::Message* aMsg, PickleIterator* aIter,
-                   IProtocol* aActor, paramType* aResult) {
-    return ReadIPDLParam(aMsg, aIter, aActor, &aResult->mProducer);
+                   IProtocol* aActor, paramType* aParam) {
+    bool result =
+      ReadIPDLParam(aMsg, aIter, aActor, static_cast<paramBaseType*>(aParam));
+    return result && ReadIPDLParam(aMsg, aIter, aActor, &aParam->mProducer);
   }
 };
 

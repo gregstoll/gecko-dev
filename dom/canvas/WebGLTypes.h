@@ -8,6 +8,7 @@
 
 // Most WebIDL typedefs are identical to their OpenGL counterparts.
 #include "GLTypes.h"
+#include "gfxTypes.h"
 
 #include "nsTArray.h"
 #include "mozilla/dom/WebGLRenderingContextBinding.h"
@@ -32,6 +33,8 @@ template<typename T> struct PcqParamTraits;
 
 namespace webgl {
 class TexUnpackBytes;
+class TexUnpackImage;
+class TexUnpackSurface;
 }
 
 class ClientWebGLContext;
@@ -259,9 +262,27 @@ class WebGLId {
   static const WebGLId<HostType> Invalid() { return WebGLId<HostType>(); }
 
  protected:
+  friend struct DefaultHasher<WebGLId<HostType>>;
   IdType mId;
 };
 
+template<typename HostType>
+struct DefaultHasher<WebGLId<HostType>> {
+  using Key = WebGLId<HostType>;
+  using Lookup = Key;
+
+  static HashNumber hash(const Lookup& aLookup) {
+    // This discards the high 32-bits of 64-bit integers!
+    return aLookup.Id();
+  }
+
+  static bool match(const Key& aKey, const Lookup& aLookup) {
+    // Use builtin or overloaded operator==.
+    return aKey.Id() == aLookup.Id();
+  }
+
+  static void rekey(Key& aKey, const Key& aNewKey) { aKey.mId = aNewKey.Id(); }
+};
 
 // ---
 
@@ -298,17 +319,30 @@ struct WebGLPixelStore {
   bool mRequireFastPath = false;
 };
 
+struct WebGLTexImageData {
+  TexImageTarget mTarget;
+  int32_t mRowLength;
+  uint32_t mWidth;
+  uint32_t mHeight;
+  uint32_t mDepth;
+  gfxAlphaType mSrcAlphaType;
+};
+
 struct WebGLTexPboOffset {
   TexImageTarget mTarget;
   uint32_t mWidth;
   uint32_t mHeight;
   uint32_t mDepth;
   WebGLsizeiptr mPboOffset;
-  const Maybe<GLsizei>& mExpectedImageSize;
+  bool mHasExpectedImageSize;
+  GLsizei mExpectedImageSize;
 };
 
 using WebGLTexUnpackVariant =
-  Variant<UniquePtr<webgl::TexUnpackBytes>, WebGLTexPboOffset>;
+  Variant<UniquePtr<webgl::TexUnpackBytes>,
+          UniquePtr<webgl::TexUnpackSurface>,
+          WebGLTexImageData,
+          WebGLTexPboOffset>;
 
 using MaybeWebGLTexUnpackVariant = Maybe<WebGLTexUnpackVariant>;
 
@@ -341,6 +375,7 @@ struct SetDimensionsData {
   bool mResetLayer;
   bool mMaybeLostOldContext;
   nsresult mResult;
+  WebGLPixelStore mPixelStore;
 };
 
 // return value for the InitializeCanvasRenderer message
@@ -350,6 +385,36 @@ struct ICRData {
   bool supportsAlpha;
   bool isPremultAlpha;
 };
+
+#if 0
+/**
+ * Objects need to be copyable for the Variant but Arrays by themselves
+ * are not since that operation is neither guaranteed to be safe or
+ * performant.  But we promise to be good.
+ */
+template <typename T, size_t Length>
+class CopyableArray : public Array<T, Length> {
+ public:
+  template <typename... Args>
+  MOZ_IMPLICIT constexpr CopyableArray(Args&&... aArgs)
+    : Array<T, Length>(aArgs...) { }
+
+  CopyableArray(const CopyableArray& aObj) {
+    mArr = aObj.mArr;
+  }
+
+  CopyableArray(CopyableArray&& aObj) {
+    mArr = aObj.mArr;
+  }
+};
+
+using Int32Array2 = CopyableArray<int32_t,2>;
+using Int32Array4 = CopyableArray<int32_t,4>;
+using Uint32Array4 = CopyableArray<uint32_t,4>;
+using Float32Array2 = CopyableArray<float,2>;
+using Float32Array4 = CopyableArray<float,4>;
+using BoolArray4 = CopyableArray<bool,4>;
+#endif
 
 using Int32Array2 = Array<int32_t,2>;
 using Int32Array4 = Array<int32_t,4>;
@@ -380,29 +445,29 @@ public:
   AsSomeVariantT(Maybe<T>&& aObj) : mMaybeObj(std::move(aObj)) {}
 
   template<typename ... As>
-  operator Maybe<Variant<As...>>&&() {
-    if (!mMaybeObj) {
-      return std::forward<Maybe<Variant<As...>>>(Nothing());
+  operator Maybe<Variant<As...>>() {
+    if (mMaybeObj.isNothing()) {
+      return Nothing();
     }
-    return std::forward<Maybe<Variant<As...>>>(Some(std::move(Variant<As...>(std::move(mMaybeObj.ref())))));
+    return Some(Variant<As...>(std::forward<T>(mMaybeObj.ref())));
   }
 };
 
 template<typename FullType,
          typename T = typename RemoveReference<FullType>::Type>
 AsSomeVariantT<T> AsSomeVariant(FullType&& aObj) {
-  return AsSomeVariantT<T>(std::move(Some(std::forward<T>(aObj))));
+  return AsSomeVariantT<T>(Some(std::forward<T>(aObj)));
 }
 
 // Stack-based arrays can't be moved
 template<typename T, size_t N>
 AsSomeVariantT<Array<T,N>> AsSomeVariant(const Array<T,N>& aObj) {
-  return AsSomeVariantT<Array<T,N>>(std::move(Some(aObj)));
+  return AsSomeVariantT<Array<T,N>>(Some(aObj));
 }
 
 template<typename T>
 AsSomeVariantT<WebGLId<T>> AsSomeVariant(WebGLId<T>* aObj) {
-  return AsSomeVariantT<WebGLId<T>>(std::move(aObj ? Some(*aObj) : Nothing()));
+  return AsSomeVariantT<WebGLId<T>>(aObj ? Some(*aObj) : Nothing());
 }
 
 template<typename T>
@@ -416,8 +481,13 @@ AsSomeVariantT<WebGLId<T>> AsSomeVariant(WebGLRefPtr<T> aObj) {
 }
 
 template<typename T>
-AsSomeVariantT<T> AsSomeVariant(Maybe<T> aObj) {
-  return AsSomeVariant(std::move(aObj));
+AsSomeVariantT<T> AsSomeVariant(const Maybe<T>& aObj) {
+  return AsSomeVariantT<T>(aObj);
+}
+
+template<typename T>
+AsSomeVariantT<T> AsSomeVariant(Maybe<T>&& aObj) {
+  return AsSomeVariantT<T>(std::move(aObj));
 }
 
 /**

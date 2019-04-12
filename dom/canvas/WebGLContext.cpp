@@ -158,6 +158,7 @@ WebGLContext::WebGLContext()
   }
 
   mAllowContextRestore = true;
+  mDisallowContextRestore = false;
   mLastLossWasSimulated = false;
 
   mAlreadyGeneratedWarnings = 0;
@@ -961,37 +962,6 @@ void ClientWebGLContext::LoseOldestWebGLContextIfLimitExceeded() {
   }
 }
 
-UniquePtr<uint8_t[]> WebGLContext::GetImageBuffer(int32_t* out_format) {
-  *out_format = 0;
-
-  // Use GetSurfaceSnapshot() to make sure that appropriate y-flip gets applied
-  gfxAlphaType any;
-  RefPtr<SourceSurface> snapshot = GetSurfaceSnapshot(&any);
-  if (!snapshot) return nullptr;
-
-  RefPtr<DataSourceSurface> dataSurface = snapshot->GetDataSurface();
-
-  return gfxUtils::GetImageBuffer(dataSurface, mOptions.premultipliedAlpha,
-                                  out_format);
-}
-
-NS_IMETHODIMP
-WebGLContext::GetInputStream(const char* mimeType,
-                             const char16_t* encoderOptions,
-                             nsIInputStream** out_stream) {
-  NS_ASSERTION(gl, "GetInputStream on invalid context?");
-  if (!gl) return NS_ERROR_FAILURE;
-
-  // Use GetSurfaceSnapshot() to make sure that appropriate y-flip gets applied
-  gfxAlphaType any;
-  RefPtr<SourceSurface> snapshot = GetSurfaceSnapshot(&any);
-  if (!snapshot) return NS_ERROR_FAILURE;
-
-  RefPtr<DataSourceSurface> dataSurface = snapshot->GetDataSurface();
-  return gfxUtils::GetInputStream(dataSurface, mOptions.premultipliedAlpha,
-                                  mimeType, encoderOptions, out_stream);
-}
-
 // -
 
 namespace webgl {
@@ -1182,13 +1152,43 @@ bool WebGLContext::PresentScreenBuffer(GLScreenBuffer* const targetScreen) {
   return true;
 }
 
+RefPtr<DataSourceSurface> GetTempSurface(const IntSize& aSize, SurfaceFormat& aFormat) {
+  uint32_t stride = GetAlignedStride<8>(aSize.width, BytesPerPixel(aFormat));
+  return Factory::CreateDataSourceSurfaceWithStride(aSize, aFormat, stride);
+}
+
+void WriteFrontToFile(gl::GLContext* gl, GLScreenBuffer* screen, const char* fname,
+                      bool needsPremult) {
+  auto frontbuffer = screen->Front()->Surf();
+  IntSize readSize(frontbuffer->mSize);
+  SurfaceFormat format = frontbuffer->mHasAlpha ? SurfaceFormat::B8G8R8A8
+                                                : SurfaceFormat::B8G8R8X8;
+  RefPtr<DataSourceSurface> resultSurf = GetTempSurface(readSize, format);
+  if (NS_WARN_IF(!resultSurf)) {
+    MOZ_ASSERT_UNREACHABLE("FAIL");
+    return;
+  }
+
+  if (!gl->Readback(frontbuffer, resultSurf)) {
+    NS_WARNING("Failed to read back canvas surface.");
+    MOZ_ASSERT_UNREACHABLE("FAIL");
+    return;
+  }
+  if (needsPremult) {
+    gfxUtils::PremultiplyDataSurface(resultSurf, resultSurf);
+  }
+  MOZ_ASSERT(resultSurf);
+  gfxUtils::WriteAsPNG(resultSurf, fname);
+}
+
 bool WebGLContext::Present() {
-  if (!mCompositableHost) {
+  if (!PresentScreenBuffer()) {
     return false;
   }
 
-  if (!PresentScreenBuffer()) {
-    return false;
+  if (XRE_IsContentProcess()) {
+    // That's all!
+    return true;
   }
 
   // Set the CompositableHost to use the front buffer as the display,
@@ -1213,6 +1213,20 @@ bool WebGLContext::Present() {
   // TODO: I probably need to hold onto screen->Front()->Surf() somehow
   layers::SurfaceDescriptor surfaceDescriptor;
   screen->Front()->Surf()->ToSurfaceDescriptor(&surfaceDescriptor);
+
+  // TODO: TEST:
+  {
+    static uint32_t sCount = 0;
+    char fname[512];
+    sprintf(fname, "\\PresentSurface-%03d.png", sCount++);
+    bool needsPremult = screen->Front()->Surf()->mHasAlpha && IsPremultAlpha();
+    WriteFrontToFile(gl, screen, fname, needsPremult);
+  }
+
+  if (!mCompositableHost) {
+    return false;
+  }
+
   wr::MaybeExternalImageId noExternalImageId = Nothing();
   RefPtr<TextureHost> host =
     TextureHost::Create(surfaceDescriptor, null_t(), nullptr,
@@ -1364,12 +1378,11 @@ void WebGLContext::UpdateContextLossStatus() {
 
     // We sent the callback, so we're just 'regular lost' now.
     mContextStatus = ContextStatus::Lost;
-    // If we're told to use the default handler, it means the script
-    // didn't bother to handle the event. In this case, we shouldn't
-    // auto-restore the context.
-    if (useDefaultHandler) mAllowContextRestore = false;
 
-    // Fall through.
+    // This is cleared if the context lost event handler permits it
+    // (i.e. is not the default handler)
+    mDisallowContextRestore = true;
+    return;
   }
 
   if (mContextStatus == ContextStatus::Lost) {
@@ -1378,7 +1391,7 @@ void WebGLContext::UpdateContextLossStatus() {
     // and supposed to.
 
     // Are we allowed to restore the context?
-    if (!mAllowContextRestore) return;
+    if (mDisallowContextRestore || (!mAllowContextRestore)) return;
 
     // If we're only simulated-lost, we shouldn't auto-restore, and
     // instead we should wait for restoreContext() to be called.
@@ -1431,6 +1444,7 @@ void WebGLContext::ForceRestoreContext() {
   printf_stderr("WebGL(%p)::ForceRestoreContext\n", this);
   mContextStatus = ContextStatus::LostAwaitingRestore;
   mAllowContextRestore = true;  // Hey, you did say 'force'.
+  mDisallowContextRestore = false;
 
   // Queue up a task, since we know the status changed.
   EnqueueUpdateContextLossStatus();

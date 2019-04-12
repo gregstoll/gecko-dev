@@ -279,33 +279,14 @@ class WebGLContext : public SupportsWeakPtr<WebGLContext> {
   SetDimensionsData SetDimensions(int32_t width, int32_t height) {
     DoSetDimensionsData result = DoSetDimensions(width, height);
     return { mOptions, mOptionsFrozen, mResetLayer,
-             result.maybeLoseOldContext, result.result };
+             result.maybeLoseOldContext, result.result,
+             mPixelStore };
   }
 
   void SetCompositableHost(RefPtr<layers::CompositableHost>& aCompositableHost);
 
-  NS_IMETHOD InitializeWithDrawTarget(nsIDocShell*,
-                                      NotNull<gfx::DrawTarget*>) {
-    return NS_ERROR_NOT_IMPLEMENTED;
-  }
-
-  NS_IMETHOD Reset() {
-    /* (InitializeWithSurface) */
-    return NS_ERROR_NOT_IMPLEMENTED;
-  }
-
-  virtual UniquePtr<uint8_t[]> GetImageBuffer(int32_t* out_format);
-  NS_IMETHOD GetInputStream(const char* mimeType,
-                            const char16_t* encoderOptions,
-                            nsIInputStream** out_stream);
-
   virtual already_AddRefed<mozilla::gfx::SourceSurface> GetSurfaceSnapshot(
       gfxAlphaType* out_alphaType);
-
-  virtual void SetOpaqueValueFromOpaqueAttr(bool){};
-  bool GetIsOpaque() { return !mOptions.alpha; }
-
-  NS_IMETHOD SetIsIPC(bool) { return NS_ERROR_NOT_IMPLEMENTED; }
 
   /**
    * An abstract base class to be implemented by callers wanting to be notified
@@ -313,10 +294,6 @@ class WebGLContext : public SupportsWeakPtr<WebGLContext> {
    * before it is destroyed.
    */
   virtual void DidRefresh();
-
-  NS_IMETHOD Redraw(const gfxRect&) {
-    return NS_ERROR_NOT_IMPLEMENTED;
-  }
 
   void OnMemoryPressure();
 
@@ -441,8 +418,6 @@ class WebGLContext : public SupportsWeakPtr<WebGLContext> {
   // WebIDL WebGLRenderingContext API
   void Commit();
 
- private:
-
   gfx::IntSize DrawingBufferSize();
 
  public:
@@ -557,7 +532,7 @@ class WebGLContext : public SupportsWeakPtr<WebGLContext> {
 
   void LineWidth(GLfloat width);
   void LinkProgram(WebGLProgram& prog);
-  void PixelStorei(GLenum pname, GLint param);
+  WebGLPixelStore PixelStorei(GLenum pname, GLint param);
   void PolygonOffset(GLfloat factor, GLfloat units);
 
   already_AddRefed<layers::SharedSurfaceTextureClient> GetVRFrame();
@@ -798,12 +773,12 @@ class WebGLContext : public SupportsWeakPtr<WebGLContext> {
   void CompressedTexImage(uint8_t funcDims, GLenum target, GLint level,
                           GLenum internalFormat, GLsizei width, GLsizei height,
                           GLsizei depth, GLint border,
-                          UniquePtr<webgl::TexUnpackBytes>&& src,
+                          UniquePtr<webgl::TexUnpackBlob>&& src,
                           const Maybe<GLsizei>& expectedImageSize);
   void CompressedTexSubImage(uint8_t funcDims, GLenum target, GLint level,
                              GLint xOffset, GLint yOffset, GLint zOffset,
                              GLsizei width, GLsizei height, GLsizei depth,
-                             GLenum unpackFormat, UniquePtr<webgl::TexUnpackBytes>&& src,
+                             GLenum unpackFormat, UniquePtr<webgl::TexUnpackBlob>&& src,
                              const Maybe<GLsizei>& expectedImageSize);
 
   ////////////////////////////////////
@@ -826,13 +801,13 @@ class WebGLContext : public SupportsWeakPtr<WebGLContext> {
   void TexImage(uint8_t funcDims, GLenum target, GLint level,
                 GLenum internalFormat, uint32_t width, uint32_t height,
                 uint32_t depth, GLint border, GLenum unpackFormat,
-                GLenum unpackType, UniquePtr<webgl::TexUnpackBytes>&& src);
+                GLenum unpackType, UniquePtr<webgl::TexUnpackBlob>&& src);
 
   ////
   void TexSubImage(uint8_t funcDims, GLenum target, GLint level, GLint xOffset,
                    GLint yOffset, GLint zOffset, uint32_t width, uint32_t height,
                    uint32_t depth, GLenum unpackFormat, GLenum unpackType,
-                   UniquePtr<webgl::TexUnpackBytes>&& src);
+                   UniquePtr<webgl::TexUnpackBlob>&& src);
 
   bool ValidateNullPixelUnpackBuffer() {
     if (mBoundPixelUnpackBuffer) {
@@ -841,6 +816,15 @@ class WebGLContext : public SupportsWeakPtr<WebGLContext> {
     }
     return true;
   }
+
+  UniquePtr<webgl::TexUnpackBlob>
+  TexUnpackBytesFromTexImageData(const WebGLTexImageData& imageData);
+
+  UniquePtr<webgl::TexUnpackBlob>
+  TexUnpackBytesFromTexPboOffset(
+    TexImageTarget target, uint32_t width, uint32_t height,
+    uint32_t depth, WebGLsizeiptr pboOffset,
+    const Maybe<GLsizei>& expectedImageSize);
 
   ////////////////////////////////////
   // WebGLTextureUpload.cpp
@@ -860,6 +844,8 @@ class WebGLContext : public SupportsWeakPtr<WebGLContext> {
                                  webgl::ImageInfo** const out_imageInfo);
   bool ValidateUnpackInfo(bool usePBOs, GLenum format, GLenum type,
                           webgl::PackingInfo* const out);
+  UniquePtr<webgl::TexUnpackBytes>
+  AsTexUnpackBytes(UniquePtr<webgl::TexUnpackBlob>&& aBlob);
 
   // -----------------------------------------------------------------------------
   // Vertices Feature (WebGLContextVertices.cpp)
@@ -874,8 +860,7 @@ class WebGLContext : public SupportsWeakPtr<WebGLContext> {
   void EnableVertexAttribArray(GLuint index);
   void DisableVertexAttribArray(GLuint index);
 
-  MaybeWebGLVariant GetVertexAttrib(JSContext* cx, GLuint index, GLenum pname,
-                            ErrorResult& rv);
+  MaybeWebGLVariant GetVertexAttrib(GLuint index, GLenum pname);
 
   WebGLsizeiptr GetVertexAttribOffset(GLuint index, GLenum pname);
 
@@ -1385,6 +1370,8 @@ class WebGLContext : public SupportsWeakPtr<WebGLContext> {
 
   WebGLContextLossHandler mContextLossHandler;
   bool mAllowContextRestore;
+  // true if the context lost event has not yet given permission to restore
+  bool mDisallowContextRestore;
   bool mLastLossWasSimulated;
   ContextStatus mContextStatus = ContextStatus::NotLost;
 
@@ -1465,6 +1452,11 @@ class WebGLContext : public SupportsWeakPtr<WebGLContext> {
   const decltype(mBound2DTextures)* TexListForElemType(GLenum elemType) const;
 
   void UpdateMaxDrawBuffers();
+
+  void AllowContextRestore() {
+    mDisallowContextRestore = false;
+    EnqueueUpdateContextLossStatus();
+  }
 
   // --
  private:

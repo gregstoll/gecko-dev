@@ -991,9 +991,10 @@ void WebGLContext::LinkProgram(WebGLProgram& prog) {
   }
 }
 
-void WebGLContext::PixelStorei(GLenum pname, GLint param) {
+WebGLPixelStore
+WebGLContext::PixelStorei(GLenum pname, GLint param) {
   const FuncScope funcScope(*this, "pixelStorei");
-  if (IsContextLost()) return;
+  if (IsContextLost()) return mPixelStore;
 
   if (IsWebGL2()) {
     uint32_t* pValueSlot = nullptr;
@@ -1032,39 +1033,39 @@ void WebGLContext::PixelStorei(GLenum pname, GLint param) {
     }
 
     if (pValueSlot) {
-      if (!ValidateNonNegative("param", param)) return;
+      if (!ValidateNonNegative("param", param)) return mPixelStore;
 
       gl->fPixelStorei(pname, param);
       *pValueSlot = param;
-      return;
+      return mPixelStore;
     }
   }
 
   switch (pname) {
     case UNPACK_FLIP_Y_WEBGL:
       mPixelStore.mFlipY = bool(param);
-      return;
+      return mPixelStore;
 
     case UNPACK_PREMULTIPLY_ALPHA_WEBGL:
       mPixelStore.mPremultiplyAlpha = bool(param);
-      return;
+      return mPixelStore;
 
     case UNPACK_COLORSPACE_CONVERSION_WEBGL:
       switch (param) {
         case LOCAL_GL_NONE:
         case BROWSER_DEFAULT_WEBGL:
           mPixelStore.mColorspaceConversion = param;
-          return;
+          return mPixelStore;
 
         default:
           ErrorInvalidEnumInfo("colorspace conversion parameter", param);
-          return;
+          return mPixelStore;
       }
 
     case UNPACK_REQUIRE_FASTPATH:
       if (IsExtensionEnabled(WebGLExtensionID::MOZ_debug)) {
         mPixelStore.mRequireFastPath = bool(param);
-        return;
+          return mPixelStore;
       }
       break;
 
@@ -1081,11 +1082,11 @@ void WebGLContext::PixelStorei(GLenum pname, GLint param) {
             mPixelStore.mUnpackAlignment = param;
 
           gl->fPixelStorei(pname, param);
-          return;
+          return mPixelStore;
 
         default:
           ErrorInvalidValue("Invalid pack/unpack alignment value.");
-          return;
+          return mPixelStore;
       }
 
     default:
@@ -1093,6 +1094,7 @@ void WebGLContext::PixelStorei(GLenum pname, GLint param) {
   }
 
   ErrorInvalidEnumInfo("pname", pname);
+  return mPixelStore;
 }
 
 bool WebGLContext::DoReadPixelsAndConvert(const webgl::FormatInfo* srcFormat,

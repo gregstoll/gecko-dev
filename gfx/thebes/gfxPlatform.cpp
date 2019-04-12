@@ -814,9 +814,11 @@ class WrRolloutPrefShutdownSaver : public nsIObserver {
 NS_IMPL_ISUPPORTS(WrRolloutPrefShutdownSaver, nsIObserver)
 
 void gfxPlatform::Init() {
-  MOZ_RELEASE_ASSERT(!XRE_IsGPUProcess(), "GFX: Not allowed in GPU process.");
+  // TODO:
+//  MOZ_RELEASE_ASSERT(!XRE_IsGPUProcess(), "GFX: Not allowed in GPU process.");
   MOZ_RELEASE_ASSERT(!XRE_IsRDDProcess(), "GFX: Not allowed in RDD process.");
-  MOZ_RELEASE_ASSERT(NS_IsMainThread(), "GFX: Not in main thread.");
+  MOZ_RELEASE_ASSERT(NS_IsMainThread() || NS_IsInCompositorThread(),
+                     "GFX: Not in main thread.");
 
   if (gEverInitialized) {
     MOZ_CRASH("Already started???");

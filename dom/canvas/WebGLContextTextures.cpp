@@ -178,6 +178,13 @@ bool WebGLContext::IsTexParamValid(GLenum pname) const {
   }
 }
 
+UniquePtr<webgl::TexUnpackBytes>
+WebGLContext::AsTexUnpackBytes(UniquePtr<webgl::TexUnpackBlob>&& aBlob) {
+  MOZ_RELEASE_ASSERT(aBlob->AsTexUnpackBytes());
+  // Safe to downcast the UniquePtr
+    return UniquePtr<webgl::TexUnpackBytes>(static_cast<webgl::TexUnpackBytes*>(aBlob.release()));
+}
+
 //////////////////////////////////////////////////////////////////////////////////////////
 // GL calls
 
@@ -273,27 +280,33 @@ void WebGLContext::CompressedTexImage(uint8_t funcDims, GLenum rawTarget,
                                       GLint level, GLenum internalFormat,
                                       GLsizei width, GLsizei height,
                                       GLsizei depth, GLint border,
-                                      UniquePtr<webgl::TexUnpackBytes>&& src,
+                                      UniquePtr<webgl::TexUnpackBlob>&& src,
                                       const Maybe<GLsizei>& expectedImageSize) {
   TexImageTarget target;
   WebGLTexture* tex;
   if (!ValidateTexImageTarget(this, funcDims, rawTarget, &target, &tex)) return;
 
+  UniquePtr<webgl::TexUnpackBytes> bytes(AsTexUnpackBytes(std::move(src)));
+  if (!bytes) return;
+
   tex->CompressedTexImage(target, level, internalFormat, width, height, depth,
-                          border, std::move(src), expectedImageSize);
+                          border, std::move(bytes), expectedImageSize);
 }
 
 void WebGLContext::CompressedTexSubImage(
     uint8_t funcDims, GLenum rawTarget, GLint level, GLint xOffset,
     GLint yOffset, GLint zOffset, GLsizei width, GLsizei height, GLsizei depth,
-    GLenum unpackFormat, UniquePtr<webgl::TexUnpackBytes>&& src,
+    GLenum unpackFormat, UniquePtr<webgl::TexUnpackBlob>&& src,
     const Maybe<GLsizei>& expectedImageSize) {
   TexImageTarget target;
   WebGLTexture* tex;
   if (!ValidateTexImageTarget(this, funcDims, rawTarget, &target, &tex)) return;
 
+  UniquePtr<webgl::TexUnpackBytes> bytes(AsTexUnpackBytes(std::move(src)));
+  if (!bytes) return;
+
   tex->CompressedTexSubImage(target, level, xOffset, yOffset, zOffset, width,
-                             height, depth, unpackFormat, std::move(src),
+                             height, depth, unpackFormat, std::move(bytes),
                              expectedImageSize);
 }
 
@@ -331,7 +344,7 @@ void WebGLContext::TexImage(uint8_t funcDims, GLenum rawTarget, GLint level,
                             GLenum internalFormat, uint32_t width,
                             uint32_t height, uint32_t depth, GLint border,
                             GLenum unpackFormat, GLenum unpackType,
-                            UniquePtr<webgl::TexUnpackBytes>&& src) {
+                            UniquePtr<webgl::TexUnpackBlob>&& src) {
   TexImageTarget target;
   WebGLTexture* tex;
   if (!ValidateTexImageTarget(this, funcDims, rawTarget, &target, &tex)) return;
@@ -345,7 +358,7 @@ void WebGLContext::TexSubImage(uint8_t funcDims, GLenum rawTarget, GLint level,
                                GLint xOffset, GLint yOffset, GLint zOffset,
                                uint32_t width, uint32_t height, uint32_t depth,
                                GLenum unpackFormat, GLenum unpackType,
-                               UniquePtr<webgl::TexUnpackBytes>&& src) {
+                               UniquePtr<webgl::TexUnpackBlob>&& src) {
   TexImageTarget target;
   WebGLTexture* tex;
   if (!ValidateTexImageTarget(this, funcDims, rawTarget, &target, &tex)) return;

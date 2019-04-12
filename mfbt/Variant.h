@@ -182,6 +182,12 @@ struct VariantImplementation<Tag, N, T> {
       -> decltype(aMatcher.match(aV.template as<N>())) {
     return aMatcher.match(aV.template as<N>());
   }
+
+  template <typename Matcher, typename ConcreteVariant>
+  static auto match(Matcher&& aMatcher, const ConcreteVariant& aV)
+      -> decltype(aMatcher.match(aV.template as<N>())) {
+    return aMatcher.match(aV.template as<N>());
+  }
 };
 
 // VariantImplementation for some variant type T.
@@ -234,6 +240,26 @@ struct VariantImplementation<Tag, N, T, Ts...> {
 
   template <typename Matcher, typename ConcreteVariant>
   static auto match(Matcher&& aMatcher, ConcreteVariant& aV)
+      -> decltype(aMatcher.match(aV.template as<N>())) {
+    if (aV.template is<N>()) {
+      return aMatcher.match(aV.template as<N>());
+    } else {
+      // If you're seeing compilation errors here like "no matching
+      // function for call to 'match'" then that means that the
+      // Matcher doesn't exhaust all variant types. There must exist a
+      // Matcher::match(T&) for every variant type T.
+      //
+      // If you're seeing compilation errors here like "cannot
+      // initialize return object of type <...> with an rvalue of type
+      // <...>" then that means that the Matcher::match(T&) overloads
+      // are returning different types. They must all return the same
+      // Matcher::ReturnType type.
+      return Next::match(aMatcher, aV);
+    }
+  }
+
+  template <typename Matcher, typename ConcreteVariant>
+  static auto match(Matcher&& aMatcher, const ConcreteVariant& aV)
       -> decltype(aMatcher.match(aV.template as<N>())) {
     if (aV.template is<N>()) {
       return aMatcher.match(aV.template as<N>());

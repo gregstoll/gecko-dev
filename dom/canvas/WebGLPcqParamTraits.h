@@ -33,6 +33,9 @@ template<>
 struct IsTriviallySerializable<WebGLPixelStore> : TrueType {};
 
 template<>
+struct IsTriviallySerializable<WebGLTexImageData> : TrueType {};
+
+template<>
 struct IsTriviallySerializable<WebGLTexPboOffset> : TrueType {};
 
 template<>
@@ -40,6 +43,9 @@ struct IsTriviallySerializable<SetDimensionsData> : TrueType {};
 
 template<>
 struct IsTriviallySerializable<ICRData> : TrueType {};
+
+template<>
+struct IsTriviallySerializable<gfx::IntSize> : TrueType {};
 
 template<>
 struct PcqParamTraits<ExtensionSets> {
@@ -135,22 +141,19 @@ struct PcqParamTraits<PcqTexUnpack> {
   using ParamType = PcqTexUnpack;
 
   static PcqStatus Write(ProducerView& aProducerView, const ParamType& aArg) {
-    MOZ_ASSERT_UNREACHABLE("TODO:");
-    return PcqStatus::PcqFatalError;
+    return const_cast<PcqTexUnpack&>(aArg).Write(aProducerView);
   }
 
   static PcqStatus Read(ConsumerView& aConsumerView, ParamType* aArg) {
-    nsTArray<uint8_t> arr;
-    aConsumerView.ReadParam(aArg ? &arr : nullptr);
-    // TODO: Also read the metadata and create a TexUnpackBytes for aArg
-    MOZ_ASSERT_UNREACHABLE("TODO:");
-    return PcqStatus::PcqFatalError;
+    return PcqTexUnpack::Read(aArg, aConsumerView);
   }
 
   template<typename View>
   static size_t MinSize(View& aView, const ParamType* aArg) {
-    MOZ_ASSERT_UNREACHABLE("TODO:");
-    return 0;
+    if (!aArg) {
+      return 1;
+    }
+    return aArg->MinSize();
   }
 };
 

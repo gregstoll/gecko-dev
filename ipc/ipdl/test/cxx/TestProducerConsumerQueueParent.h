@@ -1,0 +1,6 @@
+#ifndef mozilla__ipdltest_TestProducerConsumerQueueParent_h
+#define mozilla__ipdltest_TestProducerConsumerQueueParent_h 1
+
+#include "TestProducerConsumerQueue.h"
+
+#endif // ifndef mozilla__ipdltest_TestProducerConsumerQueueParent_h
