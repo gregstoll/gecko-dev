@@ -422,11 +422,8 @@ const mapStateToProps = state => {
     breakpointsDisabled: getBreakpointsDisabled(state),
     breakpointsLoading: getBreakpointsLoading(state),
     isWaitingOnBreak: getIsWaitingOnBreak(state, thread),
-    shouldPauseOnExceptions: getShouldPauseOnExceptions(state, thread),
-    shouldPauseOnCaughtExceptions: getShouldPauseOnCaughtExceptions(
-      state,
-      thread
-    ),
+    shouldPauseOnExceptions: getShouldPauseOnExceptions(state),
+    shouldPauseOnCaughtExceptions: getShouldPauseOnCaughtExceptions(state),
     workers: getWorkers(state)
   };
 };

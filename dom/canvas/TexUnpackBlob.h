@@ -159,6 +159,10 @@ class TexUnpackSurface final : public TexUnpackBlob {
                    uint32_t width, uint32_t height, uint32_t depth,
                    gfx::DataSourceSurface* surf, gfxAlphaType srcAlphaType);
 
+  TexUnpackSurface(const ClientWebGLContext* webgl, TexImageTarget target,
+                   uint32_t width, uint32_t height, uint32_t depth,
+                   gfx::DataSourceSurface* surf, gfxAlphaType srcAlphaType);
+
   TexUnpackSurface(const WebGLContext* webgl, TexImageTarget target,
                    uint32_t width, uint32_t height, uint32_t depth,
                    gfx::DataSourceSurface* surf, gfxAlphaType srcAlphaType);
