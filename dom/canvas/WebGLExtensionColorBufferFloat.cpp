@@ -43,7 +43,4 @@ bool WebGLExtensionColorBufferFloat::IsSupported(const WebGLContext* webgl) {
          gl->IsSupported(gl::GLFeature::frag_color_float);
 }
 
-IMPL_WEBGL_EXTENSION_GOOP(WebGLExtensionColorBufferFloat,
-                          WEBGL_color_buffer_float)
-
 }  // namespace mozilla

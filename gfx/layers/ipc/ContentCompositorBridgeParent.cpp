@@ -16,6 +16,9 @@
 #ifdef XP_WIN
 #  include "mozilla/gfx/DeviceManagerDx.h"  // for DeviceManagerDx
 #endif
+#include "mozilla/dom/WebGLCrossProcessCommandQueue.h"
+#include "mozilla/dom/WebGLErrorQueue.h"
+#include "mozilla/dom/WebGLParent.h"
 #include "mozilla/ipc/Transport.h"           // for Transport
 #include "mozilla/layers/AnimationHelper.h"  // for CompositorAnimationStorage
 #include "mozilla/layers/APZCTreeManagerParent.h"  // for APZCTreeManagerParent
@@ -654,6 +657,21 @@ void ContentCompositorBridgeParent::ObserveLayersUpdate(
   }
 
   Unused << state->mParent->SendObserveLayersUpdate(aLayersId, aEpoch, aActive);
+}
+
+dom::PWebGLParent*
+ContentCompositorBridgeParent::AllocPWebGLParent(const WebGLVersion& aVersion,
+                                                      UniquePtr<HostWebGLCommandSink>&& aCommandSink,
+                                                      UniquePtr<HostWebGLErrorSource>&& aErrorSource) {
+  return dom::WebGLParent::Create(aVersion,
+                                  std::move(aCommandSink),
+                                  std::move(aErrorSource));
+}
+
+bool
+ContentCompositorBridgeParent::DeallocPWebGLParent(PWebGLParent* aWebGLParent) {
+  delete aWebGLParent;
+  return true;
 }
 
 }  // namespace layers

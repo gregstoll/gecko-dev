@@ -1,0 +1,15 @@
+
+using shmemholder mozilla::ipc::Consumer from "ProducerConsumerQueue.h";
+
+namespace mozilla {
+namespace _ipdltest {
+
+
+protocol PTestProducerConsumerQueue {
+
+child:
+    async Consume(UniquePtr<Consumer> aConsumer);
+};
+
+} // namespace mozilla
+} // namespace _ipdltest

@@ -7,6 +7,13 @@
 #include "IPCMessageUtils.h"
 #include "mozilla/CheckedInt.h"
 
+namespace mozilla {
+namespace ipc {
+// Log for ProducerConsumerQueue
+mozilla::LazyLogModule gPCQLog("pcq");
+}  // namespace ipc
+}  // namespace mozilla
+
 namespace IPC {
 
 bool ByteLengthIsValid(uint32_t aNumElements, size_t aElementSize,

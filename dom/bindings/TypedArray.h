@@ -170,6 +170,17 @@ struct TypedArray
     return CreateCommon(cx, length, data);
   }
 
+  template<size_t Length>
+  static inline JSObject* Create(JSContext* cx, nsWrapperCache* creator,
+                                 const T (&data)[Length]) {
+    return Create(cx, creator, Length, data);
+  }
+
+  template<size_t Length>
+  static inline JSObject* Create(JSContext* cx, const T (&data)[Length]) {
+    return Create(cx, Length, data);
+  }
+
  private:
   static inline JSObject* CreateCommon(JSContext* cx, uint32_t length,
                                        const T* data) {

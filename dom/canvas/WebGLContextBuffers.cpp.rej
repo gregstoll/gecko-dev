@@ -1,0 +1,54 @@
+--- dom/canvas/WebGLContextBuffers.cpp
++++ dom/canvas/WebGLContextBuffers.cpp
+@@ -294,51 +295,6 @@
+   buffer->BufferData(target, dataLen, data, usage);
+ }
+ 
+-////
+-
+-void WebGLContext::BufferData(GLenum target, WebGLsizeiptr size, GLenum usage) {
+-  const FuncScope funcScope(*this, "bufferData");
+-  if (IsContextLost()) return;
+-
+-  if (!ValidateNonNegative("size", size)) return;
+-
+-  ////
+-
+-  const UniqueBuffer zeroBuffer(calloc(size, 1));
+-  if (!zeroBuffer) return ErrorOutOfMemory("Failed to allocate zeros.");
+-
+-  BufferDataImpl(target, size_t(size), (const uint8_t*)zeroBuffer.get(), usage);
+-}
+-
+-void WebGLContext::BufferData(GLenum target,
+-                              const dom::Nullable<dom::ArrayBuffer>& maybeSrc,
+-                              GLenum usage) {
+-  const FuncScope funcScope(*this, "bufferData");
+-  if (IsContextLost()) return;
+-
+-  if (!ValidateNonNull("src", maybeSrc)) return;
+-  const auto& src = maybeSrc.Value();
+-
+-  src.ComputeLengthAndData();
+-  BufferDataImpl(target, src.LengthAllowShared(), src.DataAllowShared(), usage);
+-}
+-
+-void WebGLContext::BufferData(GLenum target, const dom::ArrayBufferView& src,
+-                              GLenum usage, GLuint srcElemOffset,
+-                              GLuint srcElemCountOverride) {
+-  const FuncScope funcScope(*this, "bufferData");
+-  if (IsContextLost()) return;
+-
+-  uint8_t* bytes;
+-  size_t byteLen;
+-  if (!ValidateArrayBufferView(src, srcElemOffset, srcElemCountOverride,
+-                               LOCAL_GL_INVALID_VALUE, &bytes, &byteLen)) {
+-    return;
+-  }
+-
+-  BufferDataImpl(target, byteLen, bytes, usage);
+-}
+-
+ ////////////////////////////////////////
+ 
+ void WebGLContext::BufferSubDataImpl(GLenum target, WebGLsizeiptr dstByteOffset,

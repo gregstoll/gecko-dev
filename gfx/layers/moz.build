@@ -223,6 +223,7 @@ EXPORTS.mozilla.layers += [
     'mlgpu/MLGPUScreenshotGrabber.h',
     'mlgpu/ShaderDefinitionsMLGPU.h',
     'mlgpu/UtilityMLGPU.h',
+    'OOPCanvasRenderer.h',
     'opengl/CompositingRenderTargetOGL.h',
     'opengl/CompositorOGL.h',
     'opengl/MacIOSurfaceTextureClientOGL.h',

@@ -13,6 +13,7 @@
 #include "base/task.h"           // for NewRunnableMethod, etc
 #include "gfxPrefs.h"
 #include "mozilla/dom/TabGroup.h"
+#include "mozilla/dom/WebGLChild.h"
 #include "mozilla/layers/CompositorManagerChild.h"
 #include "mozilla/layers/ImageBridgeChild.h"
 #include "mozilla/layers/APZChild.h"
@@ -990,6 +991,27 @@ bool CompositorBridgeChild::DeallocPAPZCTreeManagerChild(
     PAPZCTreeManagerChild* aActor) {
   APZCTreeManagerChild* child = static_cast<APZCTreeManagerChild*>(aActor);
   child->ReleaseIPDLReference();
+  return true;
+}
+
+dom::PWebGLChild*
+CompositorBridgeChild::AllocPWebGLChild(const WebGLVersion& aVersion,
+                                        UniquePtr<HostWebGLCommandSink>&& aCommandSink,
+                                        UniquePtr<HostWebGLErrorSource>&& aErrorSource) {
+  MOZ_CRASH("Should create PWebGLChild outside of IPDL");
+  return nullptr;
+}
+
+dom::PWebGLChild*
+CompositorBridgeChild::AllocPWebGLChild(const WebGLVersion& aVersion,
+                                        UniquePtr<HostWebGLCommandSink>& aCommandSink,
+                                        UniquePtr<HostWebGLErrorSource>& aErrorSource) {
+  MOZ_CRASH("Should create PWebGLChild outside of IPDL");
+  return nullptr;
+}
+
+bool CompositorBridgeChild::DeallocPWebGLChild(PWebGLChild* aActor) {
+  delete static_cast<dom::WebGLChild*>(aActor);
   return true;
 }
 
