@@ -32,7 +32,8 @@ inline void CycleCollectionNoteChild(
 namespace mozilla {
 
 namespace ipc {
-template<typename T> struct PcqParamTraits;  
+template <typename T>
+struct PcqParamTraits;
 }
 
 struct Nothing {};

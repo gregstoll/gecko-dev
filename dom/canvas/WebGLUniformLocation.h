@@ -25,7 +25,7 @@ struct UniformInfo;
 }  // namespace webgl
 
 class WebGLUniformLocation final
-  : public WebGLContextBoundObject<WebGLUniformLocation> {
+    : public WebGLContextBoundObject<WebGLUniformLocation> {
  public:
   NS_INLINE_DECL_REFCOUNTING(WebGLUniformLocation)
 

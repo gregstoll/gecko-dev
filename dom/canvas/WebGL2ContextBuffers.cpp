@@ -85,10 +85,9 @@ void WebGL2Context::CopyBufferSubData(GLenum readTarget, GLenum writeTarget,
   writeBuffer->ResetLastUpdateFenceId();
 }
 
-Maybe<nsTArray<uint8_t>>
-WebGL2Context::GetBufferSubData(GLenum target, WebGLintptr srcByteOffset,
-                                size_t byteLen,
-                                const Maybe<mozilla::ipc::Shmem>& maybeShmem) {
+Maybe<nsTArray<uint8_t>> WebGL2Context::GetBufferSubData(
+    GLenum target, WebGLintptr srcByteOffset, size_t byteLen,
+    const Maybe<mozilla::ipc::Shmem>& maybeShmem) {
   const FuncScope funcScope(*this, "getBufferSubData");
   if (IsContextLost()) return Nothing();
 
@@ -131,7 +130,7 @@ WebGL2Context::GetBufferSubData(GLenum target, WebGLintptr srcByteOffset,
   nsTArray<uint8_t> arr;
   uint8_t* bytes;
   if (!maybeShmem) {
-    arr.SetLength(byteLen);     // TODO: Make Fallible
+    arr.SetLength(byteLen);  // TODO: Make Fallible
     bytes = arr.Elements();
   } else {
     bytes = maybeShmem.ref().get<uint8_t>();

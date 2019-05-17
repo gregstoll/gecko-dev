@@ -85,9 +85,8 @@ class WebGLFBAttachPoint final {
 
   void DoAttachment(gl::GLContext* gl) const;
 
-  MaybeWebGLVariant
-  GetParameter(WebGLContext* webgl, GLenum target,
-               GLenum attachment, GLenum pname) const;
+  MaybeWebGLVariant GetParameter(WebGLContext* webgl, GLenum target,
+                                 GLenum attachment, GLenum pname) const;
 
   bool IsEquivalentForFeedback(const WebGLFBAttachPoint& other) const {
     if (!HasAttachment() | !other.HasAttachment()) return false;
@@ -259,9 +258,8 @@ class WebGLFramebuffer final : public WebGLRefCountedObject<WebGLFramebuffer>,
   void DrawBuffers(const nsTArray<GLenum>& buffers);
   void ReadBuffer(GLenum attachPoint);
 
-  MaybeWebGLVariant
-  GetAttachmentParameter(GLenum target,
-                         GLenum attachment, GLenum pname);
+  MaybeWebGLVariant GetAttachmentParameter(GLenum target, GLenum attachment,
+                                           GLenum pname);
 
   static void BlitFramebuffer(WebGLContext* webgl, GLint srcX0, GLint srcY0,
                               GLint srcX1, GLint srcY1, GLint dstX0,

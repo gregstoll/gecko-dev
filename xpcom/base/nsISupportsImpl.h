@@ -509,23 +509,22 @@ typedef ThreadSafeAutoRefCntWithRecording<recordreplay::Behavior::DontPreserve>
   NS_INLINE_DECL_CYCLE_COLLECTING_NATIVE_REFCOUNTING_META(_class, NS_IMETHOD_)
 
 #define NS_INLINE_DECL_CYCLE_COLLECTING_NATIVE_REFCOUNTING_INHERITED(_class)  \
-  NS_INLINE_DECL_CYCLE_COLLECTING_NATIVE_REFCOUNTING_META(_class, NS_METHOD_, override)
+  NS_INLINE_DECL_CYCLE_COLLECTING_NATIVE_REFCOUNTING_META(_class, NS_METHOD_, \
+                                                          override)
 
-#define NS_INLINE_DECL_CYCLE_COLLECTING_NATIVE_REFCOUNTING_META(_class, _decl,...)   \
- public:                                                           \
-  _decl(MozExternalRefCountType)                                   \
-  AddRef(void) __VA_ARGS__ {                                       \
-    NS_IMPL_CC_NATIVE_ADDREF_BODY(_class)                          \
-  }                                                                \
-  _decl(MozExternalRefCountType)                                   \
-  Release(void) __VA_ARGS__ {                                      \
-    NS_IMPL_CC_NATIVE_RELEASE_BODY(_class)                         \
-  }                                                                \
-  typedef mozilla::FalseType HasThreadSafeRefCnt;                  \
-                                                                   \
- protected:                                                        \
-  nsCycleCollectingAutoRefCnt mRefCnt;                             \
-  NS_DECL_OWNINGTHREAD                                             \
+#define NS_INLINE_DECL_CYCLE_COLLECTING_NATIVE_REFCOUNTING_META(_class, _decl, \
+                                                                ...)           \
+ public:                                                                       \
+  _decl(MozExternalRefCountType) AddRef(void) __VA_ARGS__{                     \
+      NS_IMPL_CC_NATIVE_ADDREF_BODY(_class)} _decl(MozExternalRefCountType)    \
+      Release(void) __VA_ARGS__ {                                              \
+    NS_IMPL_CC_NATIVE_RELEASE_BODY(_class)                                     \
+  }                                                                            \
+  typedef mozilla::FalseType HasThreadSafeRefCnt;                              \
+                                                                               \
+ protected:                                                                    \
+  nsCycleCollectingAutoRefCnt mRefCnt;                                         \
+  NS_DECL_OWNINGTHREAD                                                         \
  public:
 
 #define NS_INLINE_DECL_MAIN_THREAD_ONLY_CYCLE_COLLECTING_NATIVE_REFCOUNTING( \

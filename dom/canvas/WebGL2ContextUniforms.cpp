@@ -53,8 +53,8 @@ void WebGLContext::Uniform4ui(WebGLUniformLocation* loc, GLuint v0, GLuint v1,
 // -------------------------------------------------------------------------
 // Uniform Buffer Objects and Transform Feedback Buffers
 
-MaybeWebGLVariant
-WebGL2Context::GetIndexedParameter(GLenum target, GLuint index) {
+MaybeWebGLVariant WebGL2Context::GetIndexedParameter(GLenum target,
+                                                     GLuint index) {
   const FuncScope funcScope(*this, "getIndexedParameter");
   MaybeWebGLVariant ret;
   if (IsContextLost()) return ret;
@@ -119,10 +119,9 @@ MaybeWebGLVariant WebGL2Context::GetUniformIndices(
   return program.GetUniformIndices(uniformNames);
 }
 
-MaybeWebGLVariant
-WebGL2Context::GetActiveUniforms(const WebGLProgram& program,
-                                 const nsTArray<GLuint>& uniformIndices,
-                                 GLenum pname) {
+MaybeWebGLVariant WebGL2Context::GetActiveUniforms(
+    const WebGLProgram& program, const nsTArray<GLuint>& uniformIndices,
+    GLenum pname) {
   const FuncScope funcScope(*this, "getActiveUniforms");
   if (IsContextLost()) return Nothing();
 
@@ -166,40 +165,36 @@ WebGL2Context::GetActiveUniforms(const WebGLProgram& program,
     case LOCAL_GL_UNIFORM_OFFSET:
     case LOCAL_GL_UNIFORM_ARRAY_STRIDE:
     case LOCAL_GL_UNIFORM_MATRIX_STRIDE: {
-        ret = AsSomeVariant(nsTArray<int32_t>());
-        nsTArray<int32_t>& variantArray =
-          ret.ref().as<nsTArray<int32_t>>();
-        GLint* array = variantArray.AppendElements(count);
-        if (!array) {
-          ErrorOutOfMemory("Failed to allocate return array.");
-          return Nothing();
-        }
+      ret = AsSomeVariant(nsTArray<int32_t>());
+      nsTArray<int32_t>& variantArray = ret.ref().as<nsTArray<int32_t>>();
+      GLint* array = variantArray.AppendElements(count);
+      if (!array) {
+        ErrorOutOfMemory("Failed to allocate return array.");
+        return Nothing();
+      }
 
-        gl->fGetActiveUniformsiv(program.mGLName, count, uniformIndices.Elements(),
-                                 pname, array);
-      }
-      break;
+      gl->fGetActiveUniformsiv(program.mGLName, count,
+                               uniformIndices.Elements(), pname, array);
+    } break;
     case LOCAL_GL_UNIFORM_IS_ROW_MAJOR: {
-        ret = AsSomeVariant(nsTArray<bool>());
-        nsTArray<bool>& variantArray =
-          ret.ref().as<nsTArray<bool>>();
-        GLint* intArray = new GLint[count];
-        if (!intArray) {
-          ErrorOutOfMemory("Failed to allocate int buffer.");
-          return Nothing();
-        }
-        gl->fGetActiveUniformsiv(program.mGLName, count, uniformIndices.Elements(),
-                                 pname, intArray);
-        bool* boolArray = variantArray.AppendElements(count);
-        if (!boolArray) {
-          ErrorOutOfMemory("Failed to allocate return array.");
-          return Nothing();
-        }
-        for (uint32_t i=0; i<count; ++i) {
-          boolArray[i] = intArray[i];
-        }
+      ret = AsSomeVariant(nsTArray<bool>());
+      nsTArray<bool>& variantArray = ret.ref().as<nsTArray<bool>>();
+      GLint* intArray = new GLint[count];
+      if (!intArray) {
+        ErrorOutOfMemory("Failed to allocate int buffer.");
+        return Nothing();
       }
-      break;
+      gl->fGetActiveUniformsiv(program.mGLName, count,
+                               uniformIndices.Elements(), pname, intArray);
+      bool* boolArray = variantArray.AppendElements(count);
+      if (!boolArray) {
+        ErrorOutOfMemory("Failed to allocate return array.");
+        return Nothing();
+      }
+      for (uint32_t i = 0; i < count; ++i) {
+        boolArray[i] = intArray[i];
+      }
+    } break;
 
     default:
       MOZ_CRASH("Invalid pname");
@@ -219,8 +214,7 @@ GLuint WebGL2Context::GetUniformBlockIndex(const WebGLProgram& program,
 }
 
 MaybeWebGLVariant WebGL2Context::GetActiveUniformBlockParameter(
-    const WebGLProgram& program, GLuint uniformBlockIndex,
-    GLenum pname) {
+    const WebGLProgram& program, GLuint uniformBlockIndex, GLenum pname) {
   const FuncScope funcScope(*this, "getActiveUniformBlockParameter");
   if (IsContextLost()) return Nothing();
 

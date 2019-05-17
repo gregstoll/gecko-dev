@@ -3,4 +3,4 @@
 
 #include "TestProducerConsumerQueue.h"
 
-#endif // ifndef mozilla__ipdltest_TestProducerConsumerQueueParent_h
+#endif  // ifndef mozilla__ipdltest_TestProducerConsumerQueueParent_h

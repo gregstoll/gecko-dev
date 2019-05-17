@@ -86,7 +86,8 @@ bool WebGL2Context::ValidateClearBuffer(GLenum buffer, GLint drawBuffer,
 ////
 
 void WebGL2Context::ClearBufferfv(GLenum buffer, GLint drawBuffer,
-                                  const nsTArray<float>& src, GLuint srcElemOffset) {
+                                  const nsTArray<float>& src,
+                                  GLuint srcElemOffset) {
   const FuncScope funcScope(*this, "clearBufferfv");
   if (IsContextLost()) return;
 
@@ -110,7 +111,8 @@ void WebGL2Context::ClearBufferfv(GLenum buffer, GLint drawBuffer,
 }
 
 void WebGL2Context::ClearBufferiv(GLenum buffer, GLint drawBuffer,
-                                  const nsTArray<int32_t>& src, GLuint srcElemOffset) {
+                                  const nsTArray<int32_t>& src,
+                                  GLuint srcElemOffset) {
   const FuncScope funcScope(*this, "clearBufferiv");
   if (IsContextLost()) return;
 
@@ -135,7 +137,8 @@ void WebGL2Context::ClearBufferiv(GLenum buffer, GLint drawBuffer,
 }
 
 void WebGL2Context::ClearBufferuiv(GLenum buffer, GLint drawBuffer,
-                                   const nsTArray<uint32_t>& src, GLuint srcElemOffset) {
+                                   const nsTArray<uint32_t>& src,
+                                   GLuint srcElemOffset) {
   const FuncScope funcScope(*this, "clearBufferuiv");
   if (IsContextLost()) return;
 

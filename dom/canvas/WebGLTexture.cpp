@@ -783,8 +783,8 @@ void WebGLTexture::GenerateMipmap() {
   PopulateMipChain(maxLevel);
 }
 
-MaybeWebGLVariant
-WebGLTexture::GetTexParameter(TexTarget texTarget, GLenum pname) {
+MaybeWebGLVariant WebGLTexture::GetTexParameter(TexTarget texTarget,
+                                                GLenum pname) {
   GLint i = 0;
   GLfloat f = 0.0f;
 

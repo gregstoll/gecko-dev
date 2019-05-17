@@ -1428,8 +1428,8 @@ nsresult gfxUtils::ThreadSafeGetFeatureStatus(
     // TODO: What happened to the non-xp semaphore???
     CrossProcessSemaphore* sem =
         CrossProcessSemaphore::Create("GetFeatureStatusSem", 0);
-    NS_DispatchToMainThread(NS_NewRunnableFunction(
-        "GetFeatureStatusMain", [&]() {
+    NS_DispatchToMainThread(
+        NS_NewRunnableFunction("GetFeatureStatusMain", [&]() {
           rv = gfxInfo->GetFeatureStatus(feature, failureId, status);
           sem->Signal();
         }));

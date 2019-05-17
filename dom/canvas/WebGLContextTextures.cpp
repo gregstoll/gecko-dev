@@ -178,11 +178,12 @@ bool WebGLContext::IsTexParamValid(GLenum pname) const {
   }
 }
 
-UniquePtr<webgl::TexUnpackBytes>
-WebGLContext::AsTexUnpackBytes(UniquePtr<webgl::TexUnpackBlob>&& aBlob) {
+UniquePtr<webgl::TexUnpackBytes> WebGLContext::AsTexUnpackBytes(
+    UniquePtr<webgl::TexUnpackBlob>&& aBlob) {
   MOZ_RELEASE_ASSERT(aBlob->AsTexUnpackBytes());
   // Safe to downcast the UniquePtr
-    return UniquePtr<webgl::TexUnpackBytes>(static_cast<webgl::TexUnpackBytes*>(aBlob.release()));
+  return UniquePtr<webgl::TexUnpackBytes>(
+      static_cast<webgl::TexUnpackBytes*>(aBlob.release()));
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////
@@ -242,8 +243,8 @@ void WebGLContext::GenerateMipmap(GLenum rawTexTarget) {
   tex->GenerateMipmap();
 }
 
-MaybeWebGLVariant
-WebGLContext::GetTexParameter(GLenum rawTexTarget, GLenum pname) {
+MaybeWebGLVariant WebGLContext::GetTexParameter(GLenum rawTexTarget,
+                                                GLenum pname) {
   const FuncScope funcScope(*this, "getTexParameter");
   const uint8_t funcDims = 0;
 
@@ -314,7 +315,8 @@ void WebGLContext::CompressedTexSubImage(
 
 void WebGLContext::CopyTexImage2D(GLenum rawTarget, GLint level,
                                   GLenum internalFormat, GLint x, GLint y,
-                                  uint32_t width, uint32_t height, uint32_t depth) {
+                                  uint32_t width, uint32_t height,
+                                  uint32_t depth) {
   const FuncScope funcScope(*this, "copyTexImage2D");
   const uint8_t funcDims = 2;
 
@@ -329,7 +331,8 @@ void WebGLContext::CopyTexImage2D(GLenum rawTarget, GLint level,
 void WebGLContext::CopyTexSubImage(uint8_t funcDims, GLenum rawTarget,
                                    GLint level, GLint xOffset, GLint yOffset,
                                    GLint zOffset, GLint x, GLint y,
-                                   uint32_t width, uint32_t height, uint32_t depth) {
+                                   uint32_t width, uint32_t height,
+                                   uint32_t depth) {
   TexImageTarget target;
   WebGLTexture* tex;
   if (!ValidateTexImageTarget(this, funcDims, rawTarget, &target, &tex)) return;

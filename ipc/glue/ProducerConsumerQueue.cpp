@@ -16,4 +16,4 @@ PcqStatus ConsumerView::Read(void* aBuffer, size_t aBufferSize) {
   return mConsumer->ReadObject(mRead, mWrite, aBuffer, aBufferSize);
 }
 
-} // namespace mozilla
+}  // namespace mozilla

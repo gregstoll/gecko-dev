@@ -15,14 +15,17 @@ namespace mozilla {
 
 // The WebGLMethodDispatcher will dispatch commands read from the
 // HostWebGLCommandSink and issue them to a given HostWebGLContext.
-DECLARE_METHOD_DISPATCHER(WebGLMethodDispatcher, HostWebGLCommandSink, HostWebGLContext)
+DECLARE_METHOD_DISPATCHER(WebGLMethodDispatcher, HostWebGLCommandSink,
+                          HostWebGLContext)
 
 // Defines each method the WebGLMethodDispatcher handles.  The COUNTER value
-// is used as a cross-process ID for each of the methods. 
+// is used as a cross-process ID for each of the methods.
 #define DEFINE_METHOD_HELPER(_METHOD, _SYNC) \
   DEFINE_METHOD_DISPATCHER(WebGLMethodDispatcher, __COUNTER__, _METHOD, _SYNC)
-#define DEFINE_ASYNC(_METHOD) DEFINE_METHOD_HELPER(_METHOD, CommandSyncType::ASYNC)
-#define DEFINE_SYNC(_METHOD)  DEFINE_METHOD_HELPER(_METHOD, CommandSyncType::SYNC)
+#define DEFINE_ASYNC(_METHOD) \
+  DEFINE_METHOD_HELPER(_METHOD, CommandSyncType::ASYNC)
+#define DEFINE_SYNC(_METHOD) \
+  DEFINE_METHOD_HELPER(_METHOD, CommandSyncType::SYNC)
 
 DEFINE_SYNC(HostWebGLContext::IsContextLost)
 DEFINE_ASYNC(HostWebGLContext::Disable)
@@ -208,7 +211,7 @@ DEFINE_ASYNC(HostWebGLContext::QueryCounter)
 DEFINE_SYNC(HostWebGLContext::GetQuery)
 DEFINE_SYNC(HostWebGLContext::GetQueryParameter)
 
-#define DEFINE_RELEASE_ASYNC(_TYPE)                 \
+#define DEFINE_RELEASE_ASYNC(_TYPE) \
   DEFINE_ASYNC(HostWebGLContext::ReleaseWebGLObject<WebGL##_TYPE>)
 
 DEFINE_RELEASE_ASYNC(Buffer)
@@ -230,4 +233,4 @@ DEFINE_RELEASE_ASYNC(VertexArray)
 
 }  // namespace mozilla
 
-#endif // WEBGLMETHODDISPATCHER_H_
+#endif  // WEBGLMETHODDISPATCHER_H_

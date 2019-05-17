@@ -106,8 +106,8 @@ void WebGL2Context::WaitSync(const WebGLSync& sync, GLbitfield flags,
   gl->fWaitSync(sync.mGLName, flags, LOCAL_GL_TIMEOUT_IGNORED);
 }
 
-MaybeWebGLVariant
-WebGL2Context::GetSyncParameter(const WebGLSync& sync, GLenum pname) {
+MaybeWebGLVariant WebGL2Context::GetSyncParameter(const WebGLSync& sync,
+                                                  GLenum pname) {
   const FuncScope funcScope(*this, "getSyncParameter");
   if (IsContextLost()) return Nothing();
 

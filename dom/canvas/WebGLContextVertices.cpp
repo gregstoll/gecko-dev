@@ -44,8 +44,7 @@ static bool ValidateAttribIndex(WebGLContext& webgl, GLuint index) {
   return valid;
 }
 
-Float32Array4&&
-WebGLContext::GetVertexAttribFloat32Array(GLuint index) {
+Float32Array4&& WebGLContext::GetVertexAttribFloat32Array(GLuint index) {
   Float32Array4 attrib;
   if (index) {
     gl->fGetVertexAttribfv(index, LOCAL_GL_CURRENT_VERTEX_ATTRIB, &attrib[0]);
@@ -56,8 +55,7 @@ WebGLContext::GetVertexAttribFloat32Array(GLuint index) {
   return std::move(attrib);
 }
 
-Int32Array4&&
-WebGLContext::GetVertexAttribInt32Array(GLuint index) {
+Int32Array4&& WebGLContext::GetVertexAttribInt32Array(GLuint index) {
   Int32Array4 attrib;
   if (index) {
     gl->fGetVertexAttribIiv(index, LOCAL_GL_CURRENT_VERTEX_ATTRIB, &attrib[0]);
@@ -68,8 +66,7 @@ WebGLContext::GetVertexAttribInt32Array(GLuint index) {
   return std::move(attrib);
 }
 
-Uint32Array4&&
-WebGLContext::GetVertexAttribUint32Array(GLuint index) {
+Uint32Array4&& WebGLContext::GetVertexAttribUint32Array(GLuint index) {
   Uint32Array4 attrib;
   if (index) {
     gl->fGetVertexAttribIuiv(index, LOCAL_GL_CURRENT_VERTEX_ATTRIB, &attrib[0]);
@@ -184,8 +181,7 @@ void WebGLContext::DisableVertexAttribArray(GLuint index) {
   mBoundVertexArray->InvalidateCaches();
 }
 
-MaybeWebGLVariant
-WebGLContext::GetVertexAttrib(GLuint index, GLenum pname) {
+MaybeWebGLVariant WebGLContext::GetVertexAttrib(GLuint index, GLenum pname) {
   const FuncScope funcScope(*this, "getVertexAttrib");
   if (IsContextLost()) return Nothing();
 
@@ -198,13 +194,16 @@ WebGLContext::GetVertexAttrib(GLuint index, GLenum pname) {
       return AsSomeVariant(std::move(mBoundVertexArray->mAttribs[index].mBuf));
 
     case LOCAL_GL_VERTEX_ATTRIB_ARRAY_STRIDE:
-      return AsSomeVariant(static_cast<int32_t>(mBoundVertexArray->mAttribs[index].Stride()));
+      return AsSomeVariant(
+          static_cast<int32_t>(mBoundVertexArray->mAttribs[index].Stride()));
 
     case LOCAL_GL_VERTEX_ATTRIB_ARRAY_SIZE:
-      return AsSomeVariant(static_cast<int32_t>(mBoundVertexArray->mAttribs[index].Size()));
+      return AsSomeVariant(
+          static_cast<int32_t>(mBoundVertexArray->mAttribs[index].Size()));
 
     case LOCAL_GL_VERTEX_ATTRIB_ARRAY_TYPE:
-      return AsSomeVariant(static_cast<int32_t>(mBoundVertexArray->mAttribs[index].Type()));
+      return AsSomeVariant(
+          static_cast<int32_t>(mBoundVertexArray->mAttribs[index].Type()));
 
     case LOCAL_GL_VERTEX_ATTRIB_ARRAY_INTEGER:
       if (IsWebGL2())
@@ -216,7 +215,8 @@ WebGLContext::GetVertexAttrib(GLuint index, GLenum pname) {
     case LOCAL_GL_VERTEX_ATTRIB_ARRAY_DIVISOR:
       if (IsWebGL2() ||
           IsExtensionEnabled(WebGLExtensionID::ANGLE_instanced_arrays)) {
-        return AsSomeVariant(static_cast<int32_t>(mBoundVertexArray->mAttribs[index].mDivisor));
+        return AsSomeVariant(
+            static_cast<int32_t>(mBoundVertexArray->mAttribs[index].mDivisor));
       }
       break;
 

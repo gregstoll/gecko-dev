@@ -22,7 +22,7 @@ class WebGL1Context : public WebGLContext {
       gl::GLContext* gl) const override;
 
  public:
-  virtual ~WebGL1Context() {};
+  virtual ~WebGL1Context(){};
 
   virtual bool IsWebGL2() const override { return false; }
 };

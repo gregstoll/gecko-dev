@@ -30,7 +30,7 @@ class OOPCanvasRenderer final {
 
  public:
   OOPCanvasRenderer(nsICanvasRenderingContextInternal* aContext)
-    : mContext(aContext) {}
+      : mContext(aContext) {}
 
   dom::HTMLCanvasElement* mHTMLCanvasElement = nullptr;
 

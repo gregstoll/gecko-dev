@@ -28,7 +28,8 @@ struct ParamTraits;
 namespace mozilla {
 
 namespace ipc {
-template <typename T> struct PcqParamTraits;
+template <typename T>
+struct PcqParamTraits;
 }  // namespace ipc
 
 template <typename... Ts>

@@ -98,11 +98,13 @@ void AsyncCanvasRenderer::SetCanvasClient(CanvasClient* aClient) {
     if (mContext) {
       MOZ_ASSERT(mCanvasClient->GetForwarder() &&
                  mCanvasClient->GetForwarder()->AsLayerForwarder() &&
-                 mCanvasClient->GetForwarder()->AsLayerForwarder()->GetShadowManager());
+                 mCanvasClient->GetForwarder()
+                     ->AsLayerForwarder()
+                     ->GetShadowManager());
       LayerTransactionChild* ltc =
-        mCanvasClient->GetForwarder()->AsLayerForwarder()->GetShadowManager();
+          mCanvasClient->GetForwarder()->AsLayerForwarder()->GetShadowManager();
       DebugOnly<bool> success =
-        mContext->UpdateCompositableHandle(ltc, mCanvasClientAsyncHandle);
+          mContext->UpdateCompositableHandle(ltc, mCanvasClientAsyncHandle);
       MOZ_ASSERT(success);
     }
   } else {

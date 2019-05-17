@@ -8,10 +8,10 @@
 
 namespace mozilla {
 
-HostWebGLCommandSink::HostWebGLCommandSink(UniquePtr<Consumer>&& aConsumer,
-                                           UniquePtr<ProducerConsumerQueue>& aResponsePcq)
-  : SyncCommandSink(std::move(aConsumer), aResponsePcq) {
-}
+HostWebGLCommandSink::HostWebGLCommandSink(
+    UniquePtr<Consumer>&& aConsumer,
+    UniquePtr<ProducerConsumerQueue>& aResponsePcq)
+    : SyncCommandSink(std::move(aConsumer), aResponsePcq) {}
 
 bool HostWebGLCommandSink::DispatchCommand(size_t command) {
   if (!mHostContext) {
@@ -21,4 +21,4 @@ bool HostWebGLCommandSink::DispatchCommand(size_t command) {
   return WebGLMethodDispatcher::DispatchCommand(command, *this, *mHostContext);
 }
 
-} // namespace mozilla
+}  // namespace mozilla

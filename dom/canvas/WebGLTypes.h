@@ -88,14 +88,15 @@ inline auto AutoAssertCast(const From val) {
 }
 
 namespace ipc {
-template<typename T> struct PcqParamTraits;
+template <typename T>
+struct PcqParamTraits;
 }
 
 namespace webgl {
 class TexUnpackBytes;
 class TexUnpackImage;
 class TexUnpackSurface;
-}
+}  // namespace webgl
 
 class ClientWebGLContext;
 struct WebGLTexPboOffset;
@@ -114,7 +115,8 @@ class WebGLTransformFeedback;
 class WebGLUniformLocation;
 class WebGLVertexArray;
 class WebGLVertexArrayObject;
-template<typename T> class WebGLRefPtr;
+template <typename T>
+class WebGLRefPtr;
 
 /*
  * Implementing WebGL (or OpenGL ES 2.0) on top of desktop OpenGL requires
@@ -298,19 +300,15 @@ const char* ToString(AttribBaseType);
  * null objects.  This class is subclassed by ClientWebGL... classes in the
  * client and is used directly as a key in an object ID map in the host.
  */
-template<typename HostType>
+template <typename HostType>
 class WebGLId {
  public:
   using IdType = uint64_t;
 
-  WebGLId() : mId(0) {};
-  WebGLId(IdType aId) : mId(aId) {};
-  WebGLId(const WebGLId<HostType>* aPtr) {
-    mId = aPtr ? aPtr->mId : 0;
-  }
-  WebGLId(const HostType* aPtr) {
-    mId = aPtr ? aPtr->Id() : 0;
-  }
+  WebGLId() : mId(0){};
+  WebGLId(IdType aId) : mId(aId){};
+  WebGLId(const WebGLId<HostType>* aPtr) { mId = aPtr ? aPtr->mId : 0; }
+  WebGLId(const HostType* aPtr) { mId = aPtr ? aPtr->Id() : 0; }
 
   IdType Id() const { return mId; }
 
@@ -326,7 +324,7 @@ class WebGLId {
   IdType mId;
 };
 
-template<typename HostType>
+template <typename HostType>
 struct DefaultHasher<WebGLId<HostType>> {
   using Key = WebGLId<HostType>;
   using Lookup = Key;
@@ -398,11 +396,9 @@ struct WebGLTexPboOffset {
   GLsizei mExpectedImageSize;
 };
 
-using WebGLTexUnpackVariant =
-  Variant<UniquePtr<webgl::TexUnpackBytes>,
-          UniquePtr<webgl::TexUnpackSurface>,
-          WebGLTexImageData,
-          WebGLTexPboOffset>;
+using WebGLTexUnpackVariant = Variant<UniquePtr<webgl::TexUnpackBytes>,
+                                      UniquePtr<webgl::TexUnpackSurface>,
+                                      WebGLTexImageData, WebGLTexPboOffset>;
 
 using MaybeWebGLTexUnpackVariant = Maybe<WebGLTexUnpackVariant>;
 
@@ -423,7 +419,7 @@ struct WebGLContextOptions {
   dom::WebGLPowerPreference powerPreference =
       dom::WebGLPowerPreference::Default;
   bool shouldResistFingerprinting = true;
-      
+
   WebGLContextOptions();
   bool operator==(const WebGLContextOptions&) const;
 };
@@ -476,35 +472,35 @@ using Float32Array4 = CopyableArray<float,4>;
 using BoolArray4 = CopyableArray<bool,4>;
 #endif
 
-using Int32Array2 = Array<int32_t,2>;
-using Int32Array4 = Array<int32_t,4>;
-using Uint32Array4 = Array<uint32_t,4>;
-using Float32Array2 = Array<float,2>;
-using Float32Array4 = Array<float,4>;
-using BoolArray4 = Array<bool,4>;
+using Int32Array2 = Array<int32_t, 2>;
+using Int32Array4 = Array<int32_t, 4>;
+using Uint32Array4 = Array<uint32_t, 4>;
+using Float32Array2 = Array<float, 2>;
+using Float32Array4 = Array<float, 4>;
+using BoolArray4 = Array<bool, 4>;
 
 using WebGLVariant =
-  Variant<int32_t, uint32_t, int64_t, uint64_t, bool, float, double,
-          nsCString, nsString,
-          WebGLId<WebGLBuffer>, WebGLId<WebGLFramebuffer>,
-          WebGLId<WebGLProgram>, WebGLId<WebGLQuery>,
-          WebGLId<WebGLRenderbuffer>, WebGLId<WebGLSampler>,
-          WebGLId<WebGLShader>, WebGLId<WebGLSync>, WebGLId<WebGLTexture>,
-          WebGLId<WebGLTransformFeedback>, WebGLId<WebGLUniformLocation>,
-          WebGLId<WebGLVertexArray>, WebGLShaderPrecisionFormat,
-          Int32Array2, Int32Array4, Uint32Array4, Float32Array2, Float32Array4,
-          BoolArray4, nsTArray<uint32_t>, nsTArray<int32_t>,
-          nsTArray<bool>, nsTArray<float>>;
+    Variant<int32_t, uint32_t, int64_t, uint64_t, bool, float, double,
+            nsCString, nsString, WebGLId<WebGLBuffer>,
+            WebGLId<WebGLFramebuffer>, WebGLId<WebGLProgram>,
+            WebGLId<WebGLQuery>, WebGLId<WebGLRenderbuffer>,
+            WebGLId<WebGLSampler>, WebGLId<WebGLShader>, WebGLId<WebGLSync>,
+            WebGLId<WebGLTexture>, WebGLId<WebGLTransformFeedback>,
+            WebGLId<WebGLUniformLocation>, WebGLId<WebGLVertexArray>,
+            WebGLShaderPrecisionFormat, Int32Array2, Int32Array4, Uint32Array4,
+            Float32Array2, Float32Array4, BoolArray4, nsTArray<uint32_t>,
+            nsTArray<int32_t>, nsTArray<bool>, nsTArray<float>>;
 
 using MaybeWebGLVariant = Maybe<WebGLVariant>;
 
-template<typename T>
+template <typename T>
 class AsSomeVariantT {
   Maybe<T> mMaybeObj;
-public:
+
+ public:
   AsSomeVariantT(Maybe<T>&& aObj) : mMaybeObj(std::move(aObj)) {}
 
-  template<typename ... As>
+  template <typename... As>
   operator Maybe<Variant<As...>>() {
     if (mMaybeObj.isNothing()) {
       return Nothing();
@@ -513,39 +509,39 @@ public:
   }
 };
 
-template<typename FullType,
-         typename T = typename RemoveReference<FullType>::Type>
+template <typename FullType,
+          typename T = typename RemoveReference<FullType>::Type>
 AsSomeVariantT<T> AsSomeVariant(FullType&& aObj) {
   return AsSomeVariantT<T>(Some(std::forward<T>(aObj)));
 }
 
 // Stack-based arrays can't be moved
-template<typename T, size_t N>
-AsSomeVariantT<Array<T,N>> AsSomeVariant(const Array<T,N>& aObj) {
-  return AsSomeVariantT<Array<T,N>>(Some(aObj));
+template <typename T, size_t N>
+AsSomeVariantT<Array<T, N>> AsSomeVariant(const Array<T, N>& aObj) {
+  return AsSomeVariantT<Array<T, N>>(Some(aObj));
 }
 
-template<typename T>
+template <typename T>
 AsSomeVariantT<WebGLId<T>> AsSomeVariant(WebGLId<T>* aObj) {
   return AsSomeVariantT<WebGLId<T>>(aObj ? Some(*aObj) : Nothing());
 }
 
-template<typename T>
+template <typename T>
 AsSomeVariantT<WebGLId<T>> AsSomeVariant(T* aObj) {
   return AsSomeVariant(static_cast<WebGLId<T>*>(aObj));
 }
 
-template<typename T>
+template <typename T>
 AsSomeVariantT<WebGLId<T>> AsSomeVariant(WebGLRefPtr<T> aObj) {
   return AsSomeVariant(static_cast<WebGLId<T>*>(aObj.get()));
 }
 
-template<typename T>
+template <typename T>
 AsSomeVariantT<T> AsSomeVariant(const Maybe<T>& aObj) {
   return AsSomeVariantT<T>(aObj);
 }
 
-template<typename T>
+template <typename T>
 AsSomeVariantT<T> AsSomeVariant(Maybe<T>&& aObj) {
   return AsSomeVariantT<T>(std::move(aObj));
 }
@@ -556,8 +552,9 @@ AsSomeVariantT<T> AsSomeVariant(Maybe<T>&& aObj) {
  * TODO: This is wrong but I can probably fix it by removing
  * const/volatile/pointer from T and checking is_trivially_assignable.
  */
-template<typename T = uint8_t,
-         typename EnableIf<std::is_trivially_assignable<T&,T>::value, int>::Type = 0>
+template <typename T = uint8_t,
+          typename EnableIf<std::is_trivially_assignable<T&, T>::value,
+                            int>::Type = 0>
 class RawBuffer {
   T* mData = nullptr;
   // Length is the number of elements of size T in the array
@@ -581,16 +578,16 @@ class RawBuffer {
 
   void ReadArray(const nsTArray<T>& arr) {
     MOZ_ASSERT(Data() && (Length() <= arr.Length()));
-    memcpy(Data(), arr.Elements(), Length()*sizeof(T));
+    memcpy(Data(), arr.Elements(), Length() * sizeof(T));
   }
 
   void ReadShmem(const mozilla::ipc::Shmem& shmem) {
     const T* buf = shmem.get<T>();
     MOZ_ASSERT(Data() && buf && (Length() <= shmem.Size<T>()));
-    memcpy(Data(), buf, mLength*sizeof(T));
+    memcpy(Data(), buf, mLength * sizeof(T));
   }
 
-  RawBuffer() {}    // For PcqParamTraits and std::tuple
+  RawBuffer() {}  // For PcqParamTraits and std::tuple
 };
 
 }  // namespace mozilla

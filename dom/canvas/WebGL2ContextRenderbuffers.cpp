@@ -12,10 +12,8 @@
 
 namespace mozilla {
 
-Maybe<nsTArray<int32_t>>
-WebGL2Context::GetInternalformatParameter(GLenum target,
-                                          GLenum internalformat,
-                                          GLenum pname) {
+Maybe<nsTArray<int32_t>> WebGL2Context::GetInternalformatParameter(
+    GLenum target, GLenum internalformat, GLenum pname) {
   const FuncScope funcScope(*this, "getInternalfomratParameter");
   if (IsContextLost()) return Nothing();
 

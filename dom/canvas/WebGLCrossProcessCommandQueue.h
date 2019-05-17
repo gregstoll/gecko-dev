@@ -25,9 +25,8 @@ using ClientWebGLCommandSource = SyncCommandSource<size_t>;
  * then uses for executing methods.  Add new commands to DispatchCommand using
  * the WEBGL_SYNC_COMMAND and WEBGL_ASYNC_COMMAND macros.
  */
-class HostWebGLCommandSink
-  : public SyncCommandSink<size_t> {
-public:
+class HostWebGLCommandSink : public SyncCommandSink<size_t> {
+ public:
   HostWebGLCommandSink(UniquePtr<Consumer>&& aConsumer,
                        UniquePtr<ProducerConsumerQueue>& aResponsePcq);
 
@@ -37,7 +36,7 @@ public:
     mHostContext = aHostContext;
   }
 
-protected:
+ protected:
   // For IPDL:
   friend struct mozilla::ipc::IPDLParamTraits<HostWebGLCommandSink>;
   friend struct mozilla::ipc::IPDLParamTraits<UniquePtr<HostWebGLCommandSink>>;
@@ -51,19 +50,20 @@ protected:
 /**
  * Factory for the WebGL command queue.
  */
-using WebGLCrossProcessCommandQueue = CommandQueue<ClientWebGLCommandSource, HostWebGLCommandSink>;
+using WebGLCrossProcessCommandQueue =
+    CommandQueue<ClientWebGLCommandSource, HostWebGLCommandSink>;
 
 namespace ipc {
 
 template <>
 struct IPDLParamTraits<mozilla::HostWebGLCommandSink>
-  : public IPDLParamTraits<mozilla::SyncCommandSink<size_t>> {
-public:
+    : public IPDLParamTraits<mozilla::SyncCommandSink<size_t>> {
+ public:
   typedef mozilla::HostWebGLCommandSink paramType;
 };
 
 }  // namespace ipc
 
-} // namespace mozilla
+}  // namespace mozilla
 
-#endif // WEBGLCROSSPROCESSCOMMANDQUEUE_H_
+#endif  // WEBGLCROSSPROCESSCOMMANDQUEUE_H_

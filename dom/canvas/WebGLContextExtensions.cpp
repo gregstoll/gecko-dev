@@ -19,8 +19,8 @@
 
 namespace mozilla {
 
-/*static*/ const char*
-ClientWebGLContext::GetExtensionString(WebGLExtensionID ext) {
+/*static*/ const char* ClientWebGLContext::GetExtensionString(
+    WebGLExtensionID ext) {
   typedef EnumeratedArray<WebGLExtensionID, WebGLExtensionID::Max, const char*>
       names_array_t;
 
@@ -233,13 +233,14 @@ static bool CompareWebGLExtensionName(const nsACString& name,
   return name.Equals(other, nsCaseInsensitiveCStringComparator());
 }
 
-void
-WebGLContext::EnableExtension(WebGLExtensionID ext,
-                              dom::CallerType callerType) {
-#define WEBGL_GET_EXTENSION_CASE(x) \
-    case WebGLExtensionID::x: GetExtension<WebGLExtensionID::x>(true, callerType); return;
+void WebGLContext::EnableExtension(WebGLExtensionID ext,
+                                   dom::CallerType callerType) {
+#define WEBGL_GET_EXTENSION_CASE(x)                      \
+  case WebGLExtensionID::x:                              \
+    GetExtension<WebGLExtensionID::x>(true, callerType); \
+    return;
 
-  switch(ext) {
+  switch (ext) {
     WEBGL_GET_EXTENSION_CASE(ANGLE_instanced_arrays)
     WEBGL_GET_EXTENSION_CASE(EXT_blend_minmax)
     WEBGL_GET_EXTENSION_CASE(EXT_color_buffer_float)
@@ -277,7 +278,8 @@ WebGLContext::EnableExtension(WebGLExtensionID ext,
 
 void ClientWebGLContext::GetExtension(JSContext* cx, const nsAString& wideName,
                                       JS::MutableHandle<JSObject*> retval,
-                                      dom::CallerType callerType, ErrorResult& rv) {
+                                      dom::CallerType callerType,
+                                      ErrorResult& rv) {
   retval.set(nullptr);
   const FuncScope funcScope(this, "getExtension");
 
@@ -310,11 +312,13 @@ void ClientWebGLContext::GetExtension(JSContext* cx, const nsAString& wideName,
 
     case WebGLExtensionID::OES_texture_float:
       GetExtension(callerType, WebGLExtensionID::EXT_float_blend, true);
-      GetExtension(callerType, WebGLExtensionID::WEBGL_color_buffer_float, true);
+      GetExtension(callerType, WebGLExtensionID::WEBGL_color_buffer_float,
+                   true);
       break;
 
     case WebGLExtensionID::OES_texture_half_float:
-      GetExtension(callerType, WebGLExtensionID::EXT_color_buffer_half_float, true);
+      GetExtension(callerType, WebGLExtensionID::EXT_color_buffer_half_float,
+                   true);
       break;
 
     case WebGLExtensionID::WEBGL_color_buffer_float:
@@ -449,8 +453,7 @@ void WebGLContext::CreateExtension(WebGLExtensionID ext) {
   mExtensions[ext] = obj;
 }
 
-const Maybe<ExtensionSets>
-WebGLContext::GetSupportedExtensions() {
+const Maybe<ExtensionSets> WebGLContext::GetSupportedExtensions() {
   const FuncScope funcScope(*this, "getSupportedExtensions");
   if (IsContextLost()) return Nothing();
 
@@ -467,8 +470,8 @@ WebGLContext::GetSupportedExtensions() {
   return ret;
 }
 
-ClientWebGLExtensionBase*
-ClientWebGLContext::UseExtension(WebGLExtensionID ext) {
+ClientWebGLExtensionBase* ClientWebGLContext::UseExtension(
+    WebGLExtensionID ext) {
   switch (ext) {
     // ANGLE_
     case WebGLExtensionID::ANGLE_instanced_arrays:
@@ -545,6 +548,5 @@ ClientWebGLContext::UseExtension(WebGLExtensionID ext) {
       MOZ_ASSERT_UNREACHABLE("illegal extension enum");
   }
 }
-
 
 }  // namespace mozilla

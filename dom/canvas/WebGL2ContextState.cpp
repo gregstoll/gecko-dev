@@ -42,13 +42,14 @@ MaybeWebGLVariant WebGL2Context::GetParameter(GLenum pname) {
 
     /* GLenum */
     case LOCAL_GL_READ_BUFFER: {
-      if (!mBoundReadFramebuffer) return AsSomeVariant(std::move(mDefaultFB_ReadBuffer));
+      if (!mBoundReadFramebuffer)
+        return AsSomeVariant(std::move(mDefaultFB_ReadBuffer));
 
       if (!mBoundReadFramebuffer->ColorReadBuffer())
         return AsSomeVariant(LOCAL_GL_NONE);
 
-      return AsSomeVariant(
-          std::move(mBoundReadFramebuffer->ColorReadBuffer()->mAttachmentPoint));
+      return AsSomeVariant(std::move(
+          mBoundReadFramebuffer->ColorReadBuffer()->mAttachmentPoint));
     }
 
     case LOCAL_GL_FRAGMENT_SHADER_DERIVATIVE_HINT:
@@ -160,7 +161,8 @@ MaybeWebGLVariant WebGL2Context::GetParameter(GLenum pname) {
       return AsSomeVariant(std::move(mBoundSamplers[mActiveTexture].get()));
 
     case LOCAL_GL_TEXTURE_BINDING_2D_ARRAY:
-      return AsSomeVariant(std::move(mBound2DArrayTextures[mActiveTexture].get()));
+      return AsSomeVariant(
+          std::move(mBound2DArrayTextures[mActiveTexture].get()));
 
     case LOCAL_GL_TEXTURE_BINDING_3D:
       return AsSomeVariant(std::move(mBound3DTextures[mActiveTexture].get()));

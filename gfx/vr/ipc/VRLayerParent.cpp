@@ -46,14 +46,14 @@ void VRLayerParent::Destroy() {
 }
 
 mozilla::ipc::IPCResult VRLayerParent::RecvSubmitFrame(
-    mozilla::dom::PWebGLParent* aPWebGLParent,
-    const uint64_t& aFrameId, const uint64_t& aLastFrameId,
-    const gfx::Rect& aLeftEyeRect, const gfx::Rect& aRightEyeRect) {
+    mozilla::dom::PWebGLParent* aPWebGLParent, const uint64_t& aFrameId,
+    const uint64_t& aLastFrameId, const gfx::Rect& aLeftEyeRect,
+    const gfx::Rect& aRightEyeRect) {
   // Keep the SharedSurfaceTextureClient alive long enough for
   // 1 extra frame, accomodating overlapped asynchronous rendering.
   mLastFrameTexture = mThisFrameTexture;
 
-  auto webGLParent = static_cast<mozilla::dom::WebGLParent*>(aPWebGLParent); 
+  auto webGLParent = static_cast<mozilla::dom::WebGLParent*>(aPWebGLParent);
   if (!webGLParent) {
     return IPC_OK();
   }
@@ -98,8 +98,7 @@ mozilla::ipc::IPCResult VRLayerParent::RecvSubmitFrame(
     VRManager* vm = VRManager::Get();
     RefPtr<VRDisplayHost> display = vm->GetDisplay(mVRDisplayID);
     if (display) {
-      display->SubmitFrame(this, desc, aFrameId, aLeftEyeRect,
-                           aRightEyeRect);
+      display->SubmitFrame(this, desc, aFrameId, aLeftEyeRect, aRightEyeRect);
     }
   }
 

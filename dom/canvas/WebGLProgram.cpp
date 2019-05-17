@@ -148,7 +148,8 @@ static webgl::TextureBaseType SamplerBaseType(const GLenum elemType) {
   }
 }
 
-webgl::UniformInfo::UniformInfo(const WebGLContext* webgl, WebGLActiveInfo& activeInfo)
+webgl::UniformInfo::UniformInfo(const WebGLContext* webgl,
+                                WebGLActiveInfo& activeInfo)
     : mActiveInfo(activeInfo),
       mSamplerTexList(GetTexList(webgl, &activeInfo)),
       mTexBaseType(SamplerBaseType(mActiveInfo.mElemType)),
@@ -278,8 +279,8 @@ static RefPtr<const webgl::LinkedProgramInfo> QueryProgramInfo(
     ///////
 
     const bool isArray = false;
-    const WebGLActiveInfo activeInfo(elemCount, elemType, isArray,
-                                     userName, mappedName);
+    const WebGLActiveInfo activeInfo(elemCount, elemType, isArray, userName,
+                                     mappedName);
     const webgl::AttribInfo attrib = {activeInfo, loc};
     info->attribs.push_back(attrib);
 
@@ -358,8 +359,8 @@ static RefPtr<const webgl::LinkedProgramInfo> QueryProgramInfo(
 
     ///////
 
-    WebGLActiveInfo activeInfo(elemCount, elemType, isArray,
-                               baseUserName, baseMappedName);
+    WebGLActiveInfo activeInfo(elemCount, elemType, isArray, baseUserName,
+                               baseMappedName);
 
     auto* uniform = new webgl::UniformInfo(webgl, activeInfo);
     info->uniforms.push_back(uniform);
@@ -461,8 +462,8 @@ static RefPtr<const webgl::LinkedProgramInfo> QueryProgramInfo(
                     mappedName.BeginReading());
 #endif
 
-      WebGLActiveInfo activeInfo(elemCount, elemType, isArray,
-                                 baseUserName, mappedName);
+      WebGLActiveInfo activeInfo(elemCount, elemType, isArray, baseUserName,
+                                 mappedName);
       info->transformFeedbackVaryings.push_back(activeInfo);
     }
   }
@@ -815,7 +816,7 @@ Maybe<nsTArray<WebGLId<WebGLShader>>> WebGLProgram::GetAttachedShaders() const {
   nsTArray<WebGLId<WebGLShader>>& out = ret.ref();
 
   if (mVertShader) {
-    out.AppendElement(mVertShader); 
+    out.AppendElement(mVertShader);
   }
   if (mFragShader) {
     out.AppendElement(mFragShader);
@@ -951,8 +952,8 @@ GLuint WebGLProgram::GetUniformBlockIndex(
   return gl->fGetUniformBlockIndex(mGLName, mappedName.BeginReading());
 }
 
-nsString
-WebGLProgram::GetActiveUniformBlockName(GLuint uniformBlockIndex) const {
+nsString WebGLProgram::GetActiveUniformBlockName(
+    GLuint uniformBlockIndex) const {
   if (!IsLinked()) {
     mContext->ErrorInvalidOperation("`program` must be linked.");
     return EmptyString();
@@ -969,9 +970,8 @@ WebGLProgram::GetActiveUniformBlockName(GLuint uniformBlockIndex) const {
   return NS_ConvertASCIItoUTF16(blockInfo->mUserName);
 }
 
-MaybeWebGLVariant
-WebGLProgram::GetActiveUniformBlockParam(GLuint uniformBlockIndex,
-                                         GLenum pname) const {
+MaybeWebGLVariant WebGLProgram::GetActiveUniformBlockParam(
+    GLuint uniformBlockIndex, GLenum pname) const {
   if (!IsLinked()) {
     mContext->ErrorInvalidOperation("`program` must be linked.");
     return Nothing();
@@ -1004,8 +1004,8 @@ WebGLProgram::GetActiveUniformBlockParam(GLuint uniformBlockIndex,
   }
 }
 
-MaybeWebGLVariant
-WebGLProgram::GetActiveUniformBlockActiveUniforms(GLuint uniformBlockIndex) const {
+MaybeWebGLVariant WebGLProgram::GetActiveUniformBlockActiveUniforms(
+    GLuint uniformBlockIndex) const {
   if (!IsLinked()) {
     mContext->ErrorInvalidOperation("`program` must be linked.");
     return Nothing();
@@ -1547,8 +1547,8 @@ bool WebGLProgram::FindUniformByMappedName(const nsACString& mappedName,
   return false;
 }
 
-void WebGLProgram::TransformFeedbackVaryings(
-    const nsTArray<nsString>& varyings, GLenum bufferMode) {
+void WebGLProgram::TransformFeedbackVaryings(const nsTArray<nsString>& varyings,
+                                             GLenum bufferMode) {
   const auto& gl = mContext->gl;
 
   switch (bufferMode) {

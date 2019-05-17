@@ -184,8 +184,8 @@ void OffscreenCanvas::CommitFrameToCompositor() {
 #if 0
     static_cast<WebGLContext*>(mCurrentContext.get())->PresentScreenBuffer();
 #else
-      // DLP: TODO:
-      MOZ_ASSERT_UNREACHABLE("WebGL OffscreenCanvas not yet supported.");
+    // DLP: TODO:
+    MOZ_ASSERT_UNREACHABLE("WebGL OffscreenCanvas not yet supported.");
 #endif
   }
 

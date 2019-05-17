@@ -111,17 +111,13 @@ void HostWebGLContext::SetCompositableHost(
   mContext->SetCompositableHost(aCompositableHost);
 }
 
-void HostWebGLContext::Present() {
-  mContext->Present();
-}
+void HostWebGLContext::Present() { mContext->Present(); }
 
-void HostWebGLContext::CreateFramebuffer(
-    const WebGLId<WebGLFramebuffer>& aId) {
+void HostWebGLContext::CreateFramebuffer(const WebGLId<WebGLFramebuffer>& aId) {
   Insert(mContext->CreateFramebuffer(), aId);
 }
 
-void HostWebGLContext::CreateProgram(
-    const WebGLId<WebGLProgram>& aId) {
+void HostWebGLContext::CreateProgram(const WebGLId<WebGLProgram>& aId) {
   Insert(mContext->CreateProgram(), aId);
 }
 
@@ -130,8 +126,8 @@ void HostWebGLContext::CreateRenderbuffer(
   Insert(mContext->CreateRenderbuffer(), aId);
 }
 
-void HostWebGLContext::CreateShader(
-    GLenum aType, const WebGLId<WebGLShader>& aId) {
+void HostWebGLContext::CreateShader(GLenum aType,
+                                    const WebGLId<WebGLShader>& aId) {
   Insert(mContext->CreateShader(aType), aId);
 }
 
@@ -150,8 +146,7 @@ WebGLId<WebGLTexture> HostWebGLContext::CreateTexture() {
   return Insert(RefPtr<WebGLTexture>(mContext->CreateTexture()));
 }
 
-void HostWebGLContext::CreateSampler(
-    const WebGLId<WebGLSampler>& aId) {
+void HostWebGLContext::CreateSampler(const WebGLId<WebGLSampler>& aId) {
   Insert(GetWebGL2Context()->CreateSampler(), aId);
 }
 
@@ -166,8 +161,8 @@ void HostWebGLContext::CreateTransformFeedback(
   Insert(GetWebGL2Context()->CreateTransformFeedback(), aId);
 }
 
-void HostWebGLContext::CreateVertexArray(
-    const WebGLId<WebGLVertexArray>& aId, bool aFromExtension) {
+void HostWebGLContext::CreateVertexArray(const WebGLId<WebGLVertexArray>& aId,
+                                         bool aFromExtension) {
   if (aFromExtension) {
     auto* ext =
         mContext->GetExtension<WebGLExtensionID::OES_vertex_array_object>();
@@ -179,8 +174,8 @@ void HostWebGLContext::CreateVertexArray(
   Insert(mContext->CreateVertexArray(), aId);
 }
 
-void HostWebGLContext::CreateQuery(
-    const WebGLId<WebGLQuery>& aId, bool aFromExtension) const {
+void HostWebGLContext::CreateQuery(const WebGLId<WebGLQuery>& aId,
+                                   bool aFromExtension) const {
   if (aFromExtension) {
     auto* ext =
         mContext->GetExtension<WebGLExtensionID::EXT_disjoint_timer_query>();
@@ -189,8 +184,7 @@ void HostWebGLContext::CreateQuery(
     return;
   }
 
-  Insert(const_cast<WebGL2Context*>(GetWebGL2Context())->CreateQuery(),
-                aId);
+  Insert(const_cast<WebGL2Context*>(GetWebGL2Context())->CreateQuery(), aId);
 }
 
 // ------------------------- Composition -------------------------

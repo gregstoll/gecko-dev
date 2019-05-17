@@ -17,15 +17,13 @@ namespace mozilla {
  * parameter, set to true, to indicate that an extension was the origin of
  * the call.
  */
-class ClientWebGLExtensionBase
-  : public nsWrapperCache {
+class ClientWebGLExtensionBase : public nsWrapperCache {
  public:
   NS_INLINE_DECL_CYCLE_COLLECTING_NATIVE_REFCOUNTING(ClientWebGLExtensionBase)
   NS_DECL_CYCLE_COLLECTION_SCRIPT_HOLDER_NATIVE_CLASS(ClientWebGLExtensionBase)
 
   ClientWebGLExtensionBase(RefPtr<ClientWebGLContext> aClient)
-    : mContext(aClient)
-  {}
+      : mContext(aClient) {}
 
   ClientWebGLContext* GetParentObject() const { return mContext; }
 
@@ -36,38 +34,41 @@ class ClientWebGLExtensionBase
 };
 
 // To be used for implementations of ClientWebGLExtensionBase
-#define DECLARE_WEBGL_EXTENSION_GOOP(_Extension)                              \
- protected:                                                                   \
-  virtual ~Client##_Extension() {}                                            \
- public:                                                                      \
-  virtual JSObject* WrapObject(JSContext* cx,                                 \
-                               JS::Handle<JSObject*> givenProto) override;    \
+#define DECLARE_WEBGL_EXTENSION_GOOP(_Extension)                           \
+ protected:                                                                \
+  virtual ~Client##_Extension() {}                                         \
+                                                                           \
+ public:                                                                   \
+  virtual JSObject* WrapObject(JSContext* cx,                              \
+                               JS::Handle<JSObject*> givenProto) override; \
   Client##_Extension(RefPtr<ClientWebGLContext> aClient);
 
 // To be used for implementations of ClientWebGLExtensionBase
-#define DEFINE_WEBGL_EXTENSION_GOOP(_WebGLBindingType, _Extension)            \
-JSObject* Client##_Extension::WrapObject(JSContext* cx,                       \
-                                       JS::Handle<JSObject*> givenProto) {    \
-  return dom::_WebGLBindingType##_Binding::Wrap(cx, this, givenProto);        \
-}                                                                             \
-Client##_Extension::Client##_Extension(RefPtr<ClientWebGLContext> aClient)    \
-  : ClientWebGLExtensionBase(aClient) {}
+#define DEFINE_WEBGL_EXTENSION_GOOP(_WebGLBindingType, _Extension)             \
+  JSObject* Client##_Extension::WrapObject(JSContext* cx,                      \
+                                           JS::Handle<JSObject*> givenProto) { \
+    return dom::_WebGLBindingType##_Binding::Wrap(cx, this, givenProto);       \
+  }                                                                            \
+  Client##_Extension::Client##_Extension(RefPtr<ClientWebGLContext> aClient)   \
+      : ClientWebGLExtensionBase(aClient) {}
 
 // Many extensions have no methods.  This is a shorthand for declaring client
 // versions of such classes.
-#define DECLARE_SIMPLE_WEBGL_EXTENSION(_Extension)                            \
-class Client##_Extension : public ClientWebGLExtensionBase {                  \
- protected:                                                                   \
-  virtual ~Client##_Extension() {}                                            \
- public:                                                                      \
-  virtual JSObject* WrapObject(JSContext* cx,                                 \
-                               JS::Handle<JSObject*> givenProto) override;    \
-  Client##_Extension(RefPtr<ClientWebGLContext> aClient);                     \
-};
+#define DECLARE_SIMPLE_WEBGL_EXTENSION(_Extension)                           \
+  class Client##_Extension : public ClientWebGLExtensionBase {               \
+   protected:                                                                \
+    virtual ~Client##_Extension() {}                                         \
+                                                                             \
+   public:                                                                   \
+    virtual JSObject* WrapObject(JSContext* cx,                              \
+                                 JS::Handle<JSObject*> givenProto) override; \
+    Client##_Extension(RefPtr<ClientWebGLContext> aClient);                  \
+  };
 
 ////
 
-class ClientWebGLExtensionCompressedTextureASTC : public ClientWebGLExtensionBase {
+class ClientWebGLExtensionCompressedTextureASTC
+    : public ClientWebGLExtensionBase {
   DECLARE_WEBGL_EXTENSION_GOOP(WebGLExtensionCompressedTextureASTC)
 
   void GetSupportedProfiles(dom::Nullable<nsTArray<nsString> >& retval) const {
@@ -174,8 +175,8 @@ class ClientWebGLExtensionInstancedArrays : public ClientWebGLExtensionBase {
   void DrawElementsInstancedANGLE(GLenum mode, GLsizei count, GLenum type,
                                   WebGLintptr offset, GLsizei primcount) {
     mContext->DrawElementsInstanced(mode, count, type, offset, primcount,
-                                          WebGLContextEndpoint::drawElementsInstanced,
-                                          true);
+                                    WebGLContextEndpoint::drawElementsInstanced,
+                                    true);
   }
   void VertexAttribDivisorANGLE(GLuint index, GLuint divisor) {
     mContext->VertexAttribDivisor(index, divisor, true);
@@ -199,9 +200,7 @@ class ClientWebGLExtensionDisjointTimerQuery : public ClientWebGLExtensionBase {
   void BeginQueryEXT(GLenum target, ClientWebGLQuery& query) const {
     mContext->BeginQuery(target, query, true);
   }
-  void EndQueryEXT(GLenum target) const {
-    mContext->EndQuery(target, true);
-  }
+  void EndQueryEXT(GLenum target) const { mContext->EndQuery(target, true); }
   void QueryCounterEXT(ClientWebGLQuery& query, GLenum target) const {
     mContext->QueryCounter(query, target);
   }
@@ -209,8 +208,8 @@ class ClientWebGLExtensionDisjointTimerQuery : public ClientWebGLExtensionBase {
                    JS::MutableHandleValue retval) const {
     mContext->GetQuery(cx, target, pname, retval, true);
   }
-  void GetQueryObjectEXT(JSContext* cx, const ClientWebGLQuery& query, GLenum pname,
-                         JS::MutableHandleValue retval) const {
+  void GetQueryObjectEXT(JSContext* cx, const ClientWebGLQuery& query,
+                         GLenum pname, JS::MutableHandleValue retval) const {
     mContext->GetQueryParameter(cx, query, pname, retval, true);
   }
 };
@@ -219,7 +218,8 @@ class ClientWebGLExtensionMOZDebug : public ClientWebGLExtensionBase {
   DECLARE_WEBGL_EXTENSION_GOOP(WebGLExtensionMOZDebug)
 
   void GetParameter(JSContext* cx, GLenum pname,
-                    JS::MutableHandle<JS::Value> retval, ErrorResult& er) const {
+                    JS::MutableHandle<JS::Value> retval,
+                    ErrorResult& er) const {
     mContext->MOZDebugGetParameter(cx, pname, retval, er);
   }
 };

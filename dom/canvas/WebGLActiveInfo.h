@@ -17,7 +17,8 @@
 namespace mozilla {
 
 namespace ipc {
-template <typename T> struct PcqParamTraits;
+template <typename T>
+struct PcqParamTraits;
 }
 
 class WebGLContext;
@@ -25,10 +26,9 @@ class WebGLContext;
 class WebGLActiveInfo {
  public:
   // ActiveInfo state:
-  uint32_t mElemCount;  // `size`
-  GLenum mElemType;     // `type`
-  nsCString
-      mBaseUserName;  // `name`, but ASCII, and without any final "[0]".
+  uint32_t mElemCount;      // `size`
+  GLenum mElemType;         // `type`
+  nsCString mBaseUserName;  // `name`, but ASCII, and without any final "[0]".
 
   // Not actually part of ActiveInfo:
   bool mIsArray;
@@ -38,8 +38,8 @@ class WebGLActiveInfo {
 
   bool IsSampler() const;
 
-  WebGLActiveInfo(GLint elemCount, GLenum elemType,
-                  bool isArray, const nsACString& baseUserName,
+  WebGLActiveInfo(GLint elemCount, GLenum elemType, bool isArray,
+                  const nsACString& baseUserName,
                   const nsACString& baseMappedName);
 
   WebGLActiveInfo(const WebGLActiveInfo& aOther);
@@ -52,9 +52,7 @@ class WebGLActiveInfo {
    *
    * It's the same for GetActiveUniform.
    */
-  static WebGLActiveInfo CreateInvalid() {
-    return WebGLActiveInfo();
-  }
+  static WebGLActiveInfo CreateInvalid() { return WebGLActiveInfo(); }
 
   // WebIDL attributes
   GLint Size() const { return mElemCount; }
@@ -77,9 +75,8 @@ class WebGLActiveInfo {
         mBaseMappedName("") {}
 };
 
-class ClientWebGLActiveInfo final
-  : public WebGLActiveInfo
-  , public nsWrapperCache {
+class ClientWebGLActiveInfo final : public WebGLActiveInfo,
+                                    public nsWrapperCache {
  public:
   NS_DECL_CYCLE_COLLECTION_SCRIPT_HOLDER_NATIVE_CLASS(ClientWebGLActiveInfo)
   NS_INLINE_DECL_CYCLE_COLLECTING_NATIVE_REFCOUNTING(ClientWebGLActiveInfo)
@@ -93,15 +90,13 @@ class ClientWebGLActiveInfo final
                         GLenum elemType, bool isArray,
                         const nsACString& baseUserName,
                         const nsACString& baseMappedName)
-    : WebGLActiveInfo(elemCount, elemType, isArray, baseUserName,
-                      baseMappedName)
-    , mWebGL(webgl)
-  {}
+      : WebGLActiveInfo(elemCount, elemType, isArray, baseUserName,
+                        baseMappedName),
+        mWebGL(webgl) {}
 
-  ClientWebGLActiveInfo(ClientWebGLContext* webgl, const WebGLActiveInfo& aOther)
-    : WebGLActiveInfo(aOther)
-    , mWebGL(webgl)
-  {}
+  ClientWebGLActiveInfo(ClientWebGLContext* webgl,
+                        const WebGLActiveInfo& aOther)
+      : WebGLActiveInfo(aOther), mWebGL(webgl) {}
 
   ClientWebGLContext* const mWebGL;
 

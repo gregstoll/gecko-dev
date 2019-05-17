@@ -99,8 +99,7 @@ void WebGLContext::EndQuery(GLenum target) {
   query->EndQuery();
 }
 
-MaybeWebGLVariant
-WebGLContext::GetQuery(GLenum target, GLenum pname) {
+MaybeWebGLVariant WebGLContext::GetQuery(GLenum target, GLenum pname) {
   const FuncScope funcScope(*this, "getQuery");
 
   if (IsContextLost()) return Nothing();
@@ -152,9 +151,8 @@ WebGLContext::GetQuery(GLenum target, GLenum pname) {
   return Nothing();
 }
 
-MaybeWebGLVariant
-WebGLContext::GetQueryParameter(const WebGLQuery& query,
-                                GLenum pname) {
+MaybeWebGLVariant WebGLContext::GetQueryParameter(const WebGLQuery& query,
+                                                  GLenum pname) {
   const FuncScope funcScope(*this, "getQueryParameter");
   if (IsContextLost()) return Nothing();
 

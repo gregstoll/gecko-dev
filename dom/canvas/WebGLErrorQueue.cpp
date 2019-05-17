@@ -9,25 +9,24 @@
 namespace mozilla {
 
 ClientWebGLErrorSink::ClientWebGLErrorSink(UniquePtr<Consumer>&& aConsumer)
-  : CommandSink(std::move(aConsumer))
-{}
+    : CommandSink(std::move(aConsumer)) {}
 
-void
-ClientWebGLErrorSink::SetClientWebGLContext(RefPtr<ClientWebGLContext>& aClientContext) {
+void ClientWebGLErrorSink::SetClientWebGLContext(
+    RefPtr<ClientWebGLContext>& aClientContext) {
   mClientContext = aClientContext;
 }
 
-bool
-ClientWebGLErrorSink::DispatchCommand(WebGLErrorCommand command) {
+bool ClientWebGLErrorSink::DispatchCommand(WebGLErrorCommand command) {
   if (!mClientContext) {
     return false;
   }
 
-#define WEBGL_ERROR_HANDLER(_cmd,_method)                              \
-  case _cmd: return DispatchAsyncMethod(*mClientContext.get(),          \
-                                        &ClientWebGLContext::_method); 
+#define WEBGL_ERROR_HANDLER(_cmd, _method)            \
+  case _cmd:                                          \
+    return DispatchAsyncMethod(*mClientContext.get(), \
+                               &ClientWebGLContext::_method);
 
-  switch(command) {
+  switch (command) {
     WEBGL_ERROR_HANDLER(OnLostContext, OnLostContext)
     WEBGL_ERROR_HANDLER(OnRestoredContext, OnRestoredContext)
     WEBGL_ERROR_HANDLER(CreationError, PostContextCreationError)

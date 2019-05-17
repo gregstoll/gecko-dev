@@ -30,4 +30,4 @@ class WebGLChild : public PWebGLChild {
 }  // namespace dom
 }  // namespace mozilla
 
-#endif // WEBGLCHILD_H_
+#endif  // WEBGLCHILD_H_

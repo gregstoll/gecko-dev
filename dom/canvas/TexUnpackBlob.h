@@ -25,11 +25,12 @@ class HTMLVideoElement;
 }  // namespace dom
 
 namespace ipc {
-template<typename T> struct PcqParamTraits;
+template <typename T>
+struct PcqParamTraits;
 class ConsumerView;
 class ProducerView;
 enum class PcqStatus;
-}
+}  // namespace ipc
 
 namespace gfx {
 class DataSourceSurface;
@@ -67,7 +68,7 @@ class TexUnpackBlob {
                 uint32_t depth, gfxAlphaType srcAlphaType);
 
   // For IPC
-   TexUnpackBlob() {}
+  TexUnpackBlob() {}
 
   bool ConvertIfNeeded(WebGLContext* webgl, const uint32_t rowLength,
                        const uint32_t rowCount, WebGLTexelFormat srcFormat,
@@ -123,9 +124,8 @@ class TexUnpackBytes final : public TexUnpackBlob {
                              const webgl::PackingInfo& pi,
                              GLenum* const out_error) const override;
 
-  static mozilla::ipc::PcqStatus
-  Read(mozilla::ipc::ConsumerView& aView,
-       webgl::TexUnpackBytes* aTexBytes);
+  static mozilla::ipc::PcqStatus Read(mozilla::ipc::ConsumerView& aView,
+                                      webgl::TexUnpackBytes* aTexBytes);
   mozilla::ipc::PcqStatus Write(mozilla::ipc::ProducerView& aView);
   size_t Size() const;
 };
@@ -135,9 +135,9 @@ class TexUnpackImage final : public TexUnpackBlob {
   RefPtr<layers::Image> mImage;
 
   TexUnpackImage(const WebGLContext* webgl, TexImageTarget target,
-                 uint32_t rowLength,
-                 uint32_t width, uint32_t height, uint32_t depth,
-                 layers::Image* image, gfxAlphaType srcAlphaType);
+                 uint32_t rowLength, uint32_t width, uint32_t height,
+                 uint32_t depth, layers::Image* image,
+                 gfxAlphaType srcAlphaType);
 
   ~TexUnpackImage();  // Prevent needing to define layers::Image in the header.
 
@@ -179,27 +179,26 @@ class TexUnpackSurface final : public TexUnpackBlob {
 }  // namespace webgl
 
 /**
- * Simple wrapper for a TexUnpackBlobs so that they can be sent to another process.
- * The derived type of that underlying blob may change when represented in a remote
- * process.
+ * Simple wrapper for a TexUnpackBlobs so that they can be sent to another
+ * process. The derived type of that underlying blob may change when represented
+ * in a remote process.
  */
 class PcqTexUnpack final {
  public:
   PcqTexUnpack(MaybeWebGLTexUnpackVariant&& aMaybeBlob)
-    : mMaybeBlob(std::move(aMaybeBlob)) {
-  }
+      : mMaybeBlob(std::move(aMaybeBlob)) {}
 
   // Take the owned blob.  Returns null if the blob was already taken or if it
   // is not a TexUnpackBytes.
   UniquePtr<webgl::TexUnpackBlob> TakeBlob(WebGLContext* aContext);
 
-  PcqTexUnpack() = default;     // for PcqParamTraits and std::tuple
-  PcqTexUnpack(PcqTexUnpack&&)= default;
+  PcqTexUnpack() = default;  // for PcqParamTraits and std::tuple
+  PcqTexUnpack(PcqTexUnpack&&) = default;
 
   mozilla::ipc::PcqStatus Write(mozilla::ipc::ProducerView& aProducerView);
 
-  static mozilla::ipc::PcqStatus
-  Read(PcqTexUnpack* aPcqTexUnpack, mozilla::ipc::ConsumerView& aConsumerView);
+  static mozilla::ipc::PcqStatus Read(
+      PcqTexUnpack* aPcqTexUnpack, mozilla::ipc::ConsumerView& aConsumerView);
 
   size_t MinSize() const;
 

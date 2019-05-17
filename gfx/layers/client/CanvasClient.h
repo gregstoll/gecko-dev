@@ -51,7 +51,7 @@ class CanvasClient : public CompositableClient {
     CanvasClientSurface,
     CanvasClientGLContext,
     CanvasClientTypeShSurf,
-    CanvasClientAsync,  // webgl on workers
+    CanvasClientAsync,    // webgl on workers
     CanvasClientTypeOOP,  // webgl in remote process
   };
   static already_AddRefed<CanvasClient> CreateCanvasClient(
@@ -196,8 +196,7 @@ class CanvasClientBridge final : public CanvasClient {
  */
 class CanvasClientOOP final : public CanvasClient {
  public:
-  CanvasClientOOP(CompositableForwarder* aLayerForwarder,
-                  TextureFlags aFlags);
+  CanvasClientOOP(CompositableForwarder* aLayerForwarder, TextureFlags aFlags);
   ~CanvasClientOOP();
 
   TextureInfo GetTextureInfo() const override {

@@ -22,16 +22,14 @@ class SharedSurfaceTextureClient;
 
 namespace dom {
 
-class WebGLParent
-  : public PWebGLParent
-  , public SupportsWeakPtr<WebGLParent> {
+class WebGLParent : public PWebGLParent, public SupportsWeakPtr<WebGLParent> {
  public:
   MOZ_DECLARE_WEAKREFERENCE_TYPENAME(WebGLParent)
 
-  static WebGLParent*
-  Create(WebGLVersion aVersion,
-         UniquePtr<mozilla::HostWebGLCommandSink>&& aCommandSink,
-         UniquePtr<mozilla::HostWebGLErrorSource>&& aErrorSource);
+  static WebGLParent* Create(
+      WebGLVersion aVersion,
+      UniquePtr<mozilla::HostWebGLCommandSink>&& aCommandSink,
+      UniquePtr<mozilla::HostWebGLErrorSource>&& aErrorSource);
 
   already_AddRefed<layers::SharedSurfaceTextureClient> GetVRFrame();
 
@@ -44,9 +42,9 @@ class WebGLParent
   static bool MaybeRunCommandQueue(const WeakPtr<WebGLParent>& weakWebGLParent);
   bool RunCommandQueue();
 
-  mozilla::ipc::IPCResult
-  RecvUpdateCompositableHandle(layers::PLayerTransactionParent* aLayerTransaction,
-                        const CompositableHandle& aHandle);
+  mozilla::ipc::IPCResult RecvUpdateCompositableHandle(
+      layers::PLayerTransactionParent* aLayerTransaction,
+      const CompositableHandle& aHandle);
 
   mozilla::ipc::IPCResult Recv__delete__() override;
 
@@ -61,4 +59,4 @@ class WebGLParent
 }  // namespace dom
 }  // namespace mozilla
 
-#endif // WEBGLPARENT_H_
+#endif  // WEBGLPARENT_H_

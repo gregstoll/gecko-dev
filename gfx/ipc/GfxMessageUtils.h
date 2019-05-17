@@ -1186,9 +1186,9 @@ struct ParamTraits<mozilla::gfx::PaintFragment> {
 
 template <>
 struct ParamTraits<mozilla::WebGLVersion>
-  : public ContiguousEnumSerializerInclusive<mozilla::WebGLVersion,
-                                             mozilla::WebGLVersion::WEBGL1,
-                                             mozilla::WebGLVersion::WEBGL2> {
+    : public ContiguousEnumSerializerInclusive<mozilla::WebGLVersion,
+                                               mozilla::WebGLVersion::WEBGL1,
+                                               mozilla::WebGLVersion::WEBGL2> {
 };
 
 } /* namespace IPC */

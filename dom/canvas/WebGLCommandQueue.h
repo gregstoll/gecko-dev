@@ -11,21 +11,23 @@
 
 // Get around a bug in Clang related to __thiscall method pointers
 #if defined(_M_IX86)
-#define SINK_FCN_CC __thiscall
+#  define SINK_FCN_CC __thiscall
 #else
-#define SINK_FCN_CC
+#  define SINK_FCN_CC
 #endif
 
 namespace mozilla {
 
-using mozilla::ipc::PcqStatus;
-using mozilla::ipc::IPDLParamTraits;
-using mozilla::ipc::ProducerConsumerQueue;
-using mozilla::ipc::Producer;
 using mozilla::ipc::Consumer;
+using mozilla::ipc::IPDLParamTraits;
+using mozilla::ipc::PcqStatus;
+using mozilla::ipc::Producer;
+using mozilla::ipc::ProducerConsumerQueue;
 
-template<typename Derived, typename SinkType> struct FunctionDispatcher;
-template<typename Derived, typename SinkType> struct MethodDispatcher;
+template <typename Derived, typename SinkType>
+struct FunctionDispatcher;
+template <typename Derived, typename SinkType>
+struct MethodDispatcher;
 
 enum CommandResult { Success, TimeExpired, QueueEmpty, Error };
 
@@ -41,10 +43,10 @@ enum CommandSyncType { ASYNC, SYNC };
  * to add commands into the queue.  CommandSink offers ProcessOne, ProcessAll,
  * etc for draining the queue.  See CommandSource and CommandSink for more.
  *
- * NB: When used with IPDL, Sources and Sinks must be labeled "shmemholder" (same
- * as with Producers and Consumers).
+ * NB: When used with IPDL, Sources and Sinks must be labeled "shmemholder"
+ * (same as with Producers and Consumers).
  */
-template<typename Source, typename Sink>
+template <typename Source, typename Sink>
 class CommandQueue {
  public:
   using SelfType = CommandQueue<Source, Sink>;
@@ -54,32 +56,30 @@ class CommandQueue {
   // Technically, we're just mapping the Producer and Consumer in aPcq
   // by calling the Source and Sink type's constructors on them, respectively,
   // and passing aArgs as constructor parameters.
-  template<typename ... Args>
-  static UniquePtr<SelfType>
-  Create(UniquePtr<ProducerConsumerQueue>&& aPcq, Args&... aArgs) {
+  template <typename... Args>
+  static UniquePtr<SelfType> Create(UniquePtr<ProducerConsumerQueue>&& aPcq,
+                                    Args&... aArgs) {
     // Prefer WrapUnique to MakeUnique since it allows client code to declare
     // a private constructor and give this class friend status.
     UniquePtr<Source> source =
-      WrapUnique(new Source(std::move(aPcq->mProducer), aArgs...));
+        WrapUnique(new Source(std::move(aPcq->mProducer), aArgs...));
     if (!source) {
       return nullptr;
     }
     UniquePtr<Sink> sink =
-      WrapUnique(new Sink(std::move(aPcq->mConsumer), aArgs...));
+        WrapUnique(new Sink(std::move(aPcq->mConsumer), aArgs...));
     if (!sink) {
       return nullptr;
     }
-    return WrapUnique(new CommandQueue(std::move(source),
-                                       std::move(sink)));
+    return WrapUnique(new CommandQueue(std::move(source), std::move(sink)));
   }
 
   UniquePtr<Source> mSource;
   UniquePtr<Sink> mSink;
 
-protected:
+ protected:
   CommandQueue(UniquePtr<Source>&& aSource, UniquePtr<Sink>&& aSink)
-    : mSource(std::move(aSource))
-    , mSink(std::move(aSink)) {
+      : mSource(std::move(aSource)), mSink(std::move(aSink)) {
     MOZ_ASSERT(mSource && mSink);
   }
 };
@@ -87,7 +87,7 @@ protected:
 class BasicSource {
  public:
   BasicSource(UniquePtr<Producer>&& aProducer)
-    : mProducer(std::move(aProducer)) {
+      : mProducer(std::move(aProducer)) {
     MOZ_ASSERT(mProducer);
   }
   virtual ~BasicSource() {}
@@ -96,14 +96,13 @@ class BasicSource {
   BasicSource() {}
   friend struct mozilla::ipc::IPDLParamTraits<BasicSource>;
 
-protected:
+ protected:
   UniquePtr<Producer> mProducer;
 };
 
 class BasicSink {
  public:
-  BasicSink(UniquePtr<Consumer>&& aConsumer)
-    : mConsumer(std::move(aConsumer)) {
+  BasicSink(UniquePtr<Consumer>&& aConsumer) : mConsumer(std::move(aConsumer)) {
     MOZ_ASSERT(mConsumer);
   }
   virtual ~BasicSink() {}
@@ -112,7 +111,7 @@ class BasicSink {
   BasicSink() {}
   friend struct mozilla::ipc::IPDLParamTraits<BasicSink>;
 
-protected:
+ protected:
   UniquePtr<Consumer> mConsumer;
 };
 
@@ -121,18 +120,16 @@ protected:
  * command (represented by type Command) using InsertCommand, which also
  * needs all parameters to the command.  They are then serialized and sent
  * to the CommandSink, which must understand the Command+Args combination
- * to execute it. 
+ * to execute it.
  */
-template<typename Command>
+template <typename Command>
 class CommandSource : public BasicSource {
  public:
   CommandSource(UniquePtr<Producer>&& aProducer)
-    : BasicSource(std::move(aProducer)) {
-  }
+      : BasicSource(std::move(aProducer)) {}
 
-  template <typename ... Args>
-  PcqStatus InsertCommand(Command aCommand, Args&&... aArgs)
-  {
+  template <typename... Args>
+  PcqStatus InsertCommand(Command aCommand, Args&&... aArgs) {
     // TODO: For the moment, this is just a spin-lock.
     // Maybe make this something more efficient.
     PcqStatus status;
@@ -143,8 +140,7 @@ class CommandSource : public BasicSource {
   }
 
   template <>
-  PcqStatus InsertCommand<>(Command aCommand)
-  {
+  PcqStatus InsertCommand<>(Command aCommand) {
     // TODO: For the moment, this is just a spin-lock.
     // Maybe make this something more efficient.
     PcqStatus status;
@@ -154,9 +150,8 @@ class CommandSource : public BasicSource {
     return status;
   }
 
-  template <typename ... Args>
-  PcqStatus RunCommand(Command aCommand, Args&&... aArgs)
-  {
+  template <typename... Args>
+  PcqStatus RunCommand(Command aCommand, Args&&... aArgs) {
     return InsertCommand(aCommand, std::forward<Args>(aArgs)...);
   }
 
@@ -174,19 +169,18 @@ class CommandSource : public BasicSource {
  * easily run functions and methods using arguments taken from the command
  * queue by calling the Dispatch methods in this class.
  */
-template<typename Command>
+template <typename Command>
 class CommandSink : public BasicSink {
  public:
   CommandSink(UniquePtr<Consumer>&& aConsumer)
-    : BasicSink(std::move(aConsumer)) {
-  }
+      : BasicSink(std::move(aConsumer)) {}
 
   /**
    * Attempts to process the next command in the queue, if one is available.
    */
   CommandResult ProcessOneNow() {
     Command command;
-    switch(this->mConsumer->TryRemove(command)) {
+    switch (this->mConsumer->TryRemove(command)) {
       case PcqStatus::Success:
         if (DispatchCommand(command)) {
           return CommandResult::Success;
@@ -233,11 +227,10 @@ class CommandSink : public BasicSink {
   CommandSink() {}
 
   // non-void return value, non-const method variant
-  template <typename T, typename ReturnType, typename ... Args>
-  bool
-  DispatchAsyncMethod(T& aObj, ReturnType (T::*aMethod)(Args...))
-  {
-    std::tuple<typename RemoveCV<typename RemoveReference<Args>::Type>::Type...> args;
+  template <typename T, typename ReturnType, typename... Args>
+  bool DispatchAsyncMethod(T& aObj, ReturnType (T::*aMethod)(Args...)) {
+    std::tuple<typename RemoveCV<typename RemoveReference<Args>::Type>::Type...>
+        args;
     if (!ReadArgs(args)) {
       return false;
     }
@@ -246,11 +239,11 @@ class CommandSink : public BasicSink {
   }
 
   // non-void return value, const method variant
-  template <typename T, typename ReturnType, typename ... Args>
-  bool
-  DispatchAsyncMethod(const T& aObj, ReturnType (T::*aMethod)(Args...) const)
-  {
-    std::tuple<typename RemoveCV<typename RemoveReference<Args>::Type>::Type...> args;
+  template <typename T, typename ReturnType, typename... Args>
+  bool DispatchAsyncMethod(const T& aObj,
+                           ReturnType (T::*aMethod)(Args...) const) {
+    std::tuple<typename RemoveCV<typename RemoveReference<Args>::Type>::Type...>
+        args;
     if (!ReadArgs(args)) {
       return false;
     }
@@ -258,11 +251,10 @@ class CommandSink : public BasicSink {
     return true;
   }
 
-  template <typename ReturnType, typename ... Args>
-  bool
-  DispatchAsyncFunction(ReturnType (*aFunc)(Args...))
-  {
-    std::tuple<typename RemoveCV<typename RemoveReference<Args>::Type>::Type...> args;
+  template <typename ReturnType, typename... Args>
+  bool DispatchAsyncFunction(ReturnType (*aFunc)(Args...)) {
+    std::tuple<typename RemoveCV<typename RemoveReference<Args>::Type>::Type...>
+        args;
     if (!ReadArgs(args)) {
       return false;
     }
@@ -271,11 +263,10 @@ class CommandSink : public BasicSink {
   }
 
   // void return value, non-const method variant
-  template <typename T, typename ... Args>
-  bool
-  DispatchAsyncMethod(T* aObj, void (T::*aMethod)(Args...))
-  {
-    std::tuple<typename RemoveCV<typename RemoveReference<Args>::Type>::Type...> args;
+  template <typename T, typename... Args>
+  bool DispatchAsyncMethod(T* aObj, void (T::*aMethod)(Args...)) {
+    std::tuple<typename RemoveCV<typename RemoveReference<Args>::Type>::Type...>
+        args;
     if (!ReadArgs(args)) {
       return false;
     }
@@ -285,11 +276,10 @@ class CommandSink : public BasicSink {
   }
 
   // void return value, const method variant
-  template <typename T, typename ... Args>
-  bool
-  DispatchAsyncMethod(const T* aObj, void (T::*aMethod)(Args...) const)
-  {
-    std::tuple<typename RemoveCV<typename RemoveReference<Args>::Type>::Type...> args;
+  template <typename T, typename... Args>
+  bool DispatchAsyncMethod(const T* aObj, void (T::*aMethod)(Args...) const) {
+    std::tuple<typename RemoveCV<typename RemoveReference<Args>::Type>::Type...>
+        args;
     if (!ReadArgs(args)) {
       return false;
     }
@@ -299,11 +289,10 @@ class CommandSink : public BasicSink {
   }
 
   // void return value form of above
-  template <typename ... Args>
-  bool
-  DispatchAsyncFunction(void (*aFunc)(Args...))
-  {
-    std::tuple<typename RemoveCV<typename RemoveReference<Args>::Type>::Type...> args;
+  template <typename... Args>
+  bool DispatchAsyncFunction(void (*aFunc)(Args...)) {
+    std::tuple<typename RemoveCV<typename RemoveReference<Args>::Type>::Type...>
+        args;
     if (!ReadArgs(args)) {
       return false;
     }
@@ -319,76 +308,50 @@ class CommandSink : public BasicSink {
    */
   virtual bool DispatchCommand(Command command) = 0;
 
-  template <typename ... Args, size_t ... Indices>
-  PcqStatus
-  CallTryRemove(std::tuple<Args...>& aArgs,
-                std::index_sequence<Indices...>)
-  {
+  template <typename... Args, size_t... Indices>
+  PcqStatus CallTryRemove(std::tuple<Args...>& aArgs,
+                          std::index_sequence<Indices...>) {
     return mConsumer->TryRemove(std::get<Indices>(aArgs)...);
   }
 
   template <>
-  PcqStatus
-  CallTryRemove(std::tuple<>& aArgs,
-                std::make_integer_sequence<size_t,0>)
-  {
+  PcqStatus CallTryRemove(std::tuple<>& aArgs,
+                          std::make_integer_sequence<size_t, 0>) {
     return PcqStatus::Success;
   }
 
-  template <typename T,
-            typename MethodType,
-            typename ... Args,
-            size_t ... Indices,
-            typename ReturnType = typename mozilla::FunctionTypeTraits<MethodType>::ReturnType>
-  ReturnType
-  CallMethod(T& aObj,
-             MethodType aMethod,
-             std::tuple<Args...>& aArgs,
-             std::index_sequence<Indices...>)
-  {
+  template <typename T, typename MethodType, typename... Args,
+            size_t... Indices,
+            typename ReturnType =
+                typename mozilla::FunctionTypeTraits<MethodType>::ReturnType>
+  ReturnType CallMethod(T& aObj, MethodType aMethod, std::tuple<Args...>& aArgs,
+                        std::index_sequence<Indices...>) {
     return (aObj.*aMethod)(std::forward<Args>(std::get<Indices>(aArgs))...);
   }
 
-  template <typename FunctionType,
-            typename ... Args,
-            size_t ... Indices,
-            typename ReturnType = typename mozilla::FunctionTypeTraits<FunctionType>::ReturnType>
-  ReturnType
-  CallFunction(FunctionType aFun,
-               std::tuple<Args...>& aArgs,
-               std::index_sequence<Indices...>)
-  {
+  template <typename FunctionType, typename... Args, size_t... Indices,
+            typename ReturnType =
+                typename mozilla::FunctionTypeTraits<FunctionType>::ReturnType>
+  ReturnType CallFunction(FunctionType aFun, std::tuple<Args...>& aArgs,
+                          std::index_sequence<Indices...>) {
     return (*aFunc)(std::forward<Args>(std::get<Indices>(aArgs))...);
   }
 
-  template <typename T,
-            typename MethodType,
-            typename ... Args,
-            size_t ... Indices>
-  void
-  CallVoidMethod(T& aObj,
-             MethodType aMethod,
-             std::tuple<Args...>& aArgs,
-             std::index_sequence<Indices...>)
-  {
+  template <typename T, typename MethodType, typename... Args,
+            size_t... Indices>
+  void CallVoidMethod(T& aObj, MethodType aMethod, std::tuple<Args...>& aArgs,
+                      std::index_sequence<Indices...>) {
     (aObj.*aMethod)(std::forward<Args>(std::get<Indices>(aArgs))...);
   }
 
-  template <typename FunctionType,
-            typename ... Args,
-            size_t ... Indices>
-  void
-  CallVoidFunction(FunctionType aFun,
-               std::tuple<Args...>& aArgs,
-               std::index_sequence<Indices...>)
-  {
+  template <typename FunctionType, typename... Args, size_t... Indices>
+  void CallVoidFunction(FunctionType aFun, std::tuple<Args...>& aArgs,
+                        std::index_sequence<Indices...>) {
     (*aFunc)(std::forward<Args>(std::get<Indices>(aArgs))...);
   }
 
-  template <typename ... Args>
-  bool 
-  ReadArgs(std::tuple<Args...>& aArgs)
-  {
+  template <typename... Args>
+  bool ReadArgs(std::tuple<Args...>& aArgs) {
     PcqStatus status;
     // TODO: For the moment, this is just a spin-lock.
     // Maybe make this something more efficient.
@@ -399,43 +362,41 @@ class CommandSink : public BasicSink {
   }
 };
 
-enum SyncResponse : uint8_t {
-    RESPONSE_NAK
-  , RESPONSE_ACK
-};
+enum SyncResponse : uint8_t { RESPONSE_NAK, RESPONSE_ACK };
 
 /**
  * This is the Source for a SyncCommandSink.  It takes an extra PCQ,
- * the ResponsePcq, and uses it to receive synchronous responses from 
+ * the ResponsePcq, and uses it to receive synchronous responses from
  * the sink.  The ResponsePcq is a regular ProducerConsumerQueue,
  * not a CommandQueue.
  */
-template<typename Command>
-class SyncCommandSource
-  : public CommandSource<Command> {
+template <typename Command>
+class SyncCommandSource : public CommandSource<Command> {
  public:
   using BaseType = CommandSource<Command>;
   SyncCommandSource(UniquePtr<Producer>&& aProducer,
                     UniquePtr<ProducerConsumerQueue>& aResponsePcq)
-    : CommandSource<Command>(std::move(aProducer))
-    , mConsumer(std::move(aResponsePcq->mConsumer)) {
+      : CommandSource<Command>(std::move(aProducer)),
+        mConsumer(std::move(aResponsePcq->mConsumer)) {
     MOZ_ASSERT(mConsumer);
   }
 
-  template <typename ... Args>
+  template <typename... Args>
   PcqStatus RunAsyncCommand(Command aCommand, Args&&... aArgs) {
     return this->RunCommand(aCommand, std::forward<Args>(aArgs)...);
   }
 
-  template <typename ... Args>
+  template <typename... Args>
   PcqStatus RunVoidSyncCommand(Command aCommand, Args&&... aArgs) {
     PcqStatus status = RunAsyncCommand(aCommand, std::forward<Args>(aArgs)...);
     return IsSuccess(status) ? this->ReadSyncResponse() : status;
   }
 
-  template <typename ResultType, typename ... Args>
-  PcqStatus RunSyncCommand(Command aCommand, ResultType& aReturn, Args&&... aArgs) {
-    PcqStatus status = RunVoidSyncCommand(aCommand, std::forward<Args>(aArgs)...);
+  template <typename ResultType, typename... Args>
+  PcqStatus RunSyncCommand(Command aCommand, ResultType& aReturn,
+                           Args&&... aArgs) {
+    PcqStatus status =
+        RunVoidSyncCommand(aCommand, std::forward<Args>(aArgs)...);
     return IsSuccess(status) ? this->ReadResult(aReturn) : status;
   }
 
@@ -476,16 +437,15 @@ class SyncCommandSource
  * DispatchCommand implementations.
  * The ResponsePcq is not a CommandQueue.
  */
-template<typename Command>
-class SyncCommandSink
-  : public CommandSink<Command> {
+template <typename Command>
+class SyncCommandSink : public CommandSink<Command> {
   using BaseType = CommandSink<Command>;
 
  public:
   SyncCommandSink(UniquePtr<Consumer>&& aConsumer,
                   UniquePtr<ProducerConsumerQueue>& aResponsePcq)
-    : CommandSink<Command>(std::move(aConsumer))
-    , mProducer(std::move(aResponsePcq->mProducer)) {
+      : CommandSink<Command>(std::move(aConsumer)),
+        mProducer(std::move(aResponsePcq->mProducer)) {
     MOZ_ASSERT(mProducer);
   }
 
@@ -496,34 +456,36 @@ class SyncCommandSink
   // Places RESPONSE_ACK and the typed return value, or RESPONSE_NAK, in
   // the response queue,
   // __cdecl/__thiscall non-const method variant.
-  template <typename T, typename ReturnType, typename ... Args>
+  template <typename T, typename ReturnType, typename... Args>
   bool DispatchSyncMethod(T& aObj,
                           ReturnType SINK_FCN_CC (T::*aMethod)(Args...)) {
-    std::tuple<typename RemoveCV<typename RemoveReference<Args>::Type>::Type...> args;
+    std::tuple<typename RemoveCV<typename RemoveReference<Args>::Type>::Type...>
+        args;
     if (!BaseType::ReadArgs(args)) {
       WriteNAK();
       return false;
     }
 
-    ReturnType response =
-      BaseType::CallMethod(aObj, aMethod, args, std::index_sequence_for<Args...>{});
+    ReturnType response = BaseType::CallMethod(
+        aObj, aMethod, args, std::index_sequence_for<Args...>{});
 
     WriteACK(response);
     return true;
   }
 
   // __cdecl/__thiscall const method variant.
-  template <typename T, typename ReturnType, typename ... Args>
+  template <typename T, typename ReturnType, typename... Args>
   bool DispatchSyncMethod(const T& aObj,
                           ReturnType SINK_FCN_CC (T::*aMethod)(Args...) const) {
-    std::tuple<typename RemoveCV<typename RemoveReference<Args>::Type>::Type...> args;
+    std::tuple<typename RemoveCV<typename RemoveReference<Args>::Type>::Type...>
+        args;
     if (!BaseType::ReadArgs(args)) {
       WriteNAK();
       return false;
     }
 
-    ReturnType response =
-      BaseType::CallMethod(aObj, aMethod, args, std::index_sequence_for<Args...>{});
+    ReturnType response = BaseType::CallMethod(
+        aObj, aMethod, args, std::index_sequence_for<Args...>{});
 
     WriteACK(response);
     return true;
@@ -531,114 +493,130 @@ class SyncCommandSink
 
 #if defined(_M_IX86)
   // __stdcall non-const method variant.
-  template <typename T, typename ReturnType, typename ... Args>
-  bool DispatchSyncMethod(T& aObj, ReturnType __stdcall (T::*aMethod)(Args...)) {
-    std::tuple<typename RemoveCV<typename RemoveReference<Args>::Type>::Type...> args;
+  template <typename T, typename ReturnType, typename... Args>
+  bool DispatchSyncMethod(T& aObj,
+                          ReturnType __stdcall (T::*aMethod)(Args...)) {
+    std::tuple<typename RemoveCV<typename RemoveReference<Args>::Type>::Type...>
+        args;
     if (!BaseType::ReadArgs(args)) {
       WriteNAK();
       return false;
     }
 
-    ReturnType response =
-      BaseType::CallMethod(aObj, aMethod, args, std::index_sequence_for<Args...>{});
+    ReturnType response = BaseType::CallMethod(
+        aObj, aMethod, args, std::index_sequence_for<Args...>{});
 
     WriteACK(response);
     return true;
   }
 
   // __stdcall const method variant.
-  template <typename T, typename ReturnType, typename ... Args>
-  bool DispatchSyncMethod(const T& aObj, ReturnType __stdcall (T::*aMethod)(Args...) const) {
-    std::tuple<typename RemoveCV<typename RemoveReference<Args>::Type>::Type...> args;
+  template <typename T, typename ReturnType, typename... Args>
+  bool DispatchSyncMethod(const T& aObj,
+                          ReturnType __stdcall (T::*aMethod)(Args...) const) {
+    std::tuple<typename RemoveCV<typename RemoveReference<Args>::Type>::Type...>
+        args;
     if (!BaseType::ReadArgs(args)) {
       WriteNAK();
       return false;
     }
 
-    ReturnType response =
-      BaseType::CallMethod(aObj, aMethod, args, std::index_sequence_for<Args...>{});
+    ReturnType response = BaseType::CallMethod(
+        aObj, aMethod, args, std::index_sequence_for<Args...>{});
 
     WriteACK(response);
     return true;
   }
 #endif
 
-  template <typename ReturnType, typename ... Args>
+  template <typename ReturnType, typename... Args>
   bool DispatchSyncFunction(ReturnType (*aFunc)(Args...)) {
-    std::tuple<typename RemoveCV<typename RemoveReference<Args>::Type>::Type...> args;
+    std::tuple<typename RemoveCV<typename RemoveReference<Args>::Type>::Type...>
+        args;
     if (!BaseType::ReadArgs(args)) {
       WriteNAK();
       return false;
     }
 
     ReturnType response =
-      BaseType::CallFunction(aFunc, args, std::index_sequence_for<Args...>{});
+        BaseType::CallFunction(aFunc, args, std::index_sequence_for<Args...>{});
 
     WriteACK(response);
     return true;
   }
 
   // __cdecl/__thiscall non-const void method variant
-  template <typename T, typename ... Args>
+  template <typename T, typename... Args>
   bool DispatchSyncMethod(T& aObj, void SINK_FCN_CC (T::*aMethod)(Args...)) {
-    std::tuple<typename RemoveCV<typename RemoveReference<Args>::Type>::Type...> args;
+    std::tuple<typename RemoveCV<typename RemoveReference<Args>::Type>::Type...>
+        args;
     if (!BaseType::ReadArgs(args)) {
       WriteNAK();
       return false;
     }
 
-    BaseType::CallVoidMethod(aObj, aMethod, args, std::index_sequence_for<Args...>{});
+    BaseType::CallVoidMethod(aObj, aMethod, args,
+                             std::index_sequence_for<Args...>{});
     WriteACK();
     return true;
   }
 
   // __cdecl/__thiscall const void method variant
-  template <typename T, typename ... Args>
-  bool DispatchSyncMethod(const T& aObj, void SINK_FCN_CC (T::*aMethod)(Args...) const) {
-    std::tuple<typename RemoveCV<typename RemoveReference<Args>::Type>::Type...> args;
+  template <typename T, typename... Args>
+  bool DispatchSyncMethod(const T& aObj,
+                          void SINK_FCN_CC (T::*aMethod)(Args...) const) {
+    std::tuple<typename RemoveCV<typename RemoveReference<Args>::Type>::Type...>
+        args;
     if (!BaseType::ReadArgs(args)) {
       WriteNAK();
       return false;
     }
 
-    BaseType::CallVoidMethod(aObj, aMethod, args, std::index_sequence_for<Args...>{});
+    BaseType::CallVoidMethod(aObj, aMethod, args,
+                             std::index_sequence_for<Args...>{});
     WriteACK();
     return true;
   }
 
 #if defined(_M_IX86)
   // __stdcall non-const void method variant
-  template <typename T, typename ... Args>
+  template <typename T, typename... Args>
   bool DispatchSyncMethod(T& aObj, void __stdcall (T::*aMethod)(Args...)) {
-    std::tuple<typename RemoveCV<typename RemoveReference<Args>::Type>::Type...> args;
+    std::tuple<typename RemoveCV<typename RemoveReference<Args>::Type>::Type...>
+        args;
     if (!BaseType::ReadArgs(args)) {
       WriteNAK();
       return false;
     }
 
-    BaseType::CallVoidMethod(aObj, aMethod, args, std::index_sequence_for<Args...>{});
+    BaseType::CallVoidMethod(aObj, aMethod, args,
+                             std::index_sequence_for<Args...>{});
     WriteACK();
     return true;
   }
 
   // __stdcall const void method variant
-  template <typename T, typename ... Args>
-  bool DispatchSyncMethod(const T& aObj, void __stdcall (T::*aMethod)(Args...) const) {
-    std::tuple<typename RemoveCV<typename RemoveReference<Args>::Type>::Type...> args;
+  template <typename T, typename... Args>
+  bool DispatchSyncMethod(const T& aObj,
+                          void __stdcall (T::*aMethod)(Args...) const) {
+    std::tuple<typename RemoveCV<typename RemoveReference<Args>::Type>::Type...>
+        args;
     if (!BaseType::ReadArgs(args)) {
       WriteNAK();
       return false;
     }
 
-    BaseType::CallVoidMethod(aObj, aMethod, args, std::index_sequence_for<Args...>{});
+    BaseType::CallVoidMethod(aObj, aMethod, args,
+                             std::index_sequence_for<Args...>{});
     WriteACK();
     return true;
   }
 #endif
 
-  template <typename ... Args>
+  template <typename... Args>
   bool DispatchSyncFunction(void (*aFunc)(Args...)) {
-    std::tuple<typename RemoveCV<typename RemoveReference<Args>::Type>::Type...> args;
+    std::tuple<typename RemoveCV<typename RemoveReference<Args>::Type>::Type...>
+        args;
     if (!BaseType::ReadArgs(args)) {
       WriteNAK();
       return false;
@@ -650,7 +628,7 @@ class SyncCommandSink
   }
 
  protected:
-  template <typename ... Args>
+  template <typename... Args>
   bool WriteArgs(const Args&... aArgs) {
     PcqStatus status;
     // TODO: For the moment, this is just a spin-lock.
@@ -661,7 +639,7 @@ class SyncCommandSink
     return IsSuccess(status);
   }
 
-  template<typename ... Args>
+  template <typename... Args>
   void WriteACK(const Args&... aArgs) {
     SyncResponse ack = RESPONSE_ACK;
     WriteArgs(ack, aArgs...);
@@ -678,17 +656,17 @@ class SyncCommandSink
 /**
  * Can be used by a sink to find and execute the handler for a given commandId.
  */
-template<typename Derived>
+template <typename Derived>
 struct CommandDispatcher {
   /**
    * Find and run the command.
    */
-  template <size_t commandId, typename ... Args>
+  template <size_t commandId, typename... Args>
   static bool DispatchCommandHelper(size_t aId, Args&... aArgs) {
     if (commandId == aId) {
       return Derived::template Dispatch<commandId>(aArgs...);
     }
-    return Derived::template DispatchCommand<commandId+1>(aId, aArgs...);
+    return Derived::template DispatchCommand<commandId + 1>(aId, aArgs...);
   }
 };
 
@@ -697,24 +675,25 @@ struct CommandDispatcher {
  * use to dispatch sync/async commands to a function via a CommandSink.
  * See DECLARE_FUNCTION_DISPATCHER and DEFINE_FUNCTION_DISPATCHER.
  */
-template<typename Derived, typename _SinkType>
+template <typename Derived, typename _SinkType>
 struct FunctionDispatcher : public CommandDispatcher<Derived> {
   using SinkType = _SinkType;
-  template<CommandSyncType syncType> struct DispatchFunction;
+  template <CommandSyncType syncType>
+  struct DispatchFunction;
 
   // Specialization for dispatching asynchronous functions
-  template<>
+  template <>
   struct DispatchFunction<CommandSyncType::ASYNC> {
-    template<typename FunctionType>
+    template <typename FunctionType>
     static bool Run(SinkType& aSink, FunctionType function) {
       return aSink.DispatchAsyncFunction(function);
     }
   };
 
   // Specialization for dispatching synchronous functions
-  template<>
+  template <>
   struct DispatchFunction<CommandSyncType::SYNC> {
-    template<typename FunctionType>
+    template <typename FunctionType>
     static bool Run(SinkType& aSink, FunctionType function) {
       return aSink.DispatchSyncFunction(function);
     }
@@ -726,24 +705,25 @@ struct FunctionDispatcher : public CommandDispatcher<Derived> {
  * use to dispatch sync/async commands to a method via a CommandSink.
  * See DECLARE_METHOD_DISPATCHER and DEFINE_METHOD_DISPATCHER.
  */
-template<typename Derived, typename _SinkType>
+template <typename Derived, typename _SinkType>
 struct MethodDispatcher : public CommandDispatcher<Derived> {
   using SinkType = _SinkType;
-  template<CommandSyncType syncType> struct DispatchMethod;
+  template <CommandSyncType syncType>
+  struct DispatchMethod;
 
   // Specialization for dispatching asynchronous methods
-  template<>
+  template <>
   struct DispatchMethod<CommandSyncType::ASYNC> {
-    template<typename MethodType, typename ObjectType>
+    template <typename MethodType, typename ObjectType>
     static bool Run(SinkType& aSink, MethodType mMethod, ObjectType& aObj) {
       return aSink.DispatchAsyncMethod(aObj, mMethod);
     }
   };
 
   // Specialization for dispatching synchronous methods
-  template<>
+  template <>
   struct DispatchMethod<CommandSyncType::SYNC> {
-    template<typename MethodType, typename ObjectType>
+    template <typename MethodType, typename ObjectType>
     static bool Run(SinkType& aSink, MethodType aMethod, ObjectType& aObj) {
       return aSink.DispatchSyncMethod(aObj, aMethod);
     }
@@ -751,59 +731,100 @@ struct MethodDispatcher : public CommandDispatcher<Derived> {
 };
 
 // Declares a FunctionDispatcher with the given name and CommandSink type.
-#define DECLARE_FUNCTION_DISPATCHER(_DISPATCHER,_SINKTYPE)                    \
-struct _DISPATCHER : public FunctionDispatcher<_DISPATCHER, _SINKTYPE> {      \
-  template <size_t commandId = 0>                                             \
-  static bool DispatchCommand(size_t aId) {                                   \
-    MOZ_ASSERT_UNREACHABLE("Unhandled command ID"); return false; }           \
-  template <size_t commandId> static bool Dispatch(SinkType& aSink);          \
-  template <size_t commandId> struct FuncInfo;                                \
-  template <size_t commandId> static constexpr CommandSyncType SyncType();    \
-  template <typename FuncType, FuncType func> static constexpr size_t Id();   \
-};
+#define DECLARE_FUNCTION_DISPATCHER(_DISPATCHER, _SINKTYPE)                \
+  struct _DISPATCHER : public FunctionDispatcher<_DISPATCHER, _SINKTYPE> { \
+    template <size_t commandId = 0>                                        \
+    static bool DispatchCommand(size_t aId) {                              \
+      MOZ_ASSERT_UNREACHABLE("Unhandled command ID");                      \
+      return false;                                                        \
+    }                                                                      \
+    template <size_t commandId>                                            \
+    static bool Dispatch(SinkType& aSink);                                 \
+    template <size_t commandId>                                            \
+    struct FuncInfo;                                                       \
+    template <size_t commandId>                                            \
+    static constexpr CommandSyncType SyncType();                           \
+    template <typename FuncType, FuncType func>                            \
+    static constexpr size_t Id();                                          \
+  };
 
 // Declares a MethodDispatcher with the given name and CommandSink type.
 // The ObjectType is the type of the object this class will dispatch methods to.
-#define DECLARE_METHOD_DISPATCHER(_DISPATCHER, _SINKTYPE, _OBJECTTYPE)        \
-struct _DISPATCHER : public MethodDispatcher<_DISPATCHER, _SINKTYPE> {        \
-  using ObjectType = _OBJECTTYPE;                                             \
-  template <size_t commandId = 0>                                             \
-  static bool DispatchCommand(size_t aId, SinkType& aSink, ObjectType& aObj) { \
-    MOZ_ASSERT_UNREACHABLE("Unhandled command ID"); return false; }           \
-  template <size_t commandId> static bool Dispatch(SinkType& aSink, ObjectType& aObj); \
-  template <size_t commandId> struct MethodInfo;                              \
-  template <size_t commandId> static constexpr CommandSyncType SyncType();    \
-  template <typename MethodType, MethodType method> static constexpr size_t Id(); \
-};
+#define DECLARE_METHOD_DISPATCHER(_DISPATCHER, _SINKTYPE, _OBJECTTYPE)   \
+  struct _DISPATCHER : public MethodDispatcher<_DISPATCHER, _SINKTYPE> { \
+    using ObjectType = _OBJECTTYPE;                                      \
+    template <size_t commandId = 0>                                      \
+    static bool DispatchCommand(size_t aId, SinkType& aSink,             \
+                                ObjectType& aObj) {                      \
+      MOZ_ASSERT_UNREACHABLE("Unhandled command ID");                    \
+      return false;                                                      \
+    }                                                                    \
+    template <size_t commandId>                                          \
+    static bool Dispatch(SinkType& aSink, ObjectType& aObj);             \
+    template <size_t commandId>                                          \
+    struct MethodInfo;                                                   \
+    template <size_t commandId>                                          \
+    static constexpr CommandSyncType SyncType();                         \
+    template <typename MethodType, MethodType method>                    \
+    static constexpr size_t Id();                                        \
+  };
 
 // Defines a handler in the given dispatcher for the command with the given
 // id.  The handler uses a CommandSink to read parameters, call the
 // given function using the given synchronization protocol, and provide
 // compile-time lookup of the ID by function.
-#define DEFINE_FUNCTION_DISPATCHER(_DISPATCHER, _ID, _FUNC, _SYNC)            \
-template<> bool _DISPATCHER::DispatchCommand<_ID>(size_t aId, SinkType& aSink) { \
-  return DispatchCommandHelper<_ID>(aId, aSink); }                            \
-template<> bool _DISPATCHER::Dispatch<_ID>(SinkType& aSink) {                 \
-  return DispatchFunction<_SYNC>::Run(aSink, &_FUNC); }       \
-template<> struct _DISPATCHER::FuncInfo<_ID> { using FuncType = decltype(&_FUNC); };  \
-template<> constexpr CommandSyncType _DISPATCHER::SyncType<_ID>() { return _SYNC; } \
-template<> constexpr size_t _DISPATCHER::Id<decltype(&_FUNC), &_FUNC>() { return _ID; }
+#define DEFINE_FUNCTION_DISPATCHER(_DISPATCHER, _ID, _FUNC, _SYNC)       \
+  template <>                                                            \
+  bool _DISPATCHER::DispatchCommand<_ID>(size_t aId, SinkType & aSink) { \
+    return DispatchCommandHelper<_ID>(aId, aSink);                       \
+  }                                                                      \
+  template <>                                                            \
+  bool _DISPATCHER::Dispatch<_ID>(SinkType & aSink) {                    \
+    return DispatchFunction<_SYNC>::Run(aSink, &_FUNC);                  \
+  }                                                                      \
+  template <>                                                            \
+  struct _DISPATCHER::FuncInfo<_ID> {                                    \
+    using FuncType = decltype(&_FUNC);                                   \
+  };                                                                     \
+  template <>                                                            \
+  constexpr CommandSyncType _DISPATCHER::SyncType<_ID>() {               \
+    return _SYNC;                                                        \
+  }                                                                      \
+  template <>                                                            \
+  constexpr size_t _DISPATCHER::Id<decltype(&_FUNC), &_FUNC>() {         \
+    return _ID;                                                          \
+  }
 
 // Defines a handler in the given dispatcher for the command with the given
 // id.  The handler uses a CommandSink to read parameters, call the
 // given method using the given synchronization protocol, and provide
 // compile-time lookup of the ID by class method.
-#define DEFINE_METHOD_DISPATCHER(_DISPATCHER, _ID, _METHOD, _SYNC)               \
-template<> bool _DISPATCHER::DispatchCommand<_ID>(size_t aId, SinkType& aSink, ObjectType& aObj) { \
-  return DispatchCommandHelper<_ID>(aId, aSink, aObj); }                         \
-template<> bool _DISPATCHER::Dispatch<_ID>(SinkType& aSink, ObjectType& aObj) {  \
-  return DispatchMethod<_SYNC>::Run(aSink, &_METHOD, aObj); }  \
-template<> struct _DISPATCHER::MethodInfo<_ID> { using MethodType = decltype(&_METHOD); };  \
-template<> constexpr CommandSyncType _DISPATCHER::SyncType<_ID>() { return _SYNC; } \
-template<> constexpr size_t _DISPATCHER::Id<decltype(&_METHOD), &_METHOD>() { return _ID; }
+#define DEFINE_METHOD_DISPATCHER(_DISPATCHER, _ID, _METHOD, _SYNC)       \
+  template <>                                                            \
+  bool _DISPATCHER::DispatchCommand<_ID>(size_t aId, SinkType & aSink,   \
+                                         ObjectType & aObj) {            \
+    return DispatchCommandHelper<_ID>(aId, aSink, aObj);                 \
+  }                                                                      \
+  template <>                                                            \
+  bool _DISPATCHER::Dispatch<_ID>(SinkType & aSink, ObjectType & aObj) { \
+    return DispatchMethod<_SYNC>::Run(aSink, &_METHOD, aObj);            \
+  }                                                                      \
+  template <>                                                            \
+  struct _DISPATCHER::MethodInfo<_ID> {                                  \
+    using MethodType = decltype(&_METHOD);                               \
+  };                                                                     \
+  template <>                                                            \
+  constexpr CommandSyncType _DISPATCHER::SyncType<_ID>() {               \
+    return _SYNC;                                                        \
+  }                                                                      \
+  template <>                                                            \
+  constexpr size_t _DISPATCHER::Id<decltype(&_METHOD), &_METHOD>() {     \
+    return _ID;                                                          \
+  }
 
 namespace ipc {
-template<typename T> struct IPDLParamTraits;
+template <typename T>
+struct IPDLParamTraits;
 
 template <>
 struct IPDLParamTraits<mozilla::BasicSource> {
@@ -837,21 +858,21 @@ struct IPDLParamTraits<mozilla::BasicSink> {
 
 template <typename Command>
 struct IPDLParamTraits<mozilla::CommandSource<Command>>
-  : public IPDLParamTraits<mozilla::BasicSource> {
+    : public IPDLParamTraits<mozilla::BasicSource> {
  public:
   typedef mozilla::CommandSource<Command> paramType;
 };
 
 template <typename Command>
 struct IPDLParamTraits<mozilla::CommandSink<Command>>
-  : public IPDLParamTraits<mozilla::BasicSink> {
+    : public IPDLParamTraits<mozilla::BasicSink> {
  public:
   typedef mozilla::CommandSink<Command> paramType;
 };
 
 template <typename Command>
 struct IPDLParamTraits<mozilla::SyncCommandSource<Command>>
-  : public IPDLParamTraits<mozilla::CommandSource<Command>> {
+    : public IPDLParamTraits<mozilla::CommandSource<Command>> {
  public:
   typedef mozilla::SyncCommandSource<Command> paramType;
   typedef typename paramType::BaseType paramBaseType;
@@ -864,14 +885,14 @@ struct IPDLParamTraits<mozilla::SyncCommandSource<Command>>
   static bool Read(const IPC::Message* aMsg, PickleIterator* aIter,
                    IProtocol* aActor, paramType* aParam) {
     bool result =
-      ReadIPDLParam(aMsg, aIter, aActor, static_cast<paramBaseType*>(aParam));
+        ReadIPDLParam(aMsg, aIter, aActor, static_cast<paramBaseType*>(aParam));
     return result && ReadIPDLParam(aMsg, aIter, aActor, &aParam->mConsumer);
   }
 };
 
 template <typename Command>
 struct IPDLParamTraits<mozilla::SyncCommandSink<Command>>
-  : public IPDLParamTraits<mozilla::CommandSink<Command>> {
+    : public IPDLParamTraits<mozilla::CommandSink<Command>> {
  public:
   typedef mozilla::SyncCommandSink<Command> paramType;
   typedef typename paramType::BaseType paramBaseType;
@@ -884,13 +905,13 @@ struct IPDLParamTraits<mozilla::SyncCommandSink<Command>>
   static bool Read(const IPC::Message* aMsg, PickleIterator* aIter,
                    IProtocol* aActor, paramType* aParam) {
     bool result =
-      ReadIPDLParam(aMsg, aIter, aActor, static_cast<paramBaseType*>(aParam));
+        ReadIPDLParam(aMsg, aIter, aActor, static_cast<paramBaseType*>(aParam));
     return result && ReadIPDLParam(aMsg, aIter, aActor, &aParam->mProducer);
   }
 };
 
-} // namespace ipc
+}  // namespace ipc
 
-} // namespace mozilla
+}  // namespace mozilla
 
-#endif // WEBGLCOMMANDQUEUE_H_
+#endif  // WEBGLCOMMANDQUEUE_H_

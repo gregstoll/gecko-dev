@@ -20,10 +20,11 @@
 #include "WebGLShaderPrecisionFormat.h"
 
 #ifndef WEBGL_BRIDGE_LOG_
-#define WEBGL_BRIDGE_LOG_(lvl, ...)   MOZ_LOG(mozilla::gWebGLBridgeLog, lvl, (__VA_ARGS__))
-#define WEBGL_BRIDGE_LOGD(...)        WEBGL_BRIDGE_LOG_(LogLevel::Debug, __VA_ARGS__)
-#define WEBGL_BRIDGE_LOGE(...)        WEBGL_BRIDGE_LOG_(LogLevel::Error, __VA_ARGS__)
-#endif // WEBGL_BRIDGE_LOG_
+#  define WEBGL_BRIDGE_LOG_(lvl, ...) \
+    MOZ_LOG(mozilla::gWebGLBridgeLog, lvl, (__VA_ARGS__))
+#  define WEBGL_BRIDGE_LOGD(...) WEBGL_BRIDGE_LOG_(LogLevel::Debug, __VA_ARGS__)
+#  define WEBGL_BRIDGE_LOGE(...) WEBGL_BRIDGE_LOG_(LogLevel::Error, __VA_ARGS__)
+#endif  // WEBGL_BRIDGE_LOG_
 
 namespace mozilla {
 
@@ -51,17 +52,17 @@ class CompositableHost;
  * ClientWebGLContext.
  */
 class HostWebGLContext : public WebGLContextEndpoint {
-public:
-  static UniquePtr<HostWebGLContext>
-  Create(WebGLVersion aVersion,
-         UniquePtr<HostWebGLCommandSink>&& aCommandSink = nullptr,
-         UniquePtr<HostWebGLErrorSource>&& aErrorSource = nullptr);
+ public:
+  static UniquePtr<HostWebGLContext> Create(
+      WebGLVersion aVersion,
+      UniquePtr<HostWebGLCommandSink>&& aCommandSink = nullptr,
+      UniquePtr<HostWebGLErrorSource>&& aErrorSource = nullptr);
 
   virtual ~HostWebGLContext();
 
   WebGLContext* GetWebGLContext() { return mContext; }
 
-protected:
+ protected:
   HostWebGLContext(WebGLVersion aVersion, RefPtr<WebGLContext> aContext,
                    UniquePtr<HostWebGLCommandSink>&& aCommandSink,
                    UniquePtr<HostWebGLErrorSource>&& aErrorSource);
@@ -151,18 +152,17 @@ protected:
     uint64_t mNextId;
   };
 
-#define DECLARE_OBJECT_ID_MAP_FUNCS(_WebGLType)                               \
-  WebGLId<WebGL##_WebGLType>                                                  \
-  Insert(RefPtr<WebGL##_WebGLType>&& aObj,                                    \
-         const WebGLId<WebGL##_WebGLType>& aId =                              \
-           WebGLId<WebGL##_WebGLType>::Invalid()) const;                      \
-  WebGL##_WebGLType* Find(const WebGLId<WebGL##_WebGLType>& aId) const;       \
+#define DECLARE_OBJECT_ID_MAP_FUNCS(_WebGLType)                                \
+  WebGLId<WebGL##_WebGLType> Insert(RefPtr<WebGL##_WebGLType>&& aObj,          \
+                                    const WebGLId<WebGL##_WebGLType>& aId =    \
+                                        WebGLId<WebGL##_WebGLType>::Invalid()) \
+      const;                                                                   \
+  WebGL##_WebGLType* Find(const WebGLId<WebGL##_WebGLType>& aId) const;        \
   void Remove(const WebGLId<WebGL##_WebGLType>& aId) const;
 
   // Use this when failure to find an object by ID is a fatal error.
-  template<typename WebGLType>
-  WebGLType*
-  MustFind(const WebGLId<WebGLType>& aId) const {
+  template <typename WebGLType>
+  WebGLType* MustFind(const WebGLId<WebGLType>& aId) const {
     auto ret = Find(aId);
     MOZ_RELEASE_ASSERT(ret);
     return ret;
@@ -171,8 +171,8 @@ protected:
   // Defines a host-side Object ID Map (client generates the IDs) and a few
   // convenient methods that forward to them.  If _WebGLType needs IDs to be
   // generated on the host side then use DEFINE_HOST_GEN_OBJECT_ID_MAP.
-#define DEFINE_OBJECT_ID_MAP(_WebGLType)                                      \
-  mutable ObjectIdMap<WebGL##_WebGLType> m##_WebGLType##Map;                  \
+#define DEFINE_OBJECT_ID_MAP(_WebGLType)                     \
+  mutable ObjectIdMap<WebGL##_WebGLType> m##_WebGLType##Map; \
   DECLARE_OBJECT_ID_MAP_FUNCS(_WebGLType)
 
   DEFINE_OBJECT_ID_MAP(Framebuffer);
@@ -189,8 +189,8 @@ protected:
 
   // Defines a host-side Object ID Map (host generates the IDs) and a few
   // convenient methods that forward to them.
-#define DEFINE_HOST_GEN_OBJECT_ID_MAP(_WebGLType)                             \
-  mutable HostGenObjectIdMap<WebGL##_WebGLType> m##_WebGLType##Map;           \
+#define DEFINE_HOST_GEN_OBJECT_ID_MAP(_WebGLType)                   \
+  mutable HostGenObjectIdMap<WebGL##_WebGLType> m##_WebGLType##Map; \
   DECLARE_OBJECT_ID_MAP_FUNCS(_WebGLType)
 
   DEFINE_HOST_GEN_OBJECT_ID_MAP(Buffer);
@@ -200,11 +200,11 @@ protected:
 #undef DEFINE_HOST_GEN_OBJECT_ID_MAP
 #undef DECLARE_OBJECT_ID_MAP_FUNCS
 
-  template<typename T>
-  nsTArray<WebGLId<T>>
-  MapArrayOfObjectsToIds(const nsTArray<RefPtr<T>>& objects) {
+  template <typename T>
+  nsTArray<WebGLId<T>> MapArrayOfObjectsToIds(
+      const nsTArray<RefPtr<T>>& objects) {
     nsTArray<WebGLId<T>> ret;
-    for (auto& object: objects) {
+    for (auto& object : objects) {
       ret.AppendElement(object ? object->GetWebGLId() : WebGLId<T>::Invalid());
     }
     return ret;
@@ -233,7 +233,7 @@ protected:
   // we may later ressurrect the object if the WebGLContext or some other
   // internal class still holds a reference to it.  In that case, we will still
   // keep the old ID.
-  template<typename WebGLType>
+  template <typename WebGLType>
   void ReleaseWebGLObject(const WebGLId<WebGLType>& o) {
     Remove(o);
   }
@@ -241,14 +241,11 @@ protected:
   // ------------------------- Composition -------------------------
   void Present();
 
-  Maybe<ICRData>
-  InitializeCanvasRenderer(layers::LayersBackend backend);
+  Maybe<ICRData> InitializeCanvasRenderer(layers::LayersBackend backend);
 
-  void
-  SetContextOptions(const WebGLContextOptions& options);
+  void SetContextOptions(const WebGLContextOptions& options);
 
-  SetDimensionsData
-  SetDimensions(int32_t signedWidth, int32_t signedHeight);
+  SetDimensionsData SetDimensions(int32_t signedWidth, int32_t signedHeight);
 
   gfx::IntSize DrawingBufferSize();
 
@@ -272,10 +269,10 @@ protected:
   MaybeWebGLVariant GetParameter(GLenum pname);
 
   void AttachShader(const WebGLId<WebGLProgram>& progId,
-               const WebGLId<WebGLShader>& shaderId);
+                    const WebGLId<WebGLShader>& shaderId);
 
   void BindAttribLocation(const WebGLId<WebGLProgram>& progId, GLuint location,
-                         const nsString& name);
+                          const nsString& name);
 
   void BindFramebuffer(GLenum target, const WebGLId<WebGLFramebuffer>& fb);
 
@@ -290,7 +287,7 @@ protected:
   void BlendFunc(GLenum sfactor, GLenum dfactor);
 
   void BlendFuncSeparate(GLenum srcRGB, GLenum dstRGB, GLenum srcAlpha,
-                    GLenum dstAlpha);
+                         GLenum dstAlpha);
 
   GLenum CheckFramebufferStatus(GLenum target);
 
@@ -307,17 +304,13 @@ protected:
 
   void CompileShader(const WebGLId<WebGLShader>& shaderId);
 
-  void
-  CreateFramebuffer(const WebGLId<WebGLFramebuffer>& aId);
+  void CreateFramebuffer(const WebGLId<WebGLFramebuffer>& aId);
 
-  void
-  CreateProgram(const WebGLId<WebGLProgram>& aId);
+  void CreateProgram(const WebGLId<WebGLProgram>& aId);
 
-  void
-  CreateRenderbuffer(const WebGLId<WebGLRenderbuffer>& aId);
+  void CreateRenderbuffer(const WebGLId<WebGLRenderbuffer>& aId);
 
-  void
-  CreateShader(GLenum aType, const WebGLId<WebGLShader>& aId);
+  void CreateShader(GLenum aType, const WebGLId<WebGLShader>& aId);
 
   void CullFace(GLenum face);
 
@@ -336,73 +329,64 @@ protected:
   void DepthRange(GLclampf zNear, GLclampf zFar);
 
   void DetachShader(const WebGLId<WebGLProgram>& progId,
-               const WebGLId<WebGLShader>& shaderId);
+                    const WebGLId<WebGLShader>& shaderId);
 
   void Flush();
 
   void Finish();
 
   void FramebufferRenderbuffer(GLenum target, GLenum attachment,
-                          GLenum rbTarget,
-                          const WebGLId<WebGLRenderbuffer>& rb);
+                               GLenum rbTarget,
+                               const WebGLId<WebGLRenderbuffer>& rb);
 
   void FramebufferTexture2D(GLenum target, GLenum attachment,
-                       GLenum texImageTarget,
-                       const WebGLId<WebGLTexture>& tex,
-                       GLint level);
+                            GLenum texImageTarget,
+                            const WebGLId<WebGLTexture>& tex, GLint level);
 
   void FrontFace(GLenum mode);
 
-  Maybe<WebGLActiveInfo>
-  GetActiveAttrib(const WebGLId<WebGLProgram>& progId, GLuint index);
+  Maybe<WebGLActiveInfo> GetActiveAttrib(const WebGLId<WebGLProgram>& progId,
+                                         GLuint index);
 
-  Maybe<WebGLActiveInfo>
-  GetActiveUniform(const WebGLId<WebGLProgram>& progId, GLuint index);
+  Maybe<WebGLActiveInfo> GetActiveUniform(const WebGLId<WebGLProgram>& progId,
+                                          GLuint index);
 
-  Maybe<nsTArray<WebGLId<WebGLShader>>>
-  GetAttachedShaders(const WebGLId<WebGLProgram>& progId);
+  Maybe<nsTArray<WebGLId<WebGLShader>>> GetAttachedShaders(
+      const WebGLId<WebGLProgram>& progId);
 
-  GLint
-  GetAttribLocation(const WebGLId<WebGLProgram>& progId, const nsString& name);
+  GLint GetAttribLocation(const WebGLId<WebGLProgram>& progId,
+                          const nsString& name);
 
-  MaybeWebGLVariant
-  GetBufferParameter(GLenum target, GLenum pname);
+  MaybeWebGLVariant GetBufferParameter(GLenum target, GLenum pname);
 
   GLenum GetError();
 
-  MaybeWebGLVariant
-  GetFramebufferAttachmentParameter(GLenum target,
-                                        GLenum attachment,
+  MaybeWebGLVariant GetFramebufferAttachmentParameter(GLenum target,
+                                                      GLenum attachment,
+                                                      GLenum pname);
+
+  MaybeWebGLVariant GetProgramParameter(const WebGLId<WebGLProgram>& progId,
                                         GLenum pname);
 
-  MaybeWebGLVariant
-  GetProgramParameter(const WebGLId<WebGLProgram>& progId, GLenum pname);
+  nsString GetProgramInfoLog(const WebGLId<WebGLProgram>& progId);
 
-  nsString
-  GetProgramInfoLog(const WebGLId<WebGLProgram>& progId);
+  MaybeWebGLVariant GetRenderbufferParameter(GLenum target, GLenum pname);
 
-  MaybeWebGLVariant
-  GetRenderbufferParameter(GLenum target, GLenum pname);
+  MaybeWebGLVariant GetShaderParameter(const WebGLId<WebGLShader>& shaderId,
+                                       GLenum pname);
 
-  MaybeWebGLVariant
-  GetShaderParameter(const WebGLId<WebGLShader>& shaderId, GLenum pname);
+  MaybeWebGLVariant GetShaderPrecisionFormat(GLenum shadertype,
+                                             GLenum precisiontype);
 
-  MaybeWebGLVariant
-  GetShaderPrecisionFormat(GLenum shadertype, GLenum precisiontype);
+  nsString GetShaderInfoLog(const WebGLId<WebGLShader>& shaderId);
 
-  nsString
-  GetShaderInfoLog(const WebGLId<WebGLShader>& shaderId);
+  nsString GetShaderSource(const WebGLId<WebGLShader>& shaderId);
 
-  nsString
-  GetShaderSource(const WebGLId<WebGLShader>& shaderId);
+  MaybeWebGLVariant GetUniform(const WebGLId<WebGLProgram>& progId,
+                               const WebGLId<WebGLUniformLocation>& locId);
 
-  MaybeWebGLVariant
-  GetUniform(const WebGLId<WebGLProgram>& progId,
-                 const WebGLId<WebGLUniformLocation>& locId);
-
-  WebGLId<WebGLUniformLocation>
-  GetUniformLocation(const WebGLId<WebGLProgram>& progId,
-                         const nsString& name);
+  WebGLId<WebGLUniformLocation> GetUniformLocation(
+      const WebGLId<WebGLProgram>& progId, const nsString& name);
 
   void Hint(GLenum target, GLenum mode);
 
@@ -418,14 +402,12 @@ protected:
 
   void Scissor(GLint x, GLint y, GLsizei width, GLsizei height);
 
-  void
-  ShaderSource(const WebGLId<WebGLShader>& shaderId, const nsString& source);
+  void ShaderSource(const WebGLId<WebGLShader>& shaderId,
+                    const nsString& source);
 
-  void
-  StencilFunc(GLenum func, GLint ref, GLuint mask);
+  void StencilFunc(GLenum func, GLint ref, GLuint mask);
 
-  void
-  StencilFuncSeparate(GLenum face, GLenum func, GLint ref, GLuint mask) ;
+  void StencilFuncSeparate(GLenum face, GLenum func, GLint ref, GLuint mask);
 
   void StencilMask(GLuint mask);
 
@@ -433,86 +415,69 @@ protected:
 
   void StencilOp(GLenum sfail, GLenum dpfail, GLenum dppass);
 
-  void
-  StencilOpSeparate(GLenum face, GLenum sfail, GLenum dpfail,
-                    GLenum dppass);
+  void StencilOpSeparate(GLenum face, GLenum sfail, GLenum dpfail,
+                         GLenum dppass);
 
   void Viewport(GLint x, GLint y, GLsizei width, GLsizei height);
 
   // ------------------------- Buffer Objects -------------------------
-  void
-  BindBuffer(GLenum target, const WebGLId<WebGLBuffer>& buffer);
+  void BindBuffer(GLenum target, const WebGLId<WebGLBuffer>& buffer);
 
-  void
-  BindBufferBase(GLenum target, GLuint index,
-                 const WebGLId<WebGLBuffer>& buffer);
+  void BindBufferBase(GLenum target, GLuint index,
+                      const WebGLId<WebGLBuffer>& buffer);
 
-  void
-  BindBufferRange(GLenum target, GLuint index,
-                  const WebGLId<WebGLBuffer>& buffer,
-                  WebGLintptr offset, WebGLsizeiptr size);
+  void BindBufferRange(GLenum target, GLuint index,
+                       const WebGLId<WebGLBuffer>& buffer, WebGLintptr offset,
+                       WebGLsizeiptr size);
 
-  WebGLId<WebGLBuffer>
-  CreateBuffer();
+  WebGLId<WebGLBuffer> CreateBuffer();
 
-  void
-  DeleteBuffer(const WebGLId<WebGLBuffer>& buf);
+  void DeleteBuffer(const WebGLId<WebGLBuffer>& buf);
 
-  void
-  CopyBufferSubData(GLenum readTarget, GLenum writeTarget,
-                    GLintptr readOffset, GLintptr writeOffset,
-                    GLsizeiptr size);
+  void CopyBufferSubData(GLenum readTarget, GLenum writeTarget,
+                         GLintptr readOffset, GLintptr writeOffset,
+                         GLsizeiptr size);
 
-  Maybe<nsTArray<uint8_t>>
-  GetBufferSubData(GLenum target, GLintptr srcByteOffset,
-                       size_t byteLen, bool useShmem);
+  Maybe<nsTArray<uint8_t>> GetBufferSubData(GLenum target,
+                                            GLintptr srcByteOffset,
+                                            size_t byteLen, bool useShmem);
 
-  void
-  BufferData(GLenum target, const RawBuffer<>& data,
-                 GLenum usage);
+  void BufferData(GLenum target, const RawBuffer<>& data, GLenum usage);
 
-  void
-  BufferSubData(GLenum target, WebGLsizeiptr dstByteOffset,
-                    const RawBuffer<>& srcData);
+  void BufferSubData(GLenum target, WebGLsizeiptr dstByteOffset,
+                     const RawBuffer<>& srcData);
 
   // -------------------------- Framebuffer Objects --------------------------
-  void
-  BlitFramebuffer(GLint srcX0, GLint srcY0, GLint srcX1, GLint srcY1,
-                  GLint dstX0, GLint dstY0, GLint dstX1, GLint dstY1,
-                  GLbitfield mask, GLenum filter);
+  void BlitFramebuffer(GLint srcX0, GLint srcY0, GLint srcX1, GLint srcY1,
+                       GLint dstX0, GLint dstY0, GLint dstX1, GLint dstY1,
+                       GLbitfield mask, GLenum filter);
 
-  void
-  FramebufferTextureLayer(GLenum target, GLenum attachment,
-                          const WebGLId<WebGLTexture>& textureId, GLint level,
-                          GLint layer);
+  void FramebufferTextureLayer(GLenum target, GLenum attachment,
+                               const WebGLId<WebGLTexture>& textureId,
+                               GLint level, GLint layer);
 
-  void
-  InvalidateFramebuffer(GLenum target,
-                        const nsTArray<GLenum>& attachments);
+  void InvalidateFramebuffer(GLenum target,
+                             const nsTArray<GLenum>& attachments);
 
-  void
-  InvalidateSubFramebuffer(GLenum target,
-                           const nsTArray<GLenum>& attachments,
-                           GLint x, GLint y,
-                           GLsizei width, GLsizei height);
+  void InvalidateSubFramebuffer(GLenum target,
+                                const nsTArray<GLenum>& attachments, GLint x,
+                                GLint y, GLsizei width, GLsizei height);
 
   void ReadBuffer(GLenum mode);
 
   // ----------------------- Renderbuffer objects -----------------------
-  Maybe<nsTArray<int32_t>>
-  GetInternalformatParameter(GLenum target, GLenum internalformat,
-                                 GLenum pname);
+  Maybe<nsTArray<int32_t>> GetInternalformatParameter(GLenum target,
+                                                      GLenum internalformat,
+                                                      GLenum pname);
 
-  void
-  RenderbufferStorage_base(GLenum target, GLsizei samples,
-                           GLenum internalFormat, GLsizei width,
-                           GLsizei height, FuncScopeId aFuncId);
+  void RenderbufferStorage_base(GLenum target, GLsizei samples,
+                                GLenum internalFormat, GLsizei width,
+                                GLsizei height, FuncScopeId aFuncId);
 
   // --------------------------- Texture objects ---------------------------
   void ActiveTexture(GLenum texUnit);
 
-  void
-  BindTexture(GLenum texTarget, const WebGLId<WebGLTexture>& tex);
+  void BindTexture(GLenum texTarget, const WebGLId<WebGLTexture>& tex);
 
   WebGLId<WebGLTexture> CreateTexture();
 
@@ -520,355 +485,277 @@ protected:
 
   void GenerateMipmap(GLenum texTarget);
 
-  void
-  CopyTexImage2D(GLenum target, GLint level, GLenum internalFormat,
-                 GLint x, GLint y, uint32_t width, uint32_t height,
-                 uint32_t depth);
+  void CopyTexImage2D(GLenum target, GLint level, GLenum internalFormat,
+                      GLint x, GLint y, uint32_t width, uint32_t height,
+                      uint32_t depth);
 
-  void
-  TexStorage(uint8_t funcDims, GLenum target, GLsizei levels,
-             GLenum internalFormat, GLsizei width, GLsizei height,
-             GLsizei depth, FuncScopeId aFuncId);
+  void TexStorage(uint8_t funcDims, GLenum target, GLsizei levels,
+                  GLenum internalFormat, GLsizei width, GLsizei height,
+                  GLsizei depth, FuncScopeId aFuncId);
 
-  void
-  TexImage(uint8_t funcDims, GLenum target, GLint level,
-           GLenum internalFormat, GLsizei width, GLsizei height,
-           GLsizei depth, GLint border, GLenum unpackFormat,
-           GLenum unpackType, PcqTexUnpack&& src,
-           FuncScopeId aFuncId);
+  void TexImage(uint8_t funcDims, GLenum target, GLint level,
+                GLenum internalFormat, GLsizei width, GLsizei height,
+                GLsizei depth, GLint border, GLenum unpackFormat,
+                GLenum unpackType, PcqTexUnpack&& src, FuncScopeId aFuncId);
 
-  void
-  TexSubImage(uint8_t funcDims, GLenum target, GLint level, GLint xOffset,
-              GLint yOffset, GLint zOffset, GLsizei width, GLsizei height,
-              GLsizei depth, GLenum unpackFormat, GLenum unpackType,
-              PcqTexUnpack&& src, FuncScopeId aFuncId);
+  void TexSubImage(uint8_t funcDims, GLenum target, GLint level, GLint xOffset,
+                   GLint yOffset, GLint zOffset, GLsizei width, GLsizei height,
+                   GLsizei depth, GLenum unpackFormat, GLenum unpackType,
+                   PcqTexUnpack&& src, FuncScopeId aFuncId);
 
-  void
-  CompressedTexImage(uint8_t funcDims, GLenum target, GLint level,
-                     GLenum internalFormat, GLsizei width, GLsizei height,
-                     GLsizei depth, GLint border,
-                     PcqTexUnpack&& src,
-                     const Maybe<GLsizei>& expectedImageSize,
-                     FuncScopeId aFuncId);
+  void CompressedTexImage(uint8_t funcDims, GLenum target, GLint level,
+                          GLenum internalFormat, GLsizei width, GLsizei height,
+                          GLsizei depth, GLint border, PcqTexUnpack&& src,
+                          const Maybe<GLsizei>& expectedImageSize,
+                          FuncScopeId aFuncId);
 
-  void
-  CompressedTexSubImage(uint8_t funcDims, GLenum target, GLint level,
-                        GLint xOffset, GLint yOffset, GLint zOffset,
-                        GLsizei width, GLsizei height, GLsizei depth,
-                        GLenum unpackFormat, PcqTexUnpack&& src,
-                        const Maybe<GLsizei>& expectedImageSize,
-                        FuncScopeId aFuncId);
+  void CompressedTexSubImage(uint8_t funcDims, GLenum target, GLint level,
+                             GLint xOffset, GLint yOffset, GLint zOffset,
+                             GLsizei width, GLsizei height, GLsizei depth,
+                             GLenum unpackFormat, PcqTexUnpack&& src,
+                             const Maybe<GLsizei>& expectedImageSize,
+                             FuncScopeId aFuncId);
 
-  void
-  CopyTexSubImage(uint8_t funcDims, GLenum target, GLint level,
-                  GLint xOffset, GLint yOffset, GLint zOffset, GLint x,
-                  GLint y, uint32_t width, uint32_t height, uint32_t depth,
-                  FuncScopeId aFuncId);
+  void CopyTexSubImage(uint8_t funcDims, GLenum target, GLint level,
+                       GLint xOffset, GLint yOffset, GLint zOffset, GLint x,
+                       GLint y, uint32_t width, uint32_t height, uint32_t depth,
+                       FuncScopeId aFuncId);
 
-  MaybeWebGLVariant
-  GetTexParameter(GLenum texTarget, GLenum pname);
+  MaybeWebGLVariant GetTexParameter(GLenum texTarget, GLenum pname);
 
-  void
-  TexParameter_base(GLenum texTarget, GLenum pname, const FloatOrInt& param);
+  void TexParameter_base(GLenum texTarget, GLenum pname,
+                         const FloatOrInt& param);
 
   // ------------------- Programs and shaders --------------------------------
-  void
-  UseProgram(const WebGLId<WebGLProgram>& prog);
-  
-  void
-  ValidateProgram(const WebGLId<WebGLProgram>& progId);
+  void UseProgram(const WebGLId<WebGLProgram>& prog);
 
-  GLint
-  GetFragDataLocation(const WebGLId<WebGLProgram>& progId,
-                          const nsString& name);
+  void ValidateProgram(const WebGLId<WebGLProgram>& progId);
+
+  GLint GetFragDataLocation(const WebGLId<WebGLProgram>& progId,
+                            const nsString& name);
 
   // ------------------------ Uniforms and attributes ------------------------
-  void
-  UniformNfv(const nsCString& funcName, uint8_t N,
-             const WebGLId<WebGLUniformLocation>& loc,
-             const nsTArray<float>& arr, GLuint elemOffset,
-             GLuint elemCountOverride);
+  void UniformNfv(const nsCString& funcName, uint8_t N,
+                  const WebGLId<WebGLUniformLocation>& loc,
+                  const nsTArray<float>& arr, GLuint elemOffset,
+                  GLuint elemCountOverride);
 
-  void
-  UniformNiv(const nsCString& funcName, uint8_t N,
-             const WebGLId<WebGLUniformLocation>& loc,
-             const nsTArray<int32_t>& arr, GLuint elemOffset,
-             GLuint elemCountOverride);
+  void UniformNiv(const nsCString& funcName, uint8_t N,
+                  const WebGLId<WebGLUniformLocation>& loc,
+                  const nsTArray<int32_t>& arr, GLuint elemOffset,
+                  GLuint elemCountOverride);
 
-  void
-  UniformNuiv(const nsCString& funcName, uint8_t N,
-              const WebGLId<WebGLUniformLocation>& loc,
-              const nsTArray<uint32_t>& arr, GLuint elemOffset,
-              GLuint elemCountOverride);
+  void UniformNuiv(const nsCString& funcName, uint8_t N,
+                   const WebGLId<WebGLUniformLocation>& loc,
+                   const nsTArray<uint32_t>& arr, GLuint elemOffset,
+                   GLuint elemCountOverride);
 
-  void
-  UniformMatrixAxBfv(const nsCString& funcName, uint8_t A, uint8_t B,
-                     const WebGLId<WebGLUniformLocation>& loc, bool transpose,
-                     const nsTArray<float>& arr, GLuint elemOffset,
-                     GLuint elemCountOverride);
+  void UniformMatrixAxBfv(const nsCString& funcName, uint8_t A, uint8_t B,
+                          const WebGLId<WebGLUniformLocation>& loc,
+                          bool transpose, const nsTArray<float>& arr,
+                          GLuint elemOffset, GLuint elemCountOverride);
 
-  void
-  UniformFVec(const WebGLId<WebGLUniformLocation>& aLoc,
-              const nsTArray<float>& vec);
+  void UniformFVec(const WebGLId<WebGLUniformLocation>& aLoc,
+                   const nsTArray<float>& vec);
 
-  void
-  UniformIVec(const WebGLId<WebGLUniformLocation>& aLoc,
-              const nsTArray<int32_t>& vec);
+  void UniformIVec(const WebGLId<WebGLUniformLocation>& aLoc,
+                   const nsTArray<int32_t>& vec);
 
-  void
-  UniformUIVec(const WebGLId<WebGLUniformLocation>& aLoc,
-               const nsTArray<uint32_t>& vec);
-  void
-  VertexAttrib4f(GLuint index, GLfloat x, GLfloat y, GLfloat z, GLfloat w,
-                 FuncScopeId aFuncId);
+  void UniformUIVec(const WebGLId<WebGLUniformLocation>& aLoc,
+                    const nsTArray<uint32_t>& vec);
+  void VertexAttrib4f(GLuint index, GLfloat x, GLfloat y, GLfloat z, GLfloat w,
+                      FuncScopeId aFuncId);
 
-  void
-  VertexAttribI4i(GLuint index, GLint x, GLint y, GLint z, GLint w,
-                  FuncScopeId aFuncId = FuncScopeId::vertexAttribI4i);
+  void VertexAttribI4i(GLuint index, GLint x, GLint y, GLint z, GLint w,
+                       FuncScopeId aFuncId = FuncScopeId::vertexAttribI4i);
 
-  void
-  VertexAttribI4ui(GLuint index, GLuint x, GLuint y, GLuint z, GLuint w,
-                   FuncScopeId aFuncId = FuncScopeId::vertexAttribI4ui);
+  void VertexAttribI4ui(GLuint index, GLuint x, GLuint y, GLuint z, GLuint w,
+                        FuncScopeId aFuncId = FuncScopeId::vertexAttribI4ui);
 
-  void
-  VertexAttribDivisor(GLuint index, GLuint divisor,
-                      bool aFromExtension = false);
+  void VertexAttribDivisor(GLuint index, GLuint divisor,
+                           bool aFromExtension = false);
 
-  MaybeWebGLVariant
-  GetIndexedParameter(GLenum target, GLuint index);
+  MaybeWebGLVariant GetIndexedParameter(GLenum target, GLuint index);
 
-  MaybeWebGLVariant
-  GetUniformIndices(const WebGLId<WebGLProgram>& progId,
-                        const nsTArray<nsString>& uniformNames);
+  MaybeWebGLVariant GetUniformIndices(const WebGLId<WebGLProgram>& progId,
+                                      const nsTArray<nsString>& uniformNames);
 
-  MaybeWebGLVariant
-  GetActiveUniforms(const WebGLId<WebGLProgram>& progId,
-                    const nsTArray<GLuint>& uniformIndices,
-                    GLenum pname);
+  MaybeWebGLVariant GetActiveUniforms(const WebGLId<WebGLProgram>& progId,
+                                      const nsTArray<GLuint>& uniformIndices,
+                                      GLenum pname);
 
-  GLuint
-  GetUniformBlockIndex(const WebGLId<WebGLProgram>& progId,
-                           const nsString& uniformBlockName);
+  GLuint GetUniformBlockIndex(const WebGLId<WebGLProgram>& progId,
+                              const nsString& uniformBlockName);
 
-  MaybeWebGLVariant
-  GetActiveUniformBlockParameter(const WebGLId<WebGLProgram>& progId,
-                                     GLuint uniformBlockIndex,
-                                     GLenum pname);
+  MaybeWebGLVariant GetActiveUniformBlockParameter(
+      const WebGLId<WebGLProgram>& progId, GLuint uniformBlockIndex,
+      GLenum pname);
 
-  nsString
-  GetActiveUniformBlockName(const WebGLId<WebGLProgram>& progId,
-                                GLuint uniformBlockIndex);
+  nsString GetActiveUniformBlockName(const WebGLId<WebGLProgram>& progId,
+                                     GLuint uniformBlockIndex);
 
-  void
-  UniformBlockBinding(const WebGLId<WebGLProgram>& progId,
-                      GLuint uniformBlockIndex,
-                      GLuint uniformBlockBinding);
+  void UniformBlockBinding(const WebGLId<WebGLProgram>& progId,
+                           GLuint uniformBlockIndex,
+                           GLuint uniformBlockBinding);
 
-  void
-  EnableVertexAttribArray(GLuint index);
+  void EnableVertexAttribArray(GLuint index);
 
-  void
-  DisableVertexAttribArray(GLuint index);
+  void DisableVertexAttribArray(GLuint index);
 
-  MaybeWebGLVariant
-  GetVertexAttrib(GLuint index, GLenum pname);
+  MaybeWebGLVariant GetVertexAttrib(GLuint index, GLenum pname);
 
-  WebGLsizeiptr
-  GetVertexAttribOffset(GLuint index, GLenum pname);  
+  WebGLsizeiptr GetVertexAttribOffset(GLuint index, GLenum pname);
 
-  void
-  VertexAttribAnyPointer(bool isFuncInt, GLuint index, GLint size,
-                         GLenum type, bool normalized, GLsizei stride,
-                         WebGLintptr byteOffset, FuncScopeId aFuncId);
+  void VertexAttribAnyPointer(bool isFuncInt, GLuint index, GLint size,
+                              GLenum type, bool normalized, GLsizei stride,
+                              WebGLintptr byteOffset, FuncScopeId aFuncId);
 
   // --------------------------- Buffer Operations --------------------------
-  void
-  ClearBufferfv(GLenum buffer, GLint drawBuffer, const nsTArray<float>& src,
-                    GLuint srcElemOffset);
-  void
-  ClearBufferiv(GLenum buffer, GLint drawBuffer, const nsTArray<int32_t>& src,
-                    GLuint srcElemOffset);
-  void
-  ClearBufferuiv(GLenum buffer, GLint drawBuffer, const nsTArray<uint32_t>& src,
-                     GLuint srcElemOffset);
-  void
-  ClearBufferfi(GLenum buffer, GLint drawBuffer, GLfloat depth,
-                GLint stencil);
+  void ClearBufferfv(GLenum buffer, GLint drawBuffer,
+                     const nsTArray<float>& src, GLuint srcElemOffset);
+  void ClearBufferiv(GLenum buffer, GLint drawBuffer,
+                     const nsTArray<int32_t>& src, GLuint srcElemOffset);
+  void ClearBufferuiv(GLenum buffer, GLint drawBuffer,
+                      const nsTArray<uint32_t>& src, GLuint srcElemOffset);
+  void ClearBufferfi(GLenum buffer, GLint drawBuffer, GLfloat depth,
+                     GLint stencil);
 
   // ------------------------------ Readback -------------------------------
-  void
-  ReadPixels1(GLint x, GLint y, GLsizei width, GLsizei height,
-              GLenum format, GLenum type, WebGLsizeiptr offset);
+  void ReadPixels1(GLint x, GLint y, GLsizei width, GLsizei height,
+                   GLenum format, GLenum type, WebGLsizeiptr offset);
 
-
-  Maybe<nsTArray<uint8_t>>
-  ReadPixels2(GLint x, GLint y, GLsizei width, GLsizei height,
-              GLenum format, GLenum type, size_t byteLen, bool useShmem);
+  Maybe<nsTArray<uint8_t>> ReadPixels2(GLint x, GLint y, GLsizei width,
+                                       GLsizei height, GLenum format,
+                                       GLenum type, size_t byteLen,
+                                       bool useShmem);
 
   // ----------------------------- Sampler -----------------------------------
-  void
-  CreateSampler(const WebGLId<WebGLSampler>& aId);
+  void CreateSampler(const WebGLId<WebGLSampler>& aId);
 
-  void
-  DeleteSampler(const WebGLId<WebGLSampler>& aId);
+  void DeleteSampler(const WebGLId<WebGLSampler>& aId);
 
-  void
-  BindSampler(GLuint unit, const WebGLId<WebGLSampler>& sampler);
+  void BindSampler(GLuint unit, const WebGLId<WebGLSampler>& sampler);
 
-  void
-  SamplerParameteri(const WebGLId<WebGLSampler>& samplerId,
-                    GLenum pname, GLint param);
+  void SamplerParameteri(const WebGLId<WebGLSampler>& samplerId, GLenum pname,
+                         GLint param);
 
-  void
-  SamplerParameterf(const WebGLId<WebGLSampler>& samplerId,
-                    GLenum pname, GLfloat param);
+  void SamplerParameterf(const WebGLId<WebGLSampler>& samplerId, GLenum pname,
+                         GLfloat param);
 
-  MaybeWebGLVariant
-  GetSamplerParameter(const WebGLId<WebGLSampler>& samplerId,
-                          GLenum pname);
+  MaybeWebGLVariant GetSamplerParameter(const WebGLId<WebGLSampler>& samplerId,
+                                        GLenum pname);
 
   // ------------------------------- GL Sync ---------------------------------
-  WebGLId<WebGLSync>
-  FenceSync(const WebGLId<WebGLSync>& aId, GLenum condition,
-                GLbitfield flags);
+  WebGLId<WebGLSync> FenceSync(const WebGLId<WebGLSync>& aId, GLenum condition,
+                               GLbitfield flags);
 
-  void
-  DeleteSync(const WebGLId<WebGLSync>& sync);
+  void DeleteSync(const WebGLId<WebGLSync>& sync);
 
-  GLenum
-  ClientWaitSync(const WebGLId<WebGLSync>& sync, GLbitfield flags,
-                 GLuint64 timeout);
+  GLenum ClientWaitSync(const WebGLId<WebGLSync>& sync, GLbitfield flags,
+                        GLuint64 timeout);
 
-  void
-  WaitSync(const WebGLId<WebGLSync>& sync, GLbitfield flags,
-           GLint64 timeout);
+  void WaitSync(const WebGLId<WebGLSync>& sync, GLbitfield flags,
+                GLint64 timeout);
 
-  MaybeWebGLVariant
-  GetSyncParameter(const WebGLId<WebGLSync>& sync, GLenum pname);
+  MaybeWebGLVariant GetSyncParameter(const WebGLId<WebGLSync>& sync,
+                                     GLenum pname);
 
   // -------------------------- Transform Feedback ---------------------------
-  void
-  CreateTransformFeedback(const WebGLId<WebGLTransformFeedback>& aId);
+  void CreateTransformFeedback(const WebGLId<WebGLTransformFeedback>& aId);
 
-  void
-  DeleteTransformFeedback(const WebGLId<WebGLTransformFeedback>& tf);
+  void DeleteTransformFeedback(const WebGLId<WebGLTransformFeedback>& tf);
 
-  void
-  BindTransformFeedback(GLenum target, const WebGLId<WebGLTransformFeedback>& tf);
+  void BindTransformFeedback(GLenum target,
+                             const WebGLId<WebGLTransformFeedback>& tf);
 
-  void
-  BeginTransformFeedback(GLenum primitiveMode);
+  void BeginTransformFeedback(GLenum primitiveMode);
 
-  void
-  EndTransformFeedback();
+  void EndTransformFeedback();
 
-  void
-  PauseTransformFeedback();
+  void PauseTransformFeedback();
 
-  void
-  ResumeTransformFeedback();
+  void ResumeTransformFeedback();
 
-  void
-  TransformFeedbackVaryings(const WebGLId<WebGLProgram>& prog,
-                                const nsTArray<nsString>& varyings,
-                                GLenum bufferMode);
+  void TransformFeedbackVaryings(const WebGLId<WebGLProgram>& prog,
+                                 const nsTArray<nsString>& varyings,
+                                 GLenum bufferMode);
 
-  Maybe<WebGLActiveInfo>
-  GetTransformFeedbackVarying(const WebGLId<WebGLProgram>& prog,
-                                  GLuint index);
+  Maybe<WebGLActiveInfo> GetTransformFeedbackVarying(
+      const WebGLId<WebGLProgram>& prog, GLuint index);
 
   // ------------------------------ Debug ------------------------------------
-  void
-  EnqueueError(GLenum aGLError, const nsCString& aMsg);
+  void EnqueueError(GLenum aGLError, const nsCString& aMsg);
 
-  void
-  EnqueueWarning(const nsCString& aMsg);
+  void EnqueueWarning(const nsCString& aMsg);
 
   // -------------------------------------------------------------------------
-  // Host-side extension methods.  Calls in the client are forwarded to the host.
-  // Some extension methods are also available in WebGL2 Contexts.  For them, the
-  // final parameter is a boolean indicating if the call originated from an
-  // extension.
+  // Host-side extension methods.  Calls in the client are forwarded to the
+  // host. Some extension methods are also available in WebGL2 Contexts.  For
+  // them, the final parameter is a boolean indicating if the call originated
+  // from an extension.
   // -------------------------------------------------------------------------
 
   // Misc. Extensions
   void EnableExtension(dom::CallerType callerType, WebGLExtensionID ext);
 
-  const Maybe<ExtensionSets>
-  GetSupportedExtensions();
+  const Maybe<ExtensionSets> GetSupportedExtensions();
 
-  void
-  DrawBuffers(const nsTArray<GLenum>& buffers,
-                  bool aFromExtension = false);
+  void DrawBuffers(const nsTArray<GLenum>& buffers,
+                   bool aFromExtension = false);
 
-  Maybe<nsTArray<nsString>>
-  GetASTCExtensionSupportedProfiles() const;
+  Maybe<nsTArray<nsString>> GetASTCExtensionSupportedProfiles() const;
 
-  nsString
-  GetTranslatedShaderSource(const WebGLId<WebGLShader>& shader) const;
+  nsString GetTranslatedShaderSource(const WebGLId<WebGLShader>& shader) const;
 
-  void
-  LoseContext(bool isSimulated = true);
+  void LoseContext(bool isSimulated = true);
 
-  void
-  RestoreContext();
+  void RestoreContext();
 
-  MaybeWebGLVariant
-  MOZDebugGetParameter(GLenum pname) const;
+  MaybeWebGLVariant MOZDebugGetParameter(GLenum pname) const;
 
   // VertexArrayObjectEXT
-  void
-  BindVertexArray(const WebGLId<WebGLVertexArray>& array,
-                  bool aFromExtension = false);
+  void BindVertexArray(const WebGLId<WebGLVertexArray>& array,
+                       bool aFromExtension = false);
 
-  void
-  CreateVertexArray(const WebGLId<WebGLVertexArray>& aId,
-                        bool aFromExtension = false);
+  void CreateVertexArray(const WebGLId<WebGLVertexArray>& aId,
+                         bool aFromExtension = false);
 
-  void
-  DeleteVertexArray(const WebGLId<WebGLVertexArray>& array,
-                    bool aFromExtension = false);
+  void DeleteVertexArray(const WebGLId<WebGLVertexArray>& array,
+                         bool aFromExtension = false);
 
   // InstancedElementsEXT
-  void
-  DrawArraysInstanced(GLenum mode, GLint first, GLsizei count,
-                      GLsizei primcount, bool aFromExtension = false);
+  void DrawArraysInstanced(GLenum mode, GLint first, GLsizei count,
+                           GLsizei primcount, bool aFromExtension = false);
 
-  void
-  DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type,
-                        WebGLintptr offset, GLsizei primcount,
-                        FuncScopeId aFuncId = FuncScopeId::drawElementsInstanced,
-                        bool aFromExtension = false);
+  void DrawElementsInstanced(
+      GLenum mode, GLsizei count, GLenum type, WebGLintptr offset,
+      GLsizei primcount,
+      FuncScopeId aFuncId = FuncScopeId::drawElementsInstanced,
+      bool aFromExtension = false);
 
-  void
-  DrawRangeElements(GLenum mode, GLuint start, GLuint end, GLsizei count,
-                    GLenum type, WebGLintptr byteOffset);
+  void DrawRangeElements(GLenum mode, GLuint start, GLuint end, GLsizei count,
+                         GLenum type, WebGLintptr byteOffset);
 
   // GLQueryEXT
-  void
-  CreateQuery(const WebGLId<WebGLQuery>& aId,
+  void CreateQuery(const WebGLId<WebGLQuery>& aId,
+                   bool aFromExtension = false) const;
+
+  void DeleteQuery(const WebGLId<WebGLQuery>& query,
+                   bool aFromExtension = false) const;
+
+  void BeginQuery(GLenum target, const WebGLId<WebGLQuery>& query,
                   bool aFromExtension = false) const;
 
-  void
-  DeleteQuery(const WebGLId<WebGLQuery>& query, bool aFromExtension = false) const;
+  void EndQuery(GLenum target, bool aFromExtension = false) const;
 
-  void
-  BeginQuery(GLenum target, const WebGLId<WebGLQuery>& query,
-             bool aFromExtension = false) const;
+  void QueryCounter(const WebGLId<WebGLQuery>& query, GLenum target) const;
 
-  void
-  EndQuery(GLenum target, bool aFromExtension = false) const;
+  MaybeWebGLVariant GetQuery(GLenum target, GLenum pname,
+                             bool aFromExtension = false) const;
 
-  void
-  QueryCounter(const WebGLId<WebGLQuery>& query, GLenum target) const;
-
-  MaybeWebGLVariant
-  GetQuery(GLenum target, GLenum pname,
-               bool aFromExtension = false) const;
-
-  MaybeWebGLVariant
-  GetQueryParameter(const WebGLId<WebGLQuery>& query, GLenum pname,
-                        bool aFromExtension = false) const;
+  MaybeWebGLVariant GetQueryParameter(const WebGLId<WebGLQuery>& query,
+                                      GLenum pname,
+                                      bool aFromExtension = false) const;
 
   // -------------------------------------------------------------------------
   // Client-side methods.  Calls in the Host are forwarded to the client.
@@ -899,15 +786,13 @@ protected:
     return const_cast<WebGL2Context*>(constThis->GetWebGL2Context());
   }
 
-  mozilla::ipc::Shmem PopShmem() {
-    return mShmemStack.PopLastElement();
-  }
+  mozilla::ipc::Shmem PopShmem() { return mShmemStack.PopLastElement(); }
 
   RefPtr<WebGLContext> mContext;
   nsTArray<mozilla::ipc::Shmem> mShmemStack;
   ClientWebGLContext* mClientContext;
 };
 
-} // namespace mozilla
+}  // namespace mozilla
 
-#endif // HOSTWEBGLCONTEXT_H_
+#endif  // HOSTWEBGLCONTEXT_H_

@@ -264,9 +264,9 @@ static uint32_t FallbackOnZero(uint32_t val, uint32_t fallback) {
   return (val ? val : fallback);
 }
 
-TexUnpackBlob::TexUnpackBlob(const WebGLPixelStore& pixelStore, TexImageTarget target,
-                             uint32_t rowLength, uint32_t width,
-                             uint32_t height, uint32_t depth,
+TexUnpackBlob::TexUnpackBlob(const WebGLPixelStore& pixelStore,
+                             TexImageTarget target, uint32_t rowLength,
+                             uint32_t width, uint32_t height, uint32_t depth,
                              gfxAlphaType srcAlphaType)
     : mAlignment(pixelStore.mUnpackAlignment),
       mRowLength(rowLength),
@@ -331,8 +331,9 @@ bool TexUnpackBlob::ConvertIfNeeded(
     return srcIsPremult != dstIsPremult;
   };
 
-  const auto srcOrigin = (webgl->mPixelStore.mFlipY ? gl::OriginPos::TopLeft
-                                                   : gl::OriginPos::BottomLeft);
+  const auto srcOrigin =
+      (webgl->mPixelStore.mFlipY ? gl::OriginPos::TopLeft
+                                 : gl::OriginPos::BottomLeft);
   const auto dstOrigin = gl::OriginPos::BottomLeft;
 
   if (srcFormat != dstFormat) {
@@ -399,13 +400,14 @@ static GLenum DoTexOrSubImage(bool isSubImage, gl::GLContext* gl,
 //////////////////////////////////////////////////////////////////////////////////////////
 // TexUnpackBytes
 
-TexUnpackBytes::TexUnpackBytes(const WebGLPixelStore& pixelStore, TexImageTarget target,
-                               uint32_t width, uint32_t height, uint32_t depth,
+TexUnpackBytes::TexUnpackBytes(const WebGLPixelStore& pixelStore,
+                               TexImageTarget target, uint32_t width,
+                               uint32_t height, uint32_t depth,
                                bool isClientData, const uint8_t* ptr,
                                size_t availBytes)
     : TexUnpackBlob(pixelStore, target,
-                    FallbackOnZero(pixelStore.mUnpackRowLength, width),
-                    width, height, depth, gfxAlphaType::NonPremult),
+                    FallbackOnZero(pixelStore.mUnpackRowLength, width), width,
+                    height, depth, gfxAlphaType::NonPremult),
       mIsClientData(isClientData),
       mPtr(ptr),
       mAvailBytes(availBytes) {}
@@ -582,12 +584,12 @@ bool TexUnpackBytes::TexOrSubImage(bool isSubImage, bool needsRespec,
 // TexUnpackImage
 
 TexUnpackImage::TexUnpackImage(const WebGLContext* webgl, TexImageTarget target,
-                               uint32_t rowLength,
-                               uint32_t width, uint32_t height, uint32_t depth,
+                               uint32_t rowLength, uint32_t width,
+                               uint32_t height, uint32_t depth,
                                layers::Image* image, gfxAlphaType srcAlphaType)
-    : TexUnpackBlob(webgl->GetPixelStore(), target, rowLength, width, height, depth,
-                    srcAlphaType)
-    , mImage(image) {}
+    : TexUnpackBlob(webgl->GetPixelStore(), target, rowLength, width, height,
+                    depth, srcAlphaType),
+      mImage(image) {}
 
 TexUnpackImage::~TexUnpackImage() {}
 
@@ -687,7 +689,7 @@ bool TexUnpackImage::TexOrSubImage(bool isSubImage, bool needsRespec,
     const gfx::IntSize dstSize(mWidth, mHeight);
     const auto dstOrigin =
         (webgl->mPixelStore.mFlipY ? gl::OriginPos::TopLeft
-                                  : gl::OriginPos::BottomLeft);
+                                   : gl::OriginPos::BottomLeft);
     if (!gl->BlitHelper()->BlitImageToFramebuffer(mImage, dstSize, dstOrigin)) {
       fallbackReason = "likely bug: failed to blit";
       break;
@@ -740,9 +742,8 @@ TexUnpackSurface::TexUnpackSurface(const ClientWebGLContext* webgl,
                                    uint32_t height, uint32_t depth,
                                    gfx::DataSourceSurface* surf,
                                    gfxAlphaType srcAlphaType)
-    : TexUnpackBlob(webgl->GetPixelStore(), target,
-                    surf->GetSize().width, width, height, depth,
-                    srcAlphaType),
+    : TexUnpackBlob(webgl->GetPixelStore(), target, surf->GetSize().width,
+                    width, height, depth, srcAlphaType),
       mSurf(surf) {}
 
 TexUnpackSurface::TexUnpackSurface(const WebGLContext* webgl,
@@ -750,9 +751,8 @@ TexUnpackSurface::TexUnpackSurface(const WebGLContext* webgl,
                                    uint32_t height, uint32_t depth,
                                    gfx::DataSourceSurface* surf,
                                    gfxAlphaType srcAlphaType)
-    : TexUnpackBlob(webgl->GetPixelStore(), target,
-                    surf->GetSize().width, width, height, depth,
-                    srcAlphaType),
+    : TexUnpackBlob(webgl->GetPixelStore(), target, surf->GetSize().width,
+                    width, height, depth, srcAlphaType),
       mSurf(surf) {}
 
 //////////
@@ -907,8 +907,8 @@ bool TexUnpackSurface::TexOrSubImage(
 
 //////////
 
-mozilla::ipc::PcqStatus
-TexUnpackBytes::Write(mozilla::ipc::ProducerView& aView) {
+mozilla::ipc::PcqStatus TexUnpackBytes::Write(
+    mozilla::ipc::ProducerView& aView) {
   PcqStatus status = aView.WriteParam(mAlignment);
   status = IsSuccess(status) ? aView.WriteParam(mRowLength) : status;
   status = IsSuccess(status) ? aView.WriteParam(mImageHeight) : status;
@@ -923,19 +923,38 @@ TexUnpackBytes::Write(mozilla::ipc::ProducerView& aView) {
   return IsSuccess(status) ? aView.Write(mPtr, mAvailBytes) : status;
 }
 
-/* static */ mozilla::ipc::PcqStatus
-TexUnpackBytes::Read(mozilla::ipc::ConsumerView& aView,
-                     webgl::TexUnpackBytes* aTexBytes) {
-  PcqStatus status = aView.ReadParam(aTexBytes ? &aTexBytes->mAlignment : nullptr);
-  status = IsSuccess(status) ? aView.ReadParam(aTexBytes ? &aTexBytes->mRowLength : nullptr) : status;
-  status = IsSuccess(status) ? aView.ReadParam(aTexBytes ? &aTexBytes->mImageHeight : nullptr) : status;
-  status = IsSuccess(status) ? aView.ReadParam(aTexBytes ? &aTexBytes->mSkipPixels : nullptr) : status;
-  status = IsSuccess(status) ? aView.ReadParam(aTexBytes ? &aTexBytes->mSkipRows : nullptr) : status;
-  status = IsSuccess(status) ? aView.ReadParam(aTexBytes ? &aTexBytes->mSkipImages : nullptr) : status;
-  status = IsSuccess(status) ? aView.ReadParam(aTexBytes ? &aTexBytes->mWidth : nullptr) : status;
-  status = IsSuccess(status) ? aView.ReadParam(aTexBytes ? &aTexBytes->mHeight : nullptr) : status;
-  status = IsSuccess(status) ? aView.ReadParam(aTexBytes ? &aTexBytes->mDepth : nullptr) : status;
-  status = IsSuccess(status) ? aView.ReadParam(aTexBytes ? &aTexBytes->mSrcAlphaType : nullptr) : status;
+/* static */ mozilla::ipc::PcqStatus TexUnpackBytes::Read(
+    mozilla::ipc::ConsumerView& aView, webgl::TexUnpackBytes* aTexBytes) {
+  PcqStatus status =
+      aView.ReadParam(aTexBytes ? &aTexBytes->mAlignment : nullptr);
+  status = IsSuccess(status)
+               ? aView.ReadParam(aTexBytes ? &aTexBytes->mRowLength : nullptr)
+               : status;
+  status = IsSuccess(status)
+               ? aView.ReadParam(aTexBytes ? &aTexBytes->mImageHeight : nullptr)
+               : status;
+  status = IsSuccess(status)
+               ? aView.ReadParam(aTexBytes ? &aTexBytes->mSkipPixels : nullptr)
+               : status;
+  status = IsSuccess(status)
+               ? aView.ReadParam(aTexBytes ? &aTexBytes->mSkipRows : nullptr)
+               : status;
+  status = IsSuccess(status)
+               ? aView.ReadParam(aTexBytes ? &aTexBytes->mSkipImages : nullptr)
+               : status;
+  status = IsSuccess(status)
+               ? aView.ReadParam(aTexBytes ? &aTexBytes->mWidth : nullptr)
+               : status;
+  status = IsSuccess(status)
+               ? aView.ReadParam(aTexBytes ? &aTexBytes->mHeight : nullptr)
+               : status;
+  status = IsSuccess(status)
+               ? aView.ReadParam(aTexBytes ? &aTexBytes->mDepth : nullptr)
+               : status;
+  status =
+      IsSuccess(status)
+          ? aView.ReadParam(aTexBytes ? &aTexBytes->mSrcAlphaType : nullptr)
+          : status;
   uint8_t* ptr = nullptr;
   size_t availBytes;
   status = IsSuccess(status) ? aView.ReadParam(&availBytes) : status;
@@ -953,18 +972,16 @@ TexUnpackBytes::Read(mozilla::ipc::ConsumerView& aView,
 }
 
 size_t TexUnpackBytes::Size() const {
-  return (9 * sizeof(uint32_t)) + sizeof(gfxAlphaType) +
-         sizeof(size_t) + mAvailBytes;
+  return (9 * sizeof(uint32_t)) + sizeof(gfxAlphaType) + sizeof(size_t) +
+         mAvailBytes;
 }
 
-mozilla::ipc::PcqStatus
-TexUnpackSurface::Write(mozilla::ipc::ProducerView& aView) {
+mozilla::ipc::PcqStatus TexUnpackSurface::Write(
+    mozilla::ipc::ProducerView& aView) {
   MOZ_ASSERT_UNREACHABLE("TODO: Write as TexUnpackBytes");
 }
 
-size_t TexUnpackSurface::Size() const {
-  MOZ_ASSERT_UNREACHABLE("TODO:");
-}
+size_t TexUnpackSurface::Size() const { MOZ_ASSERT_UNREACHABLE("TODO:"); }
 
 }  // namespace webgl
 
@@ -985,18 +1002,18 @@ struct TexUnpackWriteMatcher {
 
   PcqStatus operator()(WebGLTexImageData& o) {
     PcqStatus status = mView.WriteParam(TexUnpackType::ImageType);
-    return IsSuccess(status) ? mView.WriteParam(o) : status; 
+    return IsSuccess(status) ? mView.WriteParam(o) : status;
   }
 
   PcqStatus operator()(WebGLTexPboOffset& o) {
     PcqStatus status = mView.WriteParam(TexUnpackType::PboType);
-    return IsSuccess(status) ? mView.WriteParam(o) : status; 
+    return IsSuccess(status) ? mView.WriteParam(o) : status;
   }
 
   ProducerView& mView;
 
  private:
-  template<typename T>
+  template <typename T>
   PcqStatus WriteTexUnpack(UniquePtr<T>& o) {
     PcqStatus status = mView.WriteParam(static_cast<bool>(o));
     if ((!IsSuccess(status)) || (!o)) {
@@ -1015,7 +1032,7 @@ PcqStatus PcqTexUnpack::Write(ProducerView& aProducerView) {
     return aProducerView.WriteParam(TexUnpackType::NoType);
   }
 
-  return mMaybeBlob.ref().match(TexUnpackWriteMatcher { aProducerView });
+  return mMaybeBlob.ref().match(TexUnpackWriteMatcher{aProducerView});
 }
 
 /* static */
@@ -1025,13 +1042,13 @@ PcqStatus PcqTexUnpack::Read(PcqTexUnpack* aPcqTexUnpack,
     aPcqTexUnpack->mMaybeBlob = Nothing();
   }
 
-  TexUnpackType unpackType; 
+  TexUnpackType unpackType;
   PcqStatus status = aConsumerView.ReadParam(&unpackType);
   if (!IsSuccess(status)) {
     return status;
   }
 
-  switch(unpackType) {
+  switch (unpackType) {
     case TexUnpackType::NoType:
       return status;
 
@@ -1042,8 +1059,7 @@ PcqStatus PcqTexUnpack::Read(PcqTexUnpack* aPcqTexUnpack,
       if (aPcqTexUnpack) {
         texBytes = MakeUnique<webgl::TexUnpackBytes>();
       }
-      status =
-        webgl::TexUnpackBytes::Read(aConsumerView, texBytes.get());
+      status = webgl::TexUnpackBytes::Read(aConsumerView, texBytes.get());
       if (IsSuccess(status) && aPcqTexUnpack) {
         aPcqTexUnpack->mMaybeBlob = AsSomeVariant(std::move(texBytes));
       }
@@ -1052,8 +1068,7 @@ PcqStatus PcqTexUnpack::Read(PcqTexUnpack* aPcqTexUnpack,
 
     case TexUnpackType::ImageType: {
       WebGLTexImageData texImage;
-      status =
-        aConsumerView.ReadParam(aPcqTexUnpack ? &texImage : nullptr);
+      status = aConsumerView.ReadParam(aPcqTexUnpack ? &texImage : nullptr);
       if (IsSuccess(status) && aPcqTexUnpack) {
         aPcqTexUnpack->mMaybeBlob = AsSomeVariant(texImage);
       }
@@ -1062,8 +1077,7 @@ PcqStatus PcqTexUnpack::Read(PcqTexUnpack* aPcqTexUnpack,
 
     case TexUnpackType::PboType: {
       WebGLTexPboOffset texPbo;
-      status =
-        aConsumerView.ReadParam(aPcqTexUnpack ? &texPbo : nullptr);
+      status = aConsumerView.ReadParam(aPcqTexUnpack ? &texPbo : nullptr);
       if (IsSuccess(status) && aPcqTexUnpack) {
         aPcqTexUnpack->mMaybeBlob = AsSomeVariant(texPbo);
       }
@@ -1094,43 +1108,41 @@ size_t PcqTexUnpack::MinSize() const {
   return sizeof(TexUnpackType) + mMaybeBlob.ref().match(Matcher());
 }
 
-UniquePtr<webgl::TexUnpackBlob>
-PcqTexUnpack::TakeBlob(WebGLContext* aContext) {
+UniquePtr<webgl::TexUnpackBlob> PcqTexUnpack::TakeBlob(WebGLContext* aContext) {
   if (!mMaybeBlob) {
     return nullptr;
   }
 
   struct Matcher {
-    UniquePtr<webgl::TexUnpackBlob>
-    operator()(UniquePtr<webgl::TexUnpackBytes>& o) {
+    UniquePtr<webgl::TexUnpackBlob> operator()(
+        UniquePtr<webgl::TexUnpackBytes>& o) {
       if (!mContext->ValidateNullPixelUnpackBuffer()) {
         return nullptr;
       }
       return std::move(o);
     }
 
-    UniquePtr<webgl::TexUnpackBlob>
-    operator()(UniquePtr<webgl::TexUnpackSurface>& o) {
-      MOZ_ASSERT_UNREACHABLE("TakeBlob requires a TexUnpackBytes or WebGLTexPboOffset");
+    UniquePtr<webgl::TexUnpackBlob> operator()(
+        UniquePtr<webgl::TexUnpackSurface>& o) {
+      MOZ_ASSERT_UNREACHABLE(
+          "TakeBlob requires a TexUnpackBytes or WebGLTexPboOffset");
       return nullptr;
     }
 
-    UniquePtr<webgl::TexUnpackBlob>
-    operator()(WebGLTexImageData& o) {
+    UniquePtr<webgl::TexUnpackBlob> operator()(WebGLTexImageData& o) {
       return mContext->TexUnpackBytesFromTexImageData(o);
     }
 
-    UniquePtr<webgl::TexUnpackBlob>
-    operator()(WebGLTexPboOffset& o) {
-      return mContext->TexUnpackBytesFromTexPboOffset(o.mTarget, o.mWidth,
-        o.mHeight, o.mDepth, o.mPboOffset,
-        o.mHasExpectedImageSize ? Some(o.mExpectedImageSize) : Nothing());
+    UniquePtr<webgl::TexUnpackBlob> operator()(WebGLTexPboOffset& o) {
+      return mContext->TexUnpackBytesFromTexPboOffset(
+          o.mTarget, o.mWidth, o.mHeight, o.mDepth, o.mPboOffset,
+          o.mHasExpectedImageSize ? Some(o.mExpectedImageSize) : Nothing());
     }
 
     WebGLContext* mContext;
   };
 
-  return mMaybeBlob.ref().match(Matcher { aContext });
+  return mMaybeBlob.ref().match(Matcher{aContext});
 }
 
 }  // namespace mozilla

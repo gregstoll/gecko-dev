@@ -67,7 +67,7 @@ void CopyableCanvasRenderer::Initialize(const CanvasInitializeData& aData) {
   } else if (aData.mRenderer) {
     mAsyncRenderer = aData.mRenderer;
     mOriginPos = gl::OriginPos::BottomLeft;
-  } else if (aData.mOOPRenderer)  {
+  } else if (aData.mOOPRenderer) {
     mOOPRenderer = aData.mOOPRenderer;
   }
 
@@ -100,7 +100,7 @@ void CopyableCanvasRenderer::Destroy() {
 }
 
 already_AddRefed<SourceSurface> CopyableCanvasRenderer::ReadbackSurface() {
-  MOZ_ASSERT(!mOOPRenderer);   // TODO: DLP: Do I need this?
+  MOZ_ASSERT(!mOOPRenderer);  // TODO: DLP: Do I need this?
 
   struct ScopedFireTransactionCallback {
     explicit ScopedFireTransactionCallback(CopyableCanvasRenderer* aRenderer)

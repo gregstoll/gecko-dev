@@ -75,8 +75,8 @@ void WebGL2Context::SamplerParameterf(WebGLSampler& sampler, GLenum pname,
   sampler.SamplerParameter(pname, FloatOrInt(param));
 }
 
-MaybeWebGLVariant WebGL2Context::GetSamplerParameter(const WebGLSampler& sampler,
-                                        GLenum pname) {
+MaybeWebGLVariant WebGL2Context::GetSamplerParameter(
+    const WebGLSampler& sampler, GLenum pname) {
   const FuncScope funcScope(*this, "getSamplerParameter");
   if (IsContextLost()) return Nothing();
 

@@ -13,14 +13,12 @@ namespace mozilla {
 
 namespace dom {
 
-/* static */ WebGLParent*
-WebGLParent::Create(WebGLVersion aVersion,
-                    UniquePtr<mozilla::HostWebGLCommandSink>&& aCommandSink,
-                    UniquePtr<mozilla::HostWebGLErrorSource>&& aErrorSource)
-{
-  UniquePtr<HostWebGLContext> host =
-    HostWebGLContext::Create(aVersion, std::move(aCommandSink),
-                             std::move(aErrorSource));
+/* static */ WebGLParent* WebGLParent::Create(
+    WebGLVersion aVersion,
+    UniquePtr<mozilla::HostWebGLCommandSink>&& aCommandSink,
+    UniquePtr<mozilla::HostWebGLErrorSource>&& aErrorSource) {
+  UniquePtr<HostWebGLContext> host = HostWebGLContext::Create(
+      aVersion, std::move(aCommandSink), std::move(aErrorSource));
 
   if (!host) {
     WEBGL_BRIDGE_LOGE("Failed to create HostWebGLContext");
@@ -37,21 +35,17 @@ WebGLParent::Create(WebGLVersion aVersion,
 }
 
 WebGLParent::WebGLParent(UniquePtr<HostWebGLContext>&& aHost)
-  : mHost(std::move(aHost))
-{}
+    : mHost(std::move(aHost)) {}
 
-
-bool
-WebGLParent::BeginCommandQueueDrain() {
+bool WebGLParent::BeginCommandQueueDrain() {
   if (mRunCommandsRunnable) {
     // already running
     return true;
   }
 
   WeakPtr<WebGLParent> weakThis = this;
-  mRunCommandsRunnable =
-    NS_NewRunnableFunction("RunWebGLCommands",
-                           [weakThis]() { MaybeRunCommandQueue(weakThis); });
+  mRunCommandsRunnable = NS_NewRunnableFunction(
+      "RunWebGLCommands", [weakThis]() { MaybeRunCommandQueue(weakThis); });
   if (!mRunCommandsRunnable) {
     MOZ_ASSERT_UNREACHABLE("Failed to create RunWebGLCommands Runnable");
     return false;
@@ -61,8 +55,8 @@ WebGLParent::BeginCommandQueueDrain() {
   return RunCommandQueue();
 }
 
-/* static */ bool
-WebGLParent::MaybeRunCommandQueue(const WeakPtr<WebGLParent>& weakWebGLParent) {
+/* static */ bool WebGLParent::MaybeRunCommandQueue(
+    const WeakPtr<WebGLParent>& weakWebGLParent) {
   // We don't have to worry about WebGLParent being deleted from under us
   // as its not thread-safe so we must be the only thread using it.  In fact,
   // WeakRef cannot atomically promote to a RefPtr so it is not thread safe
@@ -76,16 +70,16 @@ WebGLParent::MaybeRunCommandQueue(const WeakPtr<WebGLParent>& weakWebGLParent) {
   return true;
 }
 
-bool
-WebGLParent::RunCommandQueue() {
+bool WebGLParent::RunCommandQueue() {
   if (!mRunCommandsRunnable) {
     // The actor finished.  Do not re-issue the task.
     return true;
   }
 
-  static const uint32_t MaxWebGLCommandTimeSliceMs = 1000/30;     // 33ms or about 30fps
+  static const uint32_t MaxWebGLCommandTimeSliceMs =
+      1000 / 30;  // 33ms or about 30fps
   TimeDuration timeSlice =
-    TimeDuration::FromMilliseconds(MaxWebGLCommandTimeSliceMs);
+      TimeDuration::FromMilliseconds(MaxWebGLCommandTimeSliceMs);
   CommandResult result = mHost->RunCommandsForDuration(timeSlice);
   bool success = (result == CommandResult::Success) ||
                  (result == CommandResult::QueueEmpty);
@@ -111,11 +105,13 @@ mozilla::ipc::IPCResult WebGLParent::Recv__delete__() {
 
 void WebGLParent::ActorDestroy(ActorDestroyReason aWhy) { mHost = nullptr; }
 
-mozilla::ipc::IPCResult
-WebGLParent::RecvUpdateCompositableHandle(layers::PLayerTransactionParent* aLayerTransaction,
-                                   const CompositableHandle& aHandle) {
-  auto layerTrans = static_cast<layers::LayerTransactionParent*>(aLayerTransaction);
-  RefPtr<layers::CompositableHost> compositableHost(layerTrans->FindCompositable(aHandle));
+mozilla::ipc::IPCResult WebGLParent::RecvUpdateCompositableHandle(
+    layers::PLayerTransactionParent* aLayerTransaction,
+    const CompositableHandle& aHandle) {
+  auto layerTrans =
+      static_cast<layers::LayerTransactionParent*>(aLayerTransaction);
+  RefPtr<layers::CompositableHost> compositableHost(
+      layerTrans->FindCompositable(aHandle));
   if (!compositableHost) {
     return IPC_FAIL(this, "Failed to find CompositableHost for WebGL instance");
   }
@@ -124,15 +120,14 @@ WebGLParent::RecvUpdateCompositableHandle(layers::PLayerTransactionParent* aLaye
   return IPC_OK();
 }
 
-already_AddRefed<layers::SharedSurfaceTextureClient>
-WebGLParent::GetVRFrame() {
+already_AddRefed<layers::SharedSurfaceTextureClient> WebGLParent::GetVRFrame() {
   if (!mHost) {
     return nullptr;
   }
 
-  return mHost->GetVRFrame();  
+  return mHost->GetVRFrame();
 }
 
-} // namespace dom
+}  // namespace dom
 
-} // namespace mozilla
+}  // namespace mozilla

@@ -659,17 +659,16 @@ void ContentCompositorBridgeParent::ObserveLayersUpdate(
   Unused << state->mParent->SendObserveLayersUpdate(aLayersId, aEpoch, aActive);
 }
 
-dom::PWebGLParent*
-ContentCompositorBridgeParent::AllocPWebGLParent(const WebGLVersion& aVersion,
-                                                      UniquePtr<HostWebGLCommandSink>&& aCommandSink,
-                                                      UniquePtr<HostWebGLErrorSource>&& aErrorSource) {
-  return dom::WebGLParent::Create(aVersion,
-                                  std::move(aCommandSink),
+dom::PWebGLParent* ContentCompositorBridgeParent::AllocPWebGLParent(
+    const WebGLVersion& aVersion,
+    UniquePtr<HostWebGLCommandSink>&& aCommandSink,
+    UniquePtr<HostWebGLErrorSource>&& aErrorSource) {
+  return dom::WebGLParent::Create(aVersion, std::move(aCommandSink),
                                   std::move(aErrorSource));
 }
 
-bool
-ContentCompositorBridgeParent::DeallocPWebGLParent(PWebGLParent* aWebGLParent) {
+bool ContentCompositorBridgeParent::DeallocPWebGLParent(
+    PWebGLParent* aWebGLParent) {
   delete aWebGLParent;
   return true;
 }

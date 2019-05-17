@@ -12,15 +12,14 @@
 namespace mozilla {
 
 namespace ipc {
-template<typename T> struct PcqParamTraits;
+template <typename T>
+struct PcqParamTraits;
 };
 
 class WebGLShaderPrecisionFormat final {
  public:
   WebGLShaderPrecisionFormat(GLint rangeMin, GLint rangeMax, GLint precision)
-      : mRangeMin(rangeMin),
-        mRangeMax(rangeMax),
-        mPrecision(precision) {}
+      : mRangeMin(rangeMin), mRangeMax(rangeMax), mPrecision(precision) {}
 
   GLint RangeMin() const { return mRangeMin; }
   GLint RangeMax() const { return mRangeMax; }
@@ -39,11 +38,12 @@ class ClientWebGLShaderPrecisionFormat final {
   NS_INLINE_DECL_REFCOUNTING(ClientWebGLShaderPrecisionFormat)
   bool WrapObject(JSContext* cx, JS::Handle<JSObject*> givenProto,
                   JS::MutableHandle<JSObject*> reflector);
-  ClientWebGLShaderPrecisionFormat(GLint rangeMin, GLint rangeMax, GLint precision)
-    : mSPF(rangeMin, rangeMax, precision) {}
+  ClientWebGLShaderPrecisionFormat(GLint rangeMin, GLint rangeMax,
+                                   GLint precision)
+      : mSPF(rangeMin, rangeMax, precision) {}
 
   ClientWebGLShaderPrecisionFormat(const WebGLShaderPrecisionFormat& aOther)
-    : mSPF(aOther.RangeMin(), aOther.RangeMax(), aOther.Precision()) {}
+      : mSPF(aOther.RangeMin(), aOther.RangeMax(), aOther.Precision()) {}
 
   // WebIDL WebGLShaderPrecisionFormat API
   GLint RangeMin() const { return mSPF.RangeMin(); }

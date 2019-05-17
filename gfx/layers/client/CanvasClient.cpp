@@ -515,11 +515,12 @@ void CanvasClientSharedSurface::ClearSurfaces() {
 
 CanvasClientOOP::CanvasClientOOP(CompositableForwarder* aLayerForwarder,
                                  TextureFlags aFlags)
-  : CanvasClient(aLayerForwarder, aFlags) {}
+    : CanvasClient(aLayerForwarder, aFlags) {}
 
 CanvasClientOOP::~CanvasClientOOP() {}
 
-void CanvasClientOOP::SetLayer(ShadowableLayer* aLayer, OOPCanvasRenderer* aRenderer) {
+void CanvasClientOOP::SetLayer(ShadowableLayer* aLayer,
+                               OOPCanvasRenderer* aRenderer) {
   mLayer = aLayer;
   mCanvasContext = aRenderer->mContext;
   MOZ_ASSERT(mCanvasContext);
@@ -541,13 +542,12 @@ void CanvasClientOOP::Update(gfx::IntSize aSize,
     return;
   }
 
-  MOZ_ASSERT(GetForwarder() &&
-             GetForwarder()->AsLayerForwarder() &&
+  MOZ_ASSERT(GetForwarder() && GetForwarder()->AsLayerForwarder() &&
              GetForwarder()->AsLayerForwarder()->GetShadowManager());
 
   static_cast<ShadowLayerForwarder*>(GetForwarder())->Attach(this, mLayer);
   LayerTransactionChild* ltc =
-    GetForwarder()->AsLayerForwarder()->GetShadowManager();
+      GetForwarder()->AsLayerForwarder()->GetShadowManager();
   bool success = mCanvasContext->UpdateCompositableHandle(ltc, handle);
   if (!success) {
     return;

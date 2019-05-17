@@ -36,12 +36,12 @@ using HostWebGLErrorSource = CommandSource<WebGLErrorCommand>;
  * set.
  */
 class ClientWebGLErrorSink : public CommandSink<WebGLErrorCommand> {
-public:
+ public:
   ClientWebGLErrorSink(UniquePtr<Consumer>&& aConsumer);
 
   void SetClientWebGLContext(RefPtr<ClientWebGLContext>& aClientContext);
 
-protected:
+ protected:
   bool DispatchCommand(WebGLErrorCommand command) override;
 
   RefPtr<ClientWebGLContext> mClientContext;
@@ -50,8 +50,9 @@ protected:
 /**
  * Factory for the WebGL error and warning queue.
  */
-using WebGLErrorQueue = CommandQueue<HostWebGLErrorSource, ClientWebGLErrorSink>;
+using WebGLErrorQueue =
+    CommandQueue<HostWebGLErrorSource, ClientWebGLErrorSink>;
 
-} // namespace mozilla
+}  // namespace mozilla
 
-#endif // WEBGLERRORQUEUE_H_
+#endif  // WEBGLERRORQUEUE_H_

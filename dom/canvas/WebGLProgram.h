@@ -58,8 +58,8 @@ struct UniformInfo final {
   std::vector<uint32_t> mSamplerValues;
 
  protected:
-  static const TexListT*
-  GetTexList(const WebGLContext* aWebGL, WebGLActiveInfo* activeInfo);
+  static const TexListT* GetTexList(const WebGLContext* aWebGL,
+                                    WebGLActiveInfo* activeInfo);
 
  public:
   explicit UniformInfo(const WebGLContext* aWebGL, WebGLActiveInfo& activeInfo);
@@ -166,12 +166,12 @@ class WebGLProgram final : public WebGLRefCountedObject<WebGLProgram>,
   nsString GetActiveUniformBlockName(GLuint uniformBlockIndex) const;
   MaybeWebGLVariant GetActiveUniformBlockParam(GLuint uniformBlockIndex,
                                                GLenum pname) const;
-  MaybeWebGLVariant
-  GetActiveUniformBlockActiveUniforms(GLuint uniformBlockIndex) const;
+  MaybeWebGLVariant GetActiveUniformBlockActiveUniforms(
+      GLuint uniformBlockIndex) const;
   already_AddRefed<WebGLUniformLocation> GetUniformLocation(
       const nsAString& name) const;
-  MaybeWebGLVariant
-  GetUniformIndices(const nsTArray<nsString>& uniformNames) const;
+  MaybeWebGLVariant GetUniformIndices(
+      const nsTArray<nsString>& uniformNames) const;
   void UniformBlockBinding(GLuint uniformBlockIndex,
                            GLuint uniformBlockBinding) const;
 

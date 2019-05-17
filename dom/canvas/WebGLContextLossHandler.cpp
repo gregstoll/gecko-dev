@@ -20,9 +20,9 @@ WebGLContextLossHandler::WebGLContextLossHandler(WebGLContext* webgl)
 {
   MOZ_ASSERT(webgl);
   WeakPtr<WebGLContext> weakCxt = webgl;
-  mRunnable =
-    NS_NewRunnableFunction("WebGLContextLossHandler",
-                           [weakCxt]() { MaybeUpdateContextLoss(weakCxt); });
+  mRunnable = NS_NewRunnableFunction("WebGLContextLossHandler", [weakCxt]() {
+    MaybeUpdateContextLoss(weakCxt);
+  });
   MOZ_ASSERT(mRunnable);
 }
 

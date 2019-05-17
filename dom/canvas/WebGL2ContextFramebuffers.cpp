@@ -94,8 +94,7 @@ void WebGL2Context::FramebufferTextureLayer(GLenum target, GLenum attachment,
   fb->FramebufferTextureLayer(attachment, texture, level, layer);
 }
 
-MaybeWebGLVariant
-WebGL2Context::GetFramebufferAttachmentParameter(
+MaybeWebGLVariant WebGL2Context::GetFramebufferAttachmentParameter(
     GLenum target, GLenum attachment, GLenum pname) {
   return WebGLContext::GetFramebufferAttachmentParameter(target, attachment,
                                                          pname);
@@ -217,8 +216,8 @@ bool WebGLContext::ValidateInvalidateFramebuffer(
   return true;
 }
 
-void WebGL2Context::InvalidateFramebuffer(
-    GLenum target, const nsTArray<GLenum>& attachments) {
+void WebGL2Context::InvalidateFramebuffer(GLenum target,
+                                          const nsTArray<GLenum>& attachments) {
   const FuncScope funcScope(*this, "invalidateFramebuffer");
 
   std::vector<GLenum> scopedVector;

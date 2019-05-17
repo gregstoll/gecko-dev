@@ -64,12 +64,11 @@ namespace mozilla {
  *                   width, height)
  */
 
-bool
-ClientWebGLContext::ValidateExtents(GLsizei width, GLsizei height,
-                                    GLsizei depth, GLint border,
-                                    uint32_t* const out_width,
-                                    uint32_t* const out_height,
-                                    uint32_t* const out_depth) {
+bool ClientWebGLContext::ValidateExtents(GLsizei width, GLsizei height,
+                                         GLsizei depth, GLint border,
+                                         uint32_t* const out_width,
+                                         uint32_t* const out_height,
+                                         uint32_t* const out_depth) {
   // Check border
   if (border != 0) {
     EnqueueErrorInvalidValue("`border` must be 0.");
@@ -107,29 +106,27 @@ static bool ValidateUnpackInfo(WebGLContext* webgl,
 
 ////////////////////////////////////////////////////////////////////////////////
 
-UniquePtr<webgl::TexUnpackBlob>
-WebGLContext::TexUnpackBytesFromTexImageData(const WebGLTexImageData& imageData) {
+UniquePtr<webgl::TexUnpackBlob> WebGLContext::TexUnpackBytesFromTexImageData(
+    const WebGLTexImageData& imageData) {
   MOZ_ASSERT_UNREACHABLE("TODO: Texure Upload Image fast path");
   return nullptr;
-//  return MakeUnique<webgl::TexUnpackImage>(this, target, rowLength, imageheight,
-//                                           width, height, depth, srcAlphaType);
+  //  return MakeUnique<webgl::TexUnpackImage>(this, target, rowLength,
+  //  imageheight,
+  //                                           width, height, depth,
+  //                                           srcAlphaType);
 }
-
 
 ////////////////////////////////////////////////////////////////////////////////
 
-UniquePtr<webgl::TexUnpackBlob>
-WebGLContext::TexUnpackBytesFromTexPboOffset(
-    TexImageTarget target, uint32_t width, uint32_t height,
-    uint32_t depth, WebGLsizeiptr pboOffset,
-    const Maybe<GLsizei>& expectedImageSize) {
+UniquePtr<webgl::TexUnpackBlob> WebGLContext::TexUnpackBytesFromTexPboOffset(
+    TexImageTarget target, uint32_t width, uint32_t height, uint32_t depth,
+    WebGLsizeiptr pboOffset, const Maybe<GLsizei>& expectedImageSize) {
   if (pboOffset < 0) {
     ErrorInvalidValue("offset cannot be negative.");
     return nullptr;
   }
 
-  const auto& buffer =
-      ValidateBufferSelection(LOCAL_GL_PIXEL_UNPACK_BUFFER);
+  const auto& buffer = ValidateBufferSelection(LOCAL_GL_PIXEL_UNPACK_BUFFER);
   if (!buffer) return nullptr;
 
   size_t availBufferBytes = buffer->ByteLength();
@@ -154,17 +151,19 @@ WebGLContext::TexUnpackBytesFromTexPboOffset(
   const bool isClientData = false;
   const auto ptr = (const uint8_t*)pboOffset;
   UniquePtr<webgl::TexUnpackBytes> texUnpackBlob =
-    MakeUnique<webgl::TexUnpackBytes>(GetPixelStore(), target, width, height, depth,
-                                      isClientData, ptr, availBufferBytes);
+      MakeUnique<webgl::TexUnpackBytes>(GetPixelStore(), target, width, height,
+                                        depth, isClientData, ptr,
+                                        availBufferBytes);
   return texUnpackBlob;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 static MaybeWebGLTexUnpackVariant ClientFromView(
-    ClientWebGLContext* webgl, TexImageTarget target, uint32_t width, uint32_t height,
-    uint32_t depth, const dom::ArrayBufferView* view, GLuint viewElemOffset,
-    GLuint viewElemLengthOverride, const GLenum errorVal) {
+    ClientWebGLContext* webgl, TexImageTarget target, uint32_t width,
+    uint32_t height, uint32_t depth, const dom::ArrayBufferView* view,
+    GLuint viewElemOffset, GLuint viewElemLengthOverride,
+    const GLenum errorVal) {
   const bool isClientData = true;
   const uint8_t* bytes = nullptr;
   size_t availByteCount = 0;
@@ -177,30 +176,32 @@ static MaybeWebGLTexUnpackVariant ClientFromView(
   }
 
   UniquePtr<webgl::TexUnpackBytes> texUnpackBlob =
-    MakeUnique<webgl::TexUnpackBytes>(webgl->GetPixelStore(), target, width, height, depth,
-                                      isClientData, bytes, availByteCount);
+      MakeUnique<webgl::TexUnpackBytes>(webgl->GetPixelStore(), target, width,
+                                        height, depth, isClientData, bytes,
+                                        availByteCount);
   return AsSomeVariant(std::move(texUnpackBlob));
 }
 
 static MaybeWebGLTexUnpackVariant ClientFromPboOffset(
-    ClientWebGLContext* webgl, TexImageTarget target, uint32_t width, uint32_t height,
-    uint32_t depth, WebGLsizeiptr pboOffset,
+    ClientWebGLContext* webgl, TexImageTarget target, uint32_t width,
+    uint32_t height, uint32_t depth, WebGLsizeiptr pboOffset,
     const Maybe<GLsizei>& expectedImageSize) {
   if (pboOffset < 0) {
     webgl->EnqueueErrorInvalidValue("offset cannot be negative.");
     return Nothing();
   }
 
-  GLsizei imgSize =
-    expectedImageSize ? expectedImageSize.ref() : std::numeric_limits<int>::min();
-  return AsSomeVariant(WebGLTexPboOffset {
-    target, width, height, depth, pboOffset,
-    static_cast<bool>(expectedImageSize), imgSize });
+  GLsizei imgSize = expectedImageSize ? expectedImageSize.ref()
+                                      : std::numeric_limits<int>::min();
+  return AsSomeVariant(
+      WebGLTexPboOffset{target, width, height, depth, pboOffset,
+                        static_cast<bool>(expectedImageSize), imgSize});
 }
 
 static MaybeWebGLTexUnpackVariant ClientFromImageBitmap(
-    ClientWebGLContext* webgl, TexImageTarget target, uint32_t width, uint32_t height,
-    uint32_t depth, const dom::ImageBitmap& imageBitmap, ErrorResult* aRv) {
+    ClientWebGLContext* webgl, TexImageTarget target, uint32_t width,
+    uint32_t height, uint32_t depth, const dom::ImageBitmap& imageBitmap,
+    ErrorResult* aRv) {
   if (imageBitmap.IsWriteOnly()) {
     aRv->Throw(NS_ERROR_DOM_SECURITY_ERR);
     return Nothing();
@@ -225,14 +226,14 @@ static MaybeWebGLTexUnpackVariant ClientFromImageBitmap(
   // "The getImageData(sx, sy, sw, sh) method [...] Pixels must be returned as
   // non-premultiplied alpha values."
   UniquePtr<webgl::TexUnpackSurface> texUnpackBlob =
-    MakeUnique<webgl::TexUnpackSurface>(webgl, target, width, height, depth,
-                                        surf, cloneData->mAlphaType);
+      MakeUnique<webgl::TexUnpackSurface>(webgl, target, width, height, depth,
+                                          surf, cloneData->mAlphaType);
   return AsSomeVariant(std::move(texUnpackBlob));
 }
 
-static MaybeWebGLTexUnpackVariant
-ClientFromImageData(ClientWebGLContext* webgl, TexImageTarget target, uint32_t width,
-              uint32_t height, uint32_t depth, const dom::ImageData& imageData) {
+static MaybeWebGLTexUnpackVariant ClientFromImageData(
+    ClientWebGLContext* webgl, TexImageTarget target, uint32_t width,
+    uint32_t height, uint32_t depth, const dom::ImageData& imageData) {
   dom::Uint8ClampedArray scopedArr;
   DebugOnly<bool> inited = scopedArr.Init(imageData.GetDataObject());
   MOZ_ASSERT(inited);
@@ -275,8 +276,8 @@ ClientFromImageData(ClientWebGLContext* webgl, TexImageTarget target, uint32_t w
   ////
 
   UniquePtr<webgl::TexUnpackSurface> texUnpackBlob =
-    MakeUnique<webgl::TexUnpackSurface>(webgl, target, width, height,
-                                        depth, surf, alphaType);
+      MakeUnique<webgl::TexUnpackSurface>(webgl, target, width, height, depth,
+                                          surf, alphaType);
   return AsSomeVariant(std::move(texUnpackBlob));
 }
 
@@ -349,8 +350,9 @@ MaybeWebGLTexUnpackVariant ClientWebGLContext::ClientFromDomElem(
   if (!layersImage && !dataSurf) {
     const bool isClientData = true;
     UniquePtr<webgl::TexUnpackBytes> texUnpackBlob =
-      MakeUnique<webgl::TexUnpackBytes>(GetPixelStore(), target, width, height, depth,
-                                        isClientData, nullptr, 0);
+        MakeUnique<webgl::TexUnpackBytes>(GetPixelStore(), target, width,
+                                          height, depth, isClientData, nullptr,
+                                          0);
     return AsSomeVariant(std::move(texUnpackBlob));
   }
 
@@ -375,7 +377,8 @@ MaybeWebGLTexUnpackVariant ClientWebGLContext::ClientFromDomElem(
     // mIsWriteOnly defaults to true, and so will be true even if SFE merely
     // failed. Thus we must test mIsWriteOnly after successfully retrieving an
     // Image or SourceSurface.
-    EnqueueWarning(nsCString("Element is write-only, thus cannot be uploaded."));
+    EnqueueWarning(
+        nsCString("Element is write-only, thus cannot be uploaded."));
     out_error->Throw(NS_ERROR_DOM_SECURITY_ERR);
     return Nothing();
   }
@@ -384,27 +387,27 @@ MaybeWebGLTexUnpackVariant ClientWebGLContext::ClientFromDomElem(
   // Ok, we're good!
 
   if (layersImage) {
-    WebGLTexImageData texImageData {
-      target, static_cast<int32_t>(layersImage->GetSize().width),
-      width, height, depth, sfer.mAlphaType
-    };
+    WebGLTexImageData texImageData{
+        target, static_cast<int32_t>(layersImage->GetSize().width),
+        width,  height,
+        depth,  sfer.mAlphaType};
     return AsSomeVariant(std::move(texImageData));
   }
 
   MOZ_ASSERT(dataSurf);
-    UniquePtr<webgl::TexUnpackSurface> texUnpackBlob =
+  UniquePtr<webgl::TexUnpackSurface> texUnpackBlob =
       MakeUnique<webgl::TexUnpackSurface>(this, target, width, height, depth,
                                           dataSurf, sfer.mAlphaType);
-    return AsSomeVariant(std::move(texUnpackBlob));
+  return AsSomeVariant(std::move(texUnpackBlob));
 }
 
 ////////////////////////////////////////
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static bool ValidateTexOrSubImage(
-    WebGLContext* webgl, const webgl::PackingInfo& pi,
-    UniquePtr<webgl::TexUnpackBlob>& src) {
+static bool ValidateTexOrSubImage(WebGLContext* webgl,
+                                  const webgl::PackingInfo& pi,
+                                  UniquePtr<webgl::TexUnpackBlob>& src) {
   return ValidateUnpackInfo(webgl, pi) && src && src->Validate(webgl, pi);
 }
 
@@ -1280,7 +1283,8 @@ void WebGLTexture::TexSubImage(TexImageTarget target, GLint level,
 void WebGLTexture::CompressedTexImage(TexImageTarget target, GLint level,
                                       GLenum internalFormat, GLsizei rawWidth,
                                       GLsizei rawHeight, GLsizei rawDepth,
-                                      GLint border, UniquePtr<webgl::TexUnpackBytes>&& blob,
+                                      GLint border,
+                                      UniquePtr<webgl::TexUnpackBytes>&& blob,
                                       const Maybe<GLsizei>& expectedImageSize) {
   ////////////////////////////////////
   // Get dest info
@@ -2071,8 +2075,8 @@ MaybeWebGLTexUnpackVariant ClientWebGLContext::From(
     TexImageTarget target, GLsizei rawWidth, GLsizei rawHeight,
     GLsizei rawDepth, GLint border, const TexImageSource& src) {
   uint32_t width, height, depth;
-  if (!ValidateExtents(rawWidth, rawHeight, rawDepth, border, &width,
-                       &height, &depth)) {
+  if (!ValidateExtents(rawWidth, rawHeight, rawDepth, border, &width, &height,
+                       &depth)) {
     return Nothing();
   }
 
@@ -2083,21 +2087,22 @@ MaybeWebGLTexUnpackVariant ClientWebGLContext::From(
 
   if (src.mImageBitmap) {
     return ClientFromImageBitmap(this, target, width, height, depth,
-                           *(src.mImageBitmap), src.mOut_error);
+                                 *(src.mImageBitmap), src.mOut_error);
   }
 
   if (src.mImageData) {
-    return ClientFromImageData(this, target, width, height, depth, *(src.mImageData));
+    return ClientFromImageData(this, target, width, height, depth,
+                               *(src.mImageData));
   }
 
   if (src.mDomElem) {
     return ClientFromDomElem(target, width, height, depth, *(src.mDomElem),
-                       src.mOut_error);
+                             src.mOut_error);
   }
 
   return ClientFromView(this, target, width, height, depth, src.mView,
-                  src.mViewElemOffset, src.mViewElemLengthOverride,
-                  LOCAL_GL_INVALID_OPERATION);
+                        src.mViewElemOffset, src.mViewElemLengthOverride,
+                        LOCAL_GL_INVALID_OPERATION);
 }
 
 MaybeWebGLTexUnpackVariant ClientWebGLContext::FromCompressed(
@@ -2105,8 +2110,8 @@ MaybeWebGLTexUnpackVariant ClientWebGLContext::FromCompressed(
     GLsizei rawDepth, GLint border, const TexImageSource& src,
     const Maybe<GLsizei>& expectedImageSize) {
   uint32_t width, height, depth;
-  if (!ValidateExtents(rawWidth, rawHeight, rawDepth, border, &width,
-                       &height, &depth)) {
+  if (!ValidateExtents(rawWidth, rawHeight, rawDepth, border, &width, &height,
+                       &depth)) {
     return Nothing();
   }
 
@@ -2116,8 +2121,8 @@ MaybeWebGLTexUnpackVariant ClientWebGLContext::FromCompressed(
   }
 
   return ClientFromView(this, target, width, height, depth, src.mView,
-                  src.mViewElemOffset, src.mViewElemLengthOverride,
-                  LOCAL_GL_INVALID_VALUE);
+                        src.mViewElemOffset, src.mViewElemLengthOverride,
+                        LOCAL_GL_INVALID_VALUE);
 }
 
 }  // namespace mozilla

@@ -308,7 +308,8 @@ class WebGLExtensionDisjointTimerQuery : public WebGLExtensionBase {
   void EndQueryEXT(GLenum target) const;
   void QueryCounterEXT(WebGLQuery& query, GLenum target) const;
   MaybeWebGLVariant GetQueryEXT(GLenum target, GLenum pname) const;
-  MaybeWebGLVariant GetQueryObjectEXT(const WebGLQuery& query, GLenum pname) const;
+  MaybeWebGLVariant GetQueryObjectEXT(const WebGLQuery& query,
+                                      GLenum pname) const;
 
   static bool IsSupported(const WebGLContext*);
 };
@@ -321,43 +322,74 @@ class WebGLExtensionMOZDebug final : public WebGLExtensionBase {
   MaybeWebGLVariant GetParameter(GLenum pname) const;
 };
 
-template<WebGLExtensionID ext> struct WebGLExtensionClassMap;
+template <WebGLExtensionID ext>
+struct WebGLExtensionClassMap;
 
 #define DEFINE_WEBGL_EXTENSION_CLASS_MAP_ENTRY(_extensionID, _extensionClass) \
-  template<> struct WebGLExtensionClassMap<WebGLExtensionID::_extensionID> {  \
-    using Type = _extensionClass; }; 
+  template <>                                                                 \
+  struct WebGLExtensionClassMap<WebGLExtensionID::_extensionID> {             \
+    using Type = _extensionClass;                                             \
+  };
 
-DEFINE_WEBGL_EXTENSION_CLASS_MAP_ENTRY(ANGLE_instanced_arrays,              WebGLExtensionInstancedArrays)
-DEFINE_WEBGL_EXTENSION_CLASS_MAP_ENTRY(EXT_blend_minmax,                    WebGLExtensionBlendMinMax)
-DEFINE_WEBGL_EXTENSION_CLASS_MAP_ENTRY(EXT_color_buffer_float,              WebGLExtensionColorBufferFloat)
-DEFINE_WEBGL_EXTENSION_CLASS_MAP_ENTRY(EXT_color_buffer_half_float,         WebGLExtensionColorBufferHalfFloat)
-DEFINE_WEBGL_EXTENSION_CLASS_MAP_ENTRY(EXT_texture_compression_bptc,        WebGLExtensionCompressedTextureBPTC)
-DEFINE_WEBGL_EXTENSION_CLASS_MAP_ENTRY(EXT_texture_compression_rgtc,        WebGLExtensionCompressedTextureRGTC)
-DEFINE_WEBGL_EXTENSION_CLASS_MAP_ENTRY(EXT_frag_depth,                      WebGLExtensionFragDepth)
-DEFINE_WEBGL_EXTENSION_CLASS_MAP_ENTRY(EXT_sRGB,                            WebGLExtensionSRGB)
-DEFINE_WEBGL_EXTENSION_CLASS_MAP_ENTRY(EXT_shader_texture_lod,              WebGLExtensionShaderTextureLod)
-DEFINE_WEBGL_EXTENSION_CLASS_MAP_ENTRY(EXT_texture_filter_anisotropic,      WebGLExtensionTextureFilterAnisotropic)
-DEFINE_WEBGL_EXTENSION_CLASS_MAP_ENTRY(EXT_disjoint_timer_query,            WebGLExtensionDisjointTimerQuery)
-DEFINE_WEBGL_EXTENSION_CLASS_MAP_ENTRY(MOZ_debug,                           WebGLExtensionMOZDebug)
-DEFINE_WEBGL_EXTENSION_CLASS_MAP_ENTRY(OES_element_index_uint,              WebGLExtensionElementIndexUint)
-DEFINE_WEBGL_EXTENSION_CLASS_MAP_ENTRY(OES_standard_derivatives,            WebGLExtensionStandardDerivatives)
-DEFINE_WEBGL_EXTENSION_CLASS_MAP_ENTRY(OES_texture_float,                   WebGLExtensionTextureFloat)
-DEFINE_WEBGL_EXTENSION_CLASS_MAP_ENTRY(OES_texture_float_linear,            WebGLExtensionTextureFloatLinear)
-DEFINE_WEBGL_EXTENSION_CLASS_MAP_ENTRY(OES_texture_half_float,              WebGLExtensionTextureHalfFloat)
-DEFINE_WEBGL_EXTENSION_CLASS_MAP_ENTRY(OES_texture_half_float_linear,       WebGLExtensionTextureHalfFloatLinear)
-DEFINE_WEBGL_EXTENSION_CLASS_MAP_ENTRY(OES_vertex_array_object,             WebGLExtensionVertexArray)
-DEFINE_WEBGL_EXTENSION_CLASS_MAP_ENTRY(WEBGL_color_buffer_float,            WebGLExtensionEXTColorBufferFloat)
-DEFINE_WEBGL_EXTENSION_CLASS_MAP_ENTRY(WEBGL_compressed_texture_astc,       WebGLExtensionCompressedTextureASTC)
-DEFINE_WEBGL_EXTENSION_CLASS_MAP_ENTRY(WEBGL_compressed_texture_etc,        WebGLExtensionCompressedTextureES3)
-DEFINE_WEBGL_EXTENSION_CLASS_MAP_ENTRY(WEBGL_compressed_texture_etc1,       WebGLExtensionCompressedTextureETC1)
-DEFINE_WEBGL_EXTENSION_CLASS_MAP_ENTRY(WEBGL_compressed_texture_pvrtc,      WebGLExtensionCompressedTexturePVRTC)
-DEFINE_WEBGL_EXTENSION_CLASS_MAP_ENTRY(WEBGL_compressed_texture_s3tc,       WebGLExtensionCompressedTextureS3TC)
-DEFINE_WEBGL_EXTENSION_CLASS_MAP_ENTRY(WEBGL_compressed_texture_s3tc_srgb,  WebGLExtensionCompressedTextureS3TC_SRGB)
-DEFINE_WEBGL_EXTENSION_CLASS_MAP_ENTRY(WEBGL_debug_renderer_info,           WebGLExtensionDebugRendererInfo)
-DEFINE_WEBGL_EXTENSION_CLASS_MAP_ENTRY(WEBGL_debug_shaders,                 WebGLExtensionDebugShaders)
-DEFINE_WEBGL_EXTENSION_CLASS_MAP_ENTRY(WEBGL_depth_texture,                 WebGLExtensionDepthTexture)
-DEFINE_WEBGL_EXTENSION_CLASS_MAP_ENTRY(WEBGL_draw_buffers,                  WebGLExtensionDrawBuffers)
-DEFINE_WEBGL_EXTENSION_CLASS_MAP_ENTRY(WEBGL_lose_context,                  WebGLExtensionLoseContext)
+DEFINE_WEBGL_EXTENSION_CLASS_MAP_ENTRY(ANGLE_instanced_arrays,
+                                       WebGLExtensionInstancedArrays)
+DEFINE_WEBGL_EXTENSION_CLASS_MAP_ENTRY(EXT_blend_minmax,
+                                       WebGLExtensionBlendMinMax)
+DEFINE_WEBGL_EXTENSION_CLASS_MAP_ENTRY(EXT_color_buffer_float,
+                                       WebGLExtensionColorBufferFloat)
+DEFINE_WEBGL_EXTENSION_CLASS_MAP_ENTRY(EXT_color_buffer_half_float,
+                                       WebGLExtensionColorBufferHalfFloat)
+DEFINE_WEBGL_EXTENSION_CLASS_MAP_ENTRY(EXT_texture_compression_bptc,
+                                       WebGLExtensionCompressedTextureBPTC)
+DEFINE_WEBGL_EXTENSION_CLASS_MAP_ENTRY(EXT_texture_compression_rgtc,
+                                       WebGLExtensionCompressedTextureRGTC)
+DEFINE_WEBGL_EXTENSION_CLASS_MAP_ENTRY(EXT_frag_depth, WebGLExtensionFragDepth)
+DEFINE_WEBGL_EXTENSION_CLASS_MAP_ENTRY(EXT_sRGB, WebGLExtensionSRGB)
+DEFINE_WEBGL_EXTENSION_CLASS_MAP_ENTRY(EXT_shader_texture_lod,
+                                       WebGLExtensionShaderTextureLod)
+DEFINE_WEBGL_EXTENSION_CLASS_MAP_ENTRY(EXT_texture_filter_anisotropic,
+                                       WebGLExtensionTextureFilterAnisotropic)
+DEFINE_WEBGL_EXTENSION_CLASS_MAP_ENTRY(EXT_disjoint_timer_query,
+                                       WebGLExtensionDisjointTimerQuery)
+DEFINE_WEBGL_EXTENSION_CLASS_MAP_ENTRY(MOZ_debug, WebGLExtensionMOZDebug)
+DEFINE_WEBGL_EXTENSION_CLASS_MAP_ENTRY(OES_element_index_uint,
+                                       WebGLExtensionElementIndexUint)
+DEFINE_WEBGL_EXTENSION_CLASS_MAP_ENTRY(OES_standard_derivatives,
+                                       WebGLExtensionStandardDerivatives)
+DEFINE_WEBGL_EXTENSION_CLASS_MAP_ENTRY(OES_texture_float,
+                                       WebGLExtensionTextureFloat)
+DEFINE_WEBGL_EXTENSION_CLASS_MAP_ENTRY(OES_texture_float_linear,
+                                       WebGLExtensionTextureFloatLinear)
+DEFINE_WEBGL_EXTENSION_CLASS_MAP_ENTRY(OES_texture_half_float,
+                                       WebGLExtensionTextureHalfFloat)
+DEFINE_WEBGL_EXTENSION_CLASS_MAP_ENTRY(OES_texture_half_float_linear,
+                                       WebGLExtensionTextureHalfFloatLinear)
+DEFINE_WEBGL_EXTENSION_CLASS_MAP_ENTRY(OES_vertex_array_object,
+                                       WebGLExtensionVertexArray)
+DEFINE_WEBGL_EXTENSION_CLASS_MAP_ENTRY(WEBGL_color_buffer_float,
+                                       WebGLExtensionEXTColorBufferFloat)
+DEFINE_WEBGL_EXTENSION_CLASS_MAP_ENTRY(WEBGL_compressed_texture_astc,
+                                       WebGLExtensionCompressedTextureASTC)
+DEFINE_WEBGL_EXTENSION_CLASS_MAP_ENTRY(WEBGL_compressed_texture_etc,
+                                       WebGLExtensionCompressedTextureES3)
+DEFINE_WEBGL_EXTENSION_CLASS_MAP_ENTRY(WEBGL_compressed_texture_etc1,
+                                       WebGLExtensionCompressedTextureETC1)
+DEFINE_WEBGL_EXTENSION_CLASS_MAP_ENTRY(WEBGL_compressed_texture_pvrtc,
+                                       WebGLExtensionCompressedTexturePVRTC)
+DEFINE_WEBGL_EXTENSION_CLASS_MAP_ENTRY(WEBGL_compressed_texture_s3tc,
+                                       WebGLExtensionCompressedTextureS3TC)
+DEFINE_WEBGL_EXTENSION_CLASS_MAP_ENTRY(WEBGL_compressed_texture_s3tc_srgb,
+                                       WebGLExtensionCompressedTextureS3TC_SRGB)
+DEFINE_WEBGL_EXTENSION_CLASS_MAP_ENTRY(WEBGL_debug_renderer_info,
+                                       WebGLExtensionDebugRendererInfo)
+DEFINE_WEBGL_EXTENSION_CLASS_MAP_ENTRY(WEBGL_debug_shaders,
+                                       WebGLExtensionDebugShaders)
+DEFINE_WEBGL_EXTENSION_CLASS_MAP_ENTRY(WEBGL_depth_texture,
+                                       WebGLExtensionDepthTexture)
+DEFINE_WEBGL_EXTENSION_CLASS_MAP_ENTRY(WEBGL_draw_buffers,
+                                       WebGLExtensionDrawBuffers)
+DEFINE_WEBGL_EXTENSION_CLASS_MAP_ENTRY(WEBGL_lose_context,
+                                       WebGLExtensionLoseContext)
 
 }  // namespace mozilla
 

@@ -209,14 +209,14 @@ class CompositorBridgeChild final : public PCompositorBridgeChild,
   PAPZChild* AllocPAPZChild(const LayersId& aLayersId);
   bool DeallocPAPZChild(PAPZChild* aActor);
 
-  dom::PWebGLChild*
-  AllocPWebGLChild(const WebGLVersion& aVersion,
-                   UniquePtr<HostWebGLCommandSink>&& aCommandSink,
-                   UniquePtr<HostWebGLErrorSource>&& aErrorSource);
-  dom::PWebGLChild*
-  AllocPWebGLChild(const WebGLVersion& aVersion,
-                   UniquePtr<HostWebGLCommandSink>& aCommandSink,
-                   UniquePtr<HostWebGLErrorSource>& aErrorSource);
+  dom::PWebGLChild* AllocPWebGLChild(
+      const WebGLVersion& aVersion,
+      UniquePtr<HostWebGLCommandSink>&& aCommandSink,
+      UniquePtr<HostWebGLErrorSource>&& aErrorSource);
+  dom::PWebGLChild* AllocPWebGLChild(
+      const WebGLVersion& aVersion,
+      UniquePtr<HostWebGLCommandSink>& aCommandSink,
+      UniquePtr<HostWebGLErrorSource>& aErrorSource);
   bool DeallocPWebGLChild(PWebGLChild* aActor);
 
   void WillEndTransaction();

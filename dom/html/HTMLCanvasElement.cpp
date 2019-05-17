@@ -1433,8 +1433,7 @@ void HTMLCanvasElement::InvalidateFromAsyncCanvasRenderer(
   element->InvalidateCanvasContent(nullptr);
 }
 
-ClientWebGLContext*
-HTMLCanvasElement::GetClientWebGLContext() {
+ClientWebGLContext* HTMLCanvasElement::GetClientWebGLContext() {
   if (GetCurrentContextType() != CanvasContextType::WebGL1 &&
       GetCurrentContextType() != CanvasContextType::WebGL2) {
     return nullptr;
@@ -1443,8 +1442,7 @@ HTMLCanvasElement::GetClientWebGLContext() {
   return static_cast<ClientWebGLContext*>(GetContextAtIndex(0));
 }
 
-PWebGLChild*
-HTMLCanvasElement::GetWebGLChild() {
+PWebGLChild* HTMLCanvasElement::GetWebGLChild() {
   ClientWebGLContext* webgl = GetClientWebGLContext();
   if (!webgl) {
     return nullptr;

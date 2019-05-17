@@ -23,7 +23,7 @@ class OwningWebGLBufferOrLongLong;
 
 class WebGL2Context : public WebGLContext {
  public:
-  virtual ~WebGL2Context() {};
+  virtual ~WebGL2Context(){};
 
   static bool IsSupported();
   static WebGL2Context* Create() { return new WebGL2Context(); }
@@ -43,9 +43,9 @@ class WebGL2Context : public WebGLContext {
                          const BufferT& data);
 
  public:
-  Maybe<nsTArray<uint8_t>>
-  GetBufferSubData(GLenum target, WebGLintptr srcByteOffset,
-                   size_t byteLen, const Maybe<mozilla::ipc::Shmem>& maybeShmem);
+  Maybe<nsTArray<uint8_t>> GetBufferSubData(
+      GLenum target, WebGLintptr srcByteOffset, size_t byteLen,
+      const Maybe<mozilla::ipc::Shmem>& maybeShmem);
 
   // -------------------------------------------------------------------------
   // Framebuffer objects - WebGL2ContextFramebuffers.cpp
@@ -56,9 +56,8 @@ class WebGL2Context : public WebGLContext {
   void FramebufferTextureLayer(GLenum target, GLenum attachment,
                                WebGLTexture* texture, GLint level, GLint layer);
 
-  virtual MaybeWebGLVariant
-  GetFramebufferAttachmentParameter(GLenum target, GLenum attachment,
-                                    GLenum pname) override;
+  virtual MaybeWebGLVariant GetFramebufferAttachmentParameter(
+      GLenum target, GLenum attachment, GLenum pname) override;
 
   // Make the inline version from the superclass visible here.
   using WebGLContext::GetFramebufferAttachmentParameter;
@@ -66,15 +65,16 @@ class WebGL2Context : public WebGLContext {
   void InvalidateFramebuffer(GLenum target,
                              const nsTArray<GLenum>& attachments);
   void InvalidateSubFramebuffer(GLenum target,
-                                const nsTArray<GLenum>& attachments,
-                                GLint x, GLint y, GLsizei width, GLsizei height);
+                                const nsTArray<GLenum>& attachments, GLint x,
+                                GLint y, GLsizei width, GLsizei height);
   void ReadBuffer(GLenum mode);
 
   // -------------------------------------------------------------------------
   // Renderbuffer objects - WebGL2ContextRenderbuffers.cpp
 
-  Maybe<nsTArray<int32_t>>
-  GetInternalformatParameter(GLenum target, GLenum internalformat, GLenum pname);
+  Maybe<nsTArray<int32_t>> GetInternalformatParameter(GLenum target,
+                                                      GLenum internalformat,
+                                                      GLenum pname);
 
   // -------------------------------------------------------------------------
   // Texture objects - WebGL2ContextTextures.cpp
@@ -89,7 +89,7 @@ class WebGL2Context : public WebGLContext {
   void VertexAttribI4i(GLuint index, GLint x, GLint y, GLint z, GLint w);
   void VertexAttribI4ui(GLuint index, GLuint x, GLuint y, GLuint z, GLuint w);
 
-    // -------------------------------------------------------------------------
+  // -------------------------------------------------------------------------
   // Writing to the drawing buffer
 
   /* Implemented in WebGLContext
@@ -127,12 +127,12 @@ class WebGL2Context : public WebGLContext {
  public:
   void ClearBufferfi(GLenum buffer, GLint drawBuffer, GLfloat depth,
                      GLint stencil);
-  void ClearBufferfv(GLenum buffer, GLint drawBuffer, const nsTArray<float>& src,
-                     GLuint srcElemOffset);
-  void ClearBufferiv(GLenum buffer, GLint drawBuffer, const nsTArray<int32_t>& src,
-                     GLuint srcElemOffset);
-  void ClearBufferuiv(GLenum buffer, GLint drawBuffer, const nsTArray<uint32_t>& src,
-                      GLuint srcElemOffset);
+  void ClearBufferfv(GLenum buffer, GLint drawBuffer,
+                     const nsTArray<float>& src, GLuint srcElemOffset);
+  void ClearBufferiv(GLenum buffer, GLint drawBuffer,
+                     const nsTArray<int32_t>& src, GLuint srcElemOffset);
+  void ClearBufferuiv(GLenum buffer, GLint drawBuffer,
+                      const nsTArray<uint32_t>& src, GLuint srcElemOffset);
 
   // -------------------------------------------------------------------------
   // Sampler Objects - WebGL2ContextSamplers.cpp
@@ -143,7 +143,8 @@ class WebGL2Context : public WebGLContext {
   void BindSampler(GLuint unit, WebGLSampler* sampler);
   void SamplerParameteri(WebGLSampler& sampler, GLenum pname, GLint param);
   void SamplerParameterf(WebGLSampler& sampler, GLenum pname, GLfloat param);
-  MaybeWebGLVariant GetSamplerParameter(const WebGLSampler& sampler, GLenum pname);
+  MaybeWebGLVariant GetSamplerParameter(const WebGLSampler& sampler,
+                                        GLenum pname);
 
   // -------------------------------------------------------------------------
   // Sync objects - WebGL2ContextSync.cpp
@@ -192,16 +193,15 @@ class WebGL2Context : public WebGLContext {
   MaybeWebGLVariant GetIndexedParameter(GLenum target, GLuint index);
   MaybeWebGLVariant GetUniformIndices(const WebGLProgram& program,
                                       const nsTArray<nsString>& uniformNames);
-  MaybeWebGLVariant
-  GetActiveUniforms(const WebGLProgram& program,
-                    const nsTArray<GLuint>& uniformIndices,
-                    GLenum pname);
+  MaybeWebGLVariant GetActiveUniforms(const WebGLProgram& program,
+                                      const nsTArray<GLuint>& uniformIndices,
+                                      GLenum pname);
 
   GLuint GetUniformBlockIndex(const WebGLProgram& program,
                               const nsAString& uniformBlockName);
-  MaybeWebGLVariant
-  GetActiveUniformBlockParameter(const WebGLProgram& program,
-                                 GLuint uniformBlockIndex, GLenum pname);
+  MaybeWebGLVariant GetActiveUniformBlockParameter(const WebGLProgram& program,
+                                                   GLuint uniformBlockIndex,
+                                                   GLenum pname);
   nsString GetActiveUniformBlockName(const WebGLProgram& program,
                                      GLuint uniformBlockIndex);
   void UniformBlockBinding(WebGLProgram& program, GLuint uniformBlockIndex,

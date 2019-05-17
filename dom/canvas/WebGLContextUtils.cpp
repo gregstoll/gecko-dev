@@ -64,10 +64,11 @@ void WebGLContext::GenerateWarning(const char* fmt, va_list ap) const {
   nsCString msg;
   msg.AppendPrintf("WebGL warning: %s: %s", funcName, buf);
   if (!ShouldGenerateWarnings()) {
-    msg.AppendPrintf("WebGL: No further warnings will be reported for"
-                     " this WebGL context."
-                     " (already reported %d warnings)",
-                     mAlreadyGeneratedWarnings);
+    msg.AppendPrintf(
+        "WebGL: No further warnings will be reported for"
+        " this WebGL context."
+        " (already reported %d warnings)",
+        mAlreadyGeneratedWarnings);
   }
 
   mHost->PostWarning(msg);
@@ -98,9 +99,10 @@ void WebGLContext::GeneratePerfWarning(const char* fmt, ...) const {
   mNumPerfWarnings++;
 
   if (!ShouldGeneratePerfWarnings()) {
-    msg.AppendPrintf("WebGL: After reporting %u, no further perf warnings will"
-                     " be reported for this WebGL context.",
-                     uint32_t(mNumPerfWarnings));
+    msg.AppendPrintf(
+        "WebGL: After reporting %u, no further perf warnings will"
+        " be reported for this WebGL context.",
+        uint32_t(mNumPerfWarnings));
   }
 
   mHost->PostWarning(msg);

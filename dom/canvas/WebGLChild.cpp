@@ -33,5 +33,5 @@ void WebGLChild::SetContext(mozilla::ClientWebGLContext* aContext) {
   mContext = do_GetWeakReference(aContext);
 }
 
-} // namespace dom
-} // namespace mozilla
+}  // namespace dom
+}  // namespace mozilla

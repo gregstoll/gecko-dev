@@ -27,7 +27,7 @@ class WebGLContextBoundObject : public WebGLId<Derived> {
   WebGLContext* const mContext;
 
   explicit WebGLContextBoundObject(WebGLContext* webgl)
-    : mContext(webgl), mContextGeneration(webgl->Generation()) {}
+      : mContext(webgl), mContextGeneration(webgl->Generation()) {}
 
   bool IsCompatibleWithContext(const WebGLContext* other) const {
     return (mContext == other && mContextGeneration == other->Generation());
@@ -52,8 +52,7 @@ class WebGLDeletableObject {
 
   ////
 
-  explicit WebGLDeletableObject()
-      : mDeletionStatus(Default) {}
+  explicit WebGLDeletableObject() : mDeletionStatus(Default) {}
 
   ~WebGLDeletableObject() {
     MOZ_ASSERT(mDeletionStatus == Deleted,
@@ -144,8 +143,8 @@ class WebGLDeletableObject {
  */
 
 template <typename Derived>
-class WebGLRefCountedObject : public WebGLContextBoundObject<Derived>
-                            , public WebGLDeletableObject {
+class WebGLRefCountedObject : public WebGLContextBoundObject<Derived>,
+                              public WebGLDeletableObject {
   friend class WebGLContext;
   template <typename T>
   friend void ClearLinkedList(LinkedList<T>& list);
@@ -155,8 +154,7 @@ class WebGLRefCountedObject : public WebGLContextBoundObject<Derived>
 
  public:
   explicit WebGLRefCountedObject(WebGLContext* webgl)
-      : WebGLContextBoundObject<Derived>(webgl)
-      , WebGLDeletableObject() {}
+      : WebGLContextBoundObject<Derived>(webgl), WebGLDeletableObject() {}
 
   ~WebGLRefCountedObject() {
     MOZ_ASSERT(mWebGLRefCnt == 0,

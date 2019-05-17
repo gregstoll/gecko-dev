@@ -213,20 +213,20 @@ class WebGLTexture final : public WebGLRefCountedObject<WebGLTexture>,
 
   void TexImage(TexImageTarget target, GLint level, GLenum internalFormat,
                 GLsizei width, GLsizei height, GLsizei depth, GLint border,
-                const webgl::PackingInfo& pi, UniquePtr<webgl::TexUnpackBlob>&& src);
+                const webgl::PackingInfo& pi,
+                UniquePtr<webgl::TexUnpackBlob>&& src);
   void TexSubImage(TexImageTarget target, GLint level, GLint xOffset,
                    GLint yOffset, GLint zOffset, GLsizei width, GLsizei height,
                    GLsizei depth, const webgl::PackingInfo& pi,
                    UniquePtr<webgl::TexUnpackBlob>&& src);
 
  protected:
-  void TexImage(TexImageTarget target, GLint level,
-                GLenum internalFormat, const webgl::PackingInfo& pi,
+  void TexImage(TexImageTarget target, GLint level, GLenum internalFormat,
+                const webgl::PackingInfo& pi,
                 UniquePtr<webgl::TexUnpackBlob>&& blob);
 
-  void TexSubImage(TexImageTarget target, GLint level,
-                   GLint xOffset, GLint yOffset, GLint zOffset,
-                   const webgl::PackingInfo& pi,
+  void TexSubImage(TexImageTarget target, GLint level, GLint xOffset,
+                   GLint yOffset, GLint zOffset, const webgl::PackingInfo& pi,
                    UniquePtr<webgl::TexUnpackBlob>&& blob);
 
  public:
@@ -312,7 +312,6 @@ class WebGLTexture final : public WebGLRefCountedObject<WebGLTexture>,
 
   bool IsCubeMap() const { return (mTarget == LOCAL_GL_TEXTURE_CUBE_MAP); }
 };
-
 
 inline TexImageTarget TexImageTargetForTargetAndFace(TexTarget target,
                                                      uint8_t face) {

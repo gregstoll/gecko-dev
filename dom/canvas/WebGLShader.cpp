@@ -249,9 +249,7 @@ MaybeWebGLVariant WebGLShader::GetShaderParameter(GLenum pname) const {
       return Nothing();
   }
 }
-nsString WebGLShader::GetShaderSource() const {
-  return mSource;
-}
+nsString WebGLShader::GetShaderSource() const { return mSource; }
 
 nsString WebGLShader::GetShaderTranslatedSource() const {
   nsString out;

@@ -50,15 +50,13 @@ void VRLayerChild::SubmitFrame(const VRDisplayInfo& aDisplayInfo) {
   }
 
   SendSubmitFrame(webGLChild, frameId,
-                  aDisplayInfo.mDisplayState.lastSubmittedFrameId,
-                  mLeftEyeRect, mRightEyeRect);
+                  aDisplayInfo.mDisplayState.lastSubmittedFrameId, mLeftEyeRect,
+                  mRightEyeRect);
 }
 
 bool VRLayerChild::IsIPCOpen() { return mIPCOpen; }
 
-void VRLayerChild::ClearSurfaces() {
-  SendClearSurfaces();
-}
+void VRLayerChild::ClearSurfaces() { SendClearSurfaces(); }
 
 void VRLayerChild::ActorDestroy(ActorDestroyReason aWhy) { mIPCOpen = false; }
 
