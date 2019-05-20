@@ -400,7 +400,8 @@ template <
     size_t Id = WebGLMethodDispatcher::Id<MethodType, method>(),
     typename... Args>
 ReturnType ClientWebGLContext::Run(Args&&... aArgs) const {
-  if (mHostContext) {
+  if (!IsHostOOP()) {
+    MOZ_ASSERT(mHostContext);
     return ((mHostContext.get())->*method)(std::forward<Args>(aArgs)...);
   }
   return WebGLClientDispatcher<ReturnType>::template Run<Id>(*this, method,
@@ -466,14 +467,15 @@ void ClientWebGLContext::BeginComposition() {
   // When running cross-process WebGL, Present needs to be called in
   // EndComposition so that it happens _after_ the OOPCanvasRenderer's
   // Update tells it what CompositableHost to use,
-  if (mHostContext) {
+  if (!IsHostOOP()) {
+    MOZ_ASSERT(mHostContext);
     WEBGL_BRIDGE_LOGI("[%p] Presenting", this);
     mHostContext->Present();
   }
 }
 
 void ClientWebGLContext::EndComposition() {
-  if (!mHostContext) {
+  if (IsHostOOP()) {
     WEBGL_BRIDGE_LOGI("[%p] Presenting", this);
     Run<RPROC(Present)>();
   }
@@ -578,11 +580,19 @@ bool ClientWebGLContext::InitializeCanvasRenderer(
   MOZ_ASSERT(mCanvasElement);  // TODO: What to do here?  Is this about
                                // OffscreenCanvas?
 
-  data.mOOPRenderer = mCanvasElement->GetOOPCanvasRenderer();
-  MOZ_ASSERT(data.mOOPRenderer);
-  MOZ_ASSERT((!data.mOOPRenderer->mContext) ||
-             (data.mOOPRenderer->mContext == this));
-  data.mOOPRenderer->mContext = this;
+  if (IsHostOOP()) {
+    data.mOOPRenderer = mCanvasElement->GetOOPCanvasRenderer();
+    MOZ_ASSERT(data.mOOPRenderer);
+    MOZ_ASSERT((!data.mOOPRenderer->mContext) ||
+               (data.mOOPRenderer->mContext == this));
+    data.mOOPRenderer->mContext = this;
+  } else {
+    MOZ_ASSERT(mHostContext);
+    data.mGLContext = mHostContext->GetWebGLContext()->gl;
+  }
+
+  data.mHasAlpha = mSurfaceInfo.hasAlpha;
+  data.mIsGLAlphaPremult = mSurfaceInfo.isPremultAlpha || !data.mHasAlpha;
 
   // TODO: Do I really need this?  Can't use mSurfaceInfo.size?
   data.mSize = DrawingBufferSize();

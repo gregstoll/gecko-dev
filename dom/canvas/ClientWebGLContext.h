@@ -1850,6 +1850,8 @@ class ClientWebGLContext : public nsICanvasRenderingContextInternal,
   const WebGLPixelStore GetPixelStore() const { return mPixelStore; }
 
  protected:
+  bool IsHostOOP() const { return !mHostContext; }
+
   void ForceLoseContext();
   void LoseOldestWebGLContextIfLimitExceeded();
   void UpdateLastUseIndex();
