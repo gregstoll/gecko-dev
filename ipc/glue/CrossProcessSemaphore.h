@@ -7,6 +7,7 @@
 #ifndef mozilla_CrossProcessSemaphore_h
 #define mozilla_CrossProcessSemaphore_h
 
+#include <limits>
 #include "base/process.h"
 #include "mozilla/TimeStamp.h"
 #include "mozilla/Maybe.h"
@@ -70,6 +71,13 @@ class CrossProcessSemaphore {
   void Signal();
 
   /**
+   * Returns true if the semaphore was available (without waiting) at some
+   * point during the function's execution.  Returns false if it is claimed or
+   * there was an error.  Another process may change the value at any time.
+   */
+  bool IsAvailable();
+
+  /**
    * ShareToProcess
    * This function is called to generate a serializable structure that can
    * be sent to the specified process and opened on the other side.
@@ -81,8 +89,6 @@ class CrossProcessSemaphore {
   void CloseHandle();
 
  private:
-  friend struct IPC::ParamTraits<CrossProcessSemaphore>;
-
   CrossProcessSemaphore();
   CrossProcessSemaphore(const CrossProcessSemaphore&);
   CrossProcessSemaphore& operator=(const CrossProcessSemaphore&);

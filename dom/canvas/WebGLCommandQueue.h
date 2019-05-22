@@ -130,24 +130,14 @@ class CommandSource : public BasicSource {
 
   template <typename... Args>
   PcqStatus InsertCommand(Command aCommand, Args&&... aArgs) {
-    // TODO: For the moment, this is just a spin-lock.
-    // Maybe make this something more efficient.
-    PcqStatus status;
-    do {
-      status = this->mProducer->TryInsert(aCommand, aArgs...);
-    } while (status == PcqStatus::PcqNotReady);
-    return status;
+    return this->mProducer->TryWaitInsert(Nothing() /* wait forever */,
+                                          aCommand, aArgs...);
   }
 
   template <>
   PcqStatus InsertCommand<>(Command aCommand) {
-    // TODO: For the moment, this is just a spin-lock.
-    // Maybe make this something more efficient.
-    PcqStatus status;
-    do {
-      status = this->mProducer->TryInsert(aCommand);
-    } while (status == PcqStatus::PcqNotReady);
-    return status;
+    return this->mProducer->TryWaitInsert(Nothing() /* wait forever */,
+                                          aCommand);
   }
 
   template <typename... Args>
@@ -178,9 +168,13 @@ class CommandSink : public BasicSink {
   /**
    * Attempts to process the next command in the queue, if one is available.
    */
-  CommandResult ProcessOneNow() {
+  CommandResult ProcessOne(Maybe<TimeDuration> aTimeout) {
     Command command;
-    switch (this->mConsumer->TryRemove(command)) {
+    PcqStatus status = (aTimeout.isNothing() || aTimeout.value())
+                           ? this->mConsumer->TryWaitRemove(aTimeout, command)
+                           : this->mConsumer->TryRemove(command);
+
+    switch (status) {
       case PcqStatus::Success:
         if (DispatchCommand(command)) {
           return CommandResult::Success;
@@ -194,6 +188,8 @@ class CommandSink : public BasicSink {
     }
   }
 
+  CommandResult ProcessOneNow() { return ProcessOne(Some(TimeDuration(0))); }
+
   /**
    * Drains the queue until the queue is empty or an error occurs, whichever
    * comes first.
@@ -201,10 +197,10 @@ class CommandSink : public BasicSink {
    * be either QueueEmpty or Error.
    */
   CommandResult ProcessAll() {
-    CommandResult result = ProcessOneNow();
-    while (result == CommandResult::Success) {
+    CommandResult result;
+    do {
       result = ProcessOneNow();
-    }
+    } while (result == CommandResult::Success);
     return result;
   }
 
@@ -215,11 +211,13 @@ class CommandSink : public BasicSink {
    */
   CommandResult ProcessUpToDuration(TimeDuration aDuration) {
     TimeStamp start = TimeStamp::Now();
+    TimeStamp now = start;
     CommandResult result;
+
     do {
-      result = ProcessOneNow();
-    } while ((result == CommandResult::Success) &&
-             ((TimeStamp::Now() - start) < aDuration));
+      result = ProcessOne(Some(aDuration - (now - start)));
+      now = TimeStamp::Now();
+    } while ((result == CommandResult::Success) && ((now - start) < aDuration));
     return result;
   }
 
@@ -311,7 +309,12 @@ class CommandSink : public BasicSink {
   template <typename... Args, size_t... Indices>
   PcqStatus CallTryRemove(std::tuple<Args...>& aArgs,
                           std::index_sequence<Indices...>) {
-    return mConsumer->TryRemove(std::get<Indices>(aArgs)...);
+    PcqStatus status = mConsumer->TryRemove(std::get<Indices>(aArgs)...);
+    // The CommandQueue inserts the command and the args together as an atomic
+    // operation.  We already read the command so the args must also be
+    // available.
+    MOZ_ASSERT(status != PcqStatus::PcqNotReady);
+    return status;
   }
 
   template <>
@@ -352,12 +355,7 @@ class CommandSink : public BasicSink {
 
   template <typename... Args>
   bool ReadArgs(std::tuple<Args...>& aArgs) {
-    PcqStatus status;
-    // TODO: For the moment, this is just a spin-lock.
-    // Maybe make this something more efficient.
-    do {
-      status = CallTryRemove(aArgs, std::index_sequence_for<Args...>{});
-    } while (status == PcqStatus::PcqNotReady);
+    PcqStatus status = CallTryRemove(aArgs, std::index_sequence_for<Args...>{});
     return IsSuccess(status);
   }
 };
@@ -407,10 +405,9 @@ class SyncCommandSource : public CommandSource<Command> {
  protected:
   PcqStatus ReadSyncResponse() {
     SyncResponse response;
-    PcqStatus status;
-    do {
-      status = mConsumer->TryRemove(response);
-    } while (status == PcqStatus::PcqNotReady);
+    PcqStatus status =
+        mConsumer->TryWaitRemove(Nothing() /* wait forever */, response);
+    MOZ_ASSERT(status != PcqStatus::PcqNotReady);
 
     if (IsSuccess(status) && response != RESPONSE_ACK) {
       return PcqStatus::PcqFatalError;
@@ -420,10 +417,10 @@ class SyncCommandSource : public CommandSource<Command> {
 
   template <typename T>
   PcqStatus ReadResult(T& aResult) {
-    PcqStatus status;
-    do {
-      status = mConsumer->TryRemove(aResult);
-    } while (status == PcqStatus::PcqNotReady);
+    PcqStatus status = mConsumer->TryRemove(aResult);
+    // The Sink posts the response code and result as an atomic transaction.  We
+    // already read the response code so the result must be available.
+    MOZ_ASSERT(status != PcqStatus::PcqNotReady);
     return status;
   }
 
@@ -469,8 +466,7 @@ class SyncCommandSink : public CommandSink<Command> {
     ReturnType response = BaseType::CallMethod(
         aObj, aMethod, args, std::index_sequence_for<Args...>{});
 
-    WriteACK(response);
-    return true;
+    return WriteACK(response);
   }
 
   // __cdecl/__thiscall const method variant.
@@ -487,8 +483,7 @@ class SyncCommandSink : public CommandSink<Command> {
     ReturnType response = BaseType::CallMethod(
         aObj, aMethod, args, std::index_sequence_for<Args...>{});
 
-    WriteACK(response);
-    return true;
+    return WriteACK(response);
   }
 
 #if defined(_M_IX86)
@@ -506,8 +501,7 @@ class SyncCommandSink : public CommandSink<Command> {
     ReturnType response = BaseType::CallMethod(
         aObj, aMethod, args, std::index_sequence_for<Args...>{});
 
-    WriteACK(response);
-    return true;
+    return WriteACK(response);
   }
 
   // __stdcall const method variant.
@@ -524,8 +518,7 @@ class SyncCommandSink : public CommandSink<Command> {
     ReturnType response = BaseType::CallMethod(
         aObj, aMethod, args, std::index_sequence_for<Args...>{});
 
-    WriteACK(response);
-    return true;
+    return WriteACK(response);
   }
 #endif
 
@@ -541,8 +534,7 @@ class SyncCommandSink : public CommandSink<Command> {
     ReturnType response =
         BaseType::CallFunction(aFunc, args, std::index_sequence_for<Args...>{});
 
-    WriteACK(response);
-    return true;
+    return WriteACK(response);
   }
 
   // __cdecl/__thiscall non-const void method variant
@@ -557,8 +549,7 @@ class SyncCommandSink : public CommandSink<Command> {
 
     BaseType::CallVoidMethod(aObj, aMethod, args,
                              std::index_sequence_for<Args...>{});
-    WriteACK();
-    return true;
+    return WriteACK();
   }
 
   // __cdecl/__thiscall const void method variant
@@ -574,8 +565,7 @@ class SyncCommandSink : public CommandSink<Command> {
 
     BaseType::CallVoidMethod(aObj, aMethod, args,
                              std::index_sequence_for<Args...>{});
-    WriteACK();
-    return true;
+    return WriteACK();
   }
 
 #if defined(_M_IX86)
@@ -591,8 +581,7 @@ class SyncCommandSink : public CommandSink<Command> {
 
     BaseType::CallVoidMethod(aObj, aMethod, args,
                              std::index_sequence_for<Args...>{});
-    WriteACK();
-    return true;
+    return WriteACK();
   }
 
   // __stdcall const void method variant
@@ -608,8 +597,7 @@ class SyncCommandSink : public CommandSink<Command> {
 
     BaseType::CallVoidMethod(aObj, aMethod, args,
                              std::index_sequence_for<Args...>{});
-    WriteACK();
-    return true;
+    return WriteACK();
   }
 #endif
 
@@ -623,31 +611,24 @@ class SyncCommandSink : public CommandSink<Command> {
     }
 
     BaseType::CallVoidFunction(aFunc, args, std::index_sequence_for<Args...>{});
-    WriteACK();
-    return true;
+    return WriteACK();
   }
 
  protected:
   template <typename... Args>
   bool WriteArgs(const Args&... aArgs) {
-    PcqStatus status;
-    // TODO: For the moment, this is just a spin-lock.
-    // Maybe make this something more efficient.
-    do {
-      status = mProducer->TryInsert(aArgs...);
-    } while (status == PcqStatus::PcqNotReady);
-    return IsSuccess(status);
+    return IsSuccess(mProducer->TryInsert(aArgs...));
   }
 
   template <typename... Args>
-  void WriteACK(const Args&... aArgs) {
+  bool WriteACK(const Args&... aArgs) {
     SyncResponse ack = RESPONSE_ACK;
-    WriteArgs(ack, aArgs...);
+    return WriteArgs(ack, aArgs...);
   }
 
-  void WriteNAK() {
+  bool WriteNAK() {
     SyncResponse nak = RESPONSE_NAK;
-    WriteArgs(nak);
+    return WriteArgs(nak);
   }
 
   UniquePtr<Producer> mProducer;

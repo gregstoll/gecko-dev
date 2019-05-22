@@ -15,8 +15,10 @@
 #include "mozilla/ipc/Shmem.h"
 #include "mozilla/ipc/ProtocolUtils.h"
 #include "mozilla/Logging.h"
+#include "mozilla/TimeStamp.h"
 #include "mozilla/TypeTraits.h"
 #include "nsString.h"
+#include "CrossProcessSemaphore.h"
 
 namespace IPC {
 
@@ -373,6 +375,24 @@ class Marshaller {
   }
 };
 
+class PcqRCSemaphore {
+ public:
+  NS_INLINE_DECL_THREADSAFE_REFCOUNTING(PcqRCSemaphore)
+  PcqRCSemaphore(CrossProcessSemaphore* aSem) : mSem(aSem) { MOZ_ASSERT(mSem); }
+
+  bool Wait(const Maybe<TimeDuration>& aTime) { return mSem->Wait(aTime); }
+  void Signal() { mSem->Signal(); }
+  bool IsAvailable() { return mSem->IsAvailable(); }
+  CrossProcessSemaphoreHandle ShareToProcess(base::ProcessId aTargetPid) {
+    return mSem->ShareToProcess(aTargetPid);
+  }
+  void CloseHandle() { mSem->CloseHandle(); }
+
+ private:
+  ~PcqRCSemaphore() { delete mSem; }
+  CrossProcessSemaphore* mSem;
+};
+
 /**
  * Common base class for Producer and Consumer.
  */
@@ -449,9 +469,20 @@ class PcqBase {
         mRead(nullptr),
         mWrite(nullptr) {}
 
-  PcqBase(Shmem& aShmem, size_t aQueueSize) { Set(aShmem, aQueueSize); }
+  PcqBase(Shmem& aShmem, size_t aQueueSize,
+          RefPtr<PcqRCSemaphore> aMaybeNotEmptySem,
+          RefPtr<PcqRCSemaphore> aMaybeNotFullSem) {
+    Set(aShmem, aQueueSize, aMaybeNotEmptySem, aMaybeNotFullSem);
+  }
 
-  void Set(Shmem& aShmem, size_t aQueueSize) {
+  PcqBase(const PcqBase&) = delete;
+  PcqBase(PcqBase&&) = default;
+  PcqBase& operator=(const PcqBase&) = delete;
+  PcqBase& operator=(PcqBase&&) = default;
+
+  void Set(Shmem& aShmem, size_t aQueueSize,
+           RefPtr<PcqRCSemaphore> aMaybeNotEmptySem,
+           RefPtr<PcqRCSemaphore> aMaybeNotFullSem) {
     mShmem = aShmem;
     mQueue = aShmem.get<uint8_t>();
 
@@ -502,6 +533,12 @@ class PcqBase {
       mUserReservedMemory = nullptr;
       mUserReservedSize = 0;
     }
+
+    // We use Monitors to wait for data when reading from an empty queue
+    // and to wait for free space when writing to a full one.
+    MOZ_ASSERT(aMaybeNotEmptySem && aMaybeNotFullSem);
+    mMaybeNotEmptySem = aMaybeNotEmptySem;
+    mMaybeNotFullSem = aMaybeNotFullSem;
 
     PCQ_LOGD("Created queue (%p) with size: %zu, alignment: %zu, align1: %zu",
              this, aQueueSize, alignment, align1);
@@ -556,6 +593,15 @@ class PcqBase {
   // align2 and align3 is chosen to separate mRead/mWrite and mWrite/User Data
   // similarly.
   Shmem mShmem;
+
+  // Two semaphores that are signaled when the queue goes from a state
+  // where it definitely is empty/full to a state where it "may not be".
+  // Therefore, we can wait on them and know that we will be awakened if
+  // there may be work to do.
+  // Our use of these semaphores leans heavily on the assumption that
+  // the queue is used by one producer and one consumer.
+  RefPtr<PcqRCSemaphore> mMaybeNotEmptySem;
+  RefPtr<PcqRCSemaphore> mMaybeNotFullSem;
 };
 
 }  // namespace detail
@@ -648,6 +694,54 @@ class Producer : public detail::PcqBase {
         "Write index: %zu -> %zu",
         bytesNeeded, initWrite, write);
     mWrite->store(write, std::memory_order_release);
+
+    // Set the semaphore (unless it is already set) to let the consumer know
+    // that the queue may not be empty.  We just need to guarantee that it
+    // was set (i.e. non-zero) at some time after mWrite was updated.
+    if (!mMaybeNotEmptySem->IsAvailable()) {
+      mMaybeNotEmptySem->Signal();
+    }
+    return status;
+  }
+
+  /**
+   * Attempts to insert aArgs into the queue.  If the operation does not
+   * succeed in the time allotted then the queue is unchanged.
+   */
+  template <typename... Args>
+  PcqStatus TryWaitInsert(Maybe<TimeDuration> aDuration, Args&&... aArgs) {
+    // Wait up to aDuration for the not-full semaphore to be signaled.
+    // If we run out of time then quit.
+    TimeStamp start(TimeStamp::Now());
+    if (!mMaybeNotFullSem->Wait(aDuration)) {
+      return PcqStatus::PcqNotReady;
+    }
+
+    // Attempt to insert all args.  No waiting is done here.
+    PcqStatus status = TryInsert(std::forward<Args>(aArgs)...);
+
+    TimeStamp now;
+    if (IsSuccess(status)) {
+      // If our local view of the queue is that it is still not full then
+      // we know it won't get full without us (we are the only producer).
+      // So re-set the not-full semaphore unless it's already set.
+      // (We are also the only not-full semaphore decrementer so it can't
+      // become 0.)
+      if ((!IsFull()) && (!mMaybeNotFullSem->IsAvailable())) {
+        mMaybeNotFullSem->Signal();
+      }
+    } else if ((status == PcqStatus::PcqNotReady) &&
+               (aDuration.isNothing() ||
+                ((now = TimeStamp::Now()) - start) < aDuration.value())) {
+      // We don't have enough room but still have time, e.g. because
+      // the consumer read some data but not enough or because the
+      // not-full semaphore gave a false positive.  Either way, retry.
+      status = aDuration.isNothing()
+                   ? TryWaitInsert(aDuration, std::forward<Args>(aArgs)...)
+                   : TryWaitInsert(Some(aDuration.value() - (now - start)),
+                                   std::forward<Args>(aArgs)...);
+    }
+
     return status;
   }
 
@@ -681,7 +775,10 @@ class Producer : public detail::PcqBase {
         mQueue, QueueBufferSize(), aRead, aWrite, arg, aArgSize);
   }
 
-  Producer(Shmem& aShmem, size_t aQueueSize) : PcqBase(aShmem, aQueueSize) {
+  Producer(Shmem& aShmem, size_t aQueueSize,
+           RefPtr<detail::PcqRCSemaphore> aMaybeNotEmptySem,
+           RefPtr<detail::PcqRCSemaphore> aMaybeNotFullSem)
+      : PcqBase(aShmem, aQueueSize, aMaybeNotEmptySem, aMaybeNotFullSem) {
     // Since they are shared, this initializes mRead/mWrite in the Consumer
     // as well.
     *mRead = 0;
@@ -751,6 +848,68 @@ class Consumer : public detail::PcqBase {
     return TryRemove<PcqTypedArg<Args>...>();
   }
 
+  /**
+   * Wait for up to aDuration to get a copy of the requested data.  If the
+   * operation does not succeed in the time allotted then the queue is
+   * unchanged. Pass Nothing to wait until peek succeeds.
+   */
+  template <typename... Args>
+  PcqStatus TryWaitPeek(Maybe<TimeDuration> aDuration, Args&... aArgs) {
+    return TryWaitPeekOrRemove<false>(aDuration, aArgs...);
+  }
+
+  /**
+   * Wait for up to aDuration to remove the requested data from the queue.
+   * Pass Nothing to wait until removal succeeds.
+   */
+  template <typename... Args>
+  PcqStatus TryWaitRemove(Maybe<TimeDuration> aDuration, Args&... aArgs) {
+    return TryWaitPeekOrRemove<true>(aDuration, aArgs...);
+  }
+
+  /**
+   * Wait for up to aDuration to remove the requested data.  No copy
+   * of the data is returned.  If the operation does not succeed in the
+   * time allotted then the queue is unchanged.
+   * Pass Nothing to wait until removal succeeds.
+   */
+  template <typename... Args>
+  PcqStatus TryWaitRemove(Maybe<TimeDuration> aDuration) {
+    // Wait up to aDuration for the not-empty semaphore to be signaled.
+    // If we run out of time then quit.
+    TimeStamp start(TimeStamp::Now());
+    if (!mMaybeNotEmptySem->Wait(aDuration)) {
+      return PcqStatus::PcqNotReady;
+    }
+
+    // Attempt to remove all args.  No waiting is done here.
+    PcqStatus status = TryRemove<Args...>();
+
+    TimeStamp now;
+    if (IsSuccess(status)) {
+      // If our local view of the queue is that it is still not empty then
+      // we know it won't get empty without us (we are the only consumer).
+      // So re-set the not-empty semaphore unless it's already set.
+      // (We are also the only not-empty semaphore decrementer so it can't
+      // become 0.)
+      if ((!IsEmpty()) && (!mMaybeNotEmptySem->IsAvailable())) {
+        mMaybeNotEmptySem->Signal();
+      }
+    } else if ((status == PcqStatus::PcqNotReady) &&
+               (aDuration.isNothing() ||
+                ((now = TimeStamp::Now()) - start) < aDuration.value())) {
+      // We don't have enough data but still have time, e.g. because
+      // the producer wrote some data but not enough or because the
+      // not-empty semaphore gave a false positive.  Either way, retry.
+      status =
+          aDuration.isNothing()
+              ? TryWaitRemove<Args...>(aDuration)
+              : TryWaitRemove<Args...>(Some(aDuration.value() - (now - start)));
+    }
+
+    return status;
+  }
+
  protected:
   friend ProducerConsumerQueue;
   friend ConsumerView;
@@ -759,7 +918,7 @@ class Consumer : public detail::PcqBase {
   using PeekOrRemoveOperation = std::function<PcqStatus(ConsumerView&)>;
 
   template <bool isRemove, typename... Args>
-  PcqStatus TryPeekOrRemove(PeekOrRemoveOperation operation) {
+  PcqStatus TryPeekOrRemove(PeekOrRemoveOperation aOperation) {
     size_t write = mWrite->load(std::memory_order_acquire);
     size_t read = mRead->load(std::memory_order_relaxed);
     const size_t initRead = read;
@@ -795,8 +954,8 @@ class Consumer : public detail::PcqBase {
     }
 
     // Only update the queue if the operation was successful and we aren't
-    // peeking. We already checked all normal means of failure.
-    PcqStatus status = operation(view);
+    // peeking.
+    PcqStatus status = aOperation(view);
     if (!IsSuccess(status)) {
       return status;
     }
@@ -821,6 +980,12 @@ class Consumer : public detail::PcqBase {
     // Commit the transaction... unless we were just peeking.
     if (isRemove) {
       mRead->store(read, std::memory_order_release);
+      // Set the semaphore (unless it is already set) to let the producer know
+      // that the queue may not be full.  We just need to guarantee that it
+      // was set (i.e. non-zero) at some time after mRead was updated.
+      if (!mMaybeNotFullSem->IsAvailable()) {
+        mMaybeNotFullSem->Signal();
+      }
     }
     return status;
   }
@@ -832,6 +997,43 @@ class Consumer : public detail::PcqBase {
     return TryPeekOrRemove<true, Args...>([&](ConsumerView& aView) {
       return TryPeekRemoveHelper(aView, std::get<Is>(nullArgs)...);
     });
+  }
+
+  template <bool isRemove, typename... Args>
+  PcqStatus TryWaitPeekOrRemove(Maybe<TimeDuration> aDuration, Args&... aArgs) {
+    // Wait up to aDuration for the not-empty semaphore to be signaled.
+    // If we run out of time then quit.
+    TimeStamp start(TimeStamp::Now());
+    if (!mMaybeNotEmptySem->Wait(aDuration)) {
+      return PcqStatus::PcqNotReady;
+    }
+
+    // Attempt to read all args.  No waiting is done here.
+    PcqStatus status = isRemove ? TryRemove(aArgs...) : TryPeek(aArgs...);
+
+    TimeStamp now;
+    if (IsSuccess(status)) {
+      // If our local view of the queue is that it is still not empty then
+      // we know it won't get empty without us (we are the only consumer).
+      // So re-set the not-empty semaphore unless it's already set.
+      // (We are also the only not-empty semaphore decrementer so it can't
+      // become 0.)
+      if ((!IsEmpty()) && (!mMaybeNotEmptySem->IsAvailable())) {
+        mMaybeNotEmptySem->Signal();
+      }
+    } else if ((status == PcqStatus::PcqNotReady) &&
+               (aDuration.isNothing() ||
+                ((now = TimeStamp::Now()) - start) < aDuration.value())) {
+      // We don't have enough data but still have time, e.g. because
+      // the producer wrote some data but not enough or because the
+      // not-empty semaphore gave a false positive.  Either way, retry.
+      status = aDuration.isNothing()
+                   ? TryWaitPeekOrRemove<isRemove>(aDuration, aArgs...)
+                   : TryWaitPeekOrRemove<isRemove>(
+                         Some(aDuration.value() - (now - start)), aArgs...);
+    }
+
+    return status;
   }
 
   // Version of the helper for copying values out of the queue.
@@ -866,7 +1068,10 @@ class Consumer : public detail::PcqBase {
         mQueue, QueueBufferSize(), aRead, aWrite, arg, aArgSize);
   }
 
-  Consumer(Shmem& aShmem, size_t aQueueSize) : PcqBase(aShmem, aQueueSize) {}
+  Consumer(Shmem& aShmem, size_t aQueueSize,
+           RefPtr<detail::PcqRCSemaphore> aMaybeNotEmptySem,
+           RefPtr<detail::PcqRCSemaphore> aMaybeNotFullSem)
+      : PcqBase(aShmem, aQueueSize, aMaybeNotEmptySem, aMaybeNotFullSem) {}
 
   Consumer(const Consumer&) = delete;
   Consumer& operator=(const Consumer&) = delete;
@@ -876,8 +1081,8 @@ using mozilla::detail::GetCacheLineSize;
 using mozilla::detail::GetMaxHeaderSize;
 
 /**
- * A single producer + single consumer queue, implemented as a (typically)
- * lockless circular queue.  The object is backed with a Shmem, which allows
+ * A single producer + single consumer queue, implemented as a
+ * circular queue.  The object is backed with a Shmem, which allows
  * it to be used across processes.
  *
  * To work with this queue:
@@ -981,7 +1186,13 @@ struct ProducerConsumerQueue {
         ((GetMaxHeaderSize() + aQueueSize + 1) > totalShmemSize)) {
       return nullptr;
     }
-    return WrapUnique(new ProducerConsumerQueue(aShmem, aQueueSize));
+
+    auto notempty = MakeRefPtr<detail::PcqRCSemaphore>(
+        CrossProcessSemaphore::Create("webgl-notempty", 0));
+    auto notfull = MakeRefPtr<detail::PcqRCSemaphore>(
+        CrossProcessSemaphore::Create("webgl-notfull", 1));
+    return WrapUnique(
+        new ProducerConsumerQueue(aShmem, aQueueSize, notempty, notfull));
   }
 
   /**
@@ -1001,9 +1212,13 @@ struct ProducerConsumerQueue {
   }
 
  private:
-  ProducerConsumerQueue(Shmem& aShmem, size_t aQueueSize)
-      : mProducer(WrapUnique(new Producer(aShmem, aQueueSize))),
-        mConsumer(WrapUnique(new Consumer(aShmem, aQueueSize))) {
+  ProducerConsumerQueue(Shmem& aShmem, size_t aQueueSize,
+                        RefPtr<detail::PcqRCSemaphore>& aMaybeNotEmptySem,
+                        RefPtr<detail::PcqRCSemaphore>& aMaybeNotFullSem)
+      : mProducer(WrapUnique(new Producer(aShmem, aQueueSize, aMaybeNotEmptySem,
+                                          aMaybeNotFullSem))),
+        mConsumer(WrapUnique(new Consumer(aShmem, aQueueSize, aMaybeNotEmptySem,
+                                          aMaybeNotFullSem))) {
     PCQ_LOGD("Constructed PCQ (%p).  Shmem Size = %zu. Queue Size = %zu.", this,
              aShmem.Size<uint8_t>(), aQueueSize);
   }
@@ -1016,17 +1231,33 @@ struct IPDLParamTraits<mozilla::detail::PcqBase> {
   static void Write(IPC::Message* aMsg, IProtocol* aActor, paramType& aParam) {
     WriteIPDLParam(aMsg, aActor, aParam.QueueSize());
     WriteIPDLParam(aMsg, aActor, std::move(aParam.mShmem));
+    WriteIPDLParam(
+        aMsg, aActor,
+        aParam.mMaybeNotEmptySem->ShareToProcess(aActor->OtherPid()));
+    WriteIPDLParam(aMsg, aActor,
+                   aParam.mMaybeNotFullSem->ShareToProcess(aActor->OtherPid()));
   }
 
   static bool Read(const IPC::Message* aMsg, PickleIterator* aIter,
                    IProtocol* aActor, paramType* aResult) {
     size_t queueSize;
     Shmem shmem;
+    CrossProcessSemaphoreHandle notEmptyHandle;
+    CrossProcessSemaphoreHandle notFullHandle;
+
     if (!ReadIPDLParam(aMsg, aIter, aActor, &queueSize) ||
-        !ReadIPDLParam(aMsg, aIter, aActor, &shmem)) {
+        !ReadIPDLParam(aMsg, aIter, aActor, &shmem) ||
+        !ReadIPDLParam(aMsg, aIter, aActor, &notEmptyHandle) ||
+        !ReadIPDLParam(aMsg, aIter, aActor, &notFullHandle)) {
       return false;
     }
-    aResult->Set(shmem, queueSize);
+
+    MOZ_ASSERT(notEmptyHandle && notFullHandle);
+    aResult->Set(shmem, queueSize,
+                 MakeRefPtr<detail::PcqRCSemaphore>(
+                     CrossProcessSemaphore::Create(notEmptyHandle)),
+                 MakeRefPtr<detail::PcqRCSemaphore>(
+                     CrossProcessSemaphore::Create(notFullHandle)));
     return true;
   }
 

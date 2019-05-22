@@ -145,6 +145,13 @@ void CrossProcessSemaphore::Signal() {
   sem_post(mSemaphore);
 }
 
+bool CrossProcessSemaphore::IsAvailable() {
+  MOZ_ASSERT(*mRefCount > 0,
+             "Attempting to read a semaphore with zero ref count");
+  int ret;
+  return (sem_getvalue(mSemaphore, &ret) == 0) ? (ret > 0) : false;
+}
+
 CrossProcessSemaphoreHandle CrossProcessSemaphore::ShareToProcess(
     base::ProcessId aTargetPid) {
   CrossProcessSemaphoreHandle result = ipc::SharedMemoryBasic::NULLHandle();

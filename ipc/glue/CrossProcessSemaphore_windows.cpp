@@ -65,6 +65,17 @@ void CrossProcessSemaphore::Signal() {
   ::ReleaseSemaphore(mSemaphore, 1, nullptr);
 }
 
+bool CrossProcessSemaphore::IsAvailable() {
+  MOZ_ASSERT(mSemaphore, "Improper construction of semaphore.");
+  // If we can decrement immediately then it's available.
+  if (Wait(Some(TimeDuration(0)))) {
+    // Restore the value we decremented by signaling.
+    Signal();
+    return true;
+  }
+  return false;
+}
+
 CrossProcessSemaphoreHandle CrossProcessSemaphore::ShareToProcess(
     base::ProcessId aTargetPid) {
   HANDLE newHandle;
