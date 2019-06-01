@@ -128,11 +128,12 @@ class WebGL2Context : public WebGLContext {
   void ClearBufferfi(GLenum buffer, GLint drawBuffer, GLfloat depth,
                      GLint stencil);
   void ClearBufferfv(GLenum buffer, GLint drawBuffer,
-                     const nsTArray<float>& src, GLuint srcElemOffset);
+                     const RawBuffer<const float>& src, GLuint srcElemOffset);
   void ClearBufferiv(GLenum buffer, GLint drawBuffer,
-                     const nsTArray<int32_t>& src, GLuint srcElemOffset);
+                     const RawBuffer<const int32_t>& src, GLuint srcElemOffset);
   void ClearBufferuiv(GLenum buffer, GLint drawBuffer,
-                      const nsTArray<uint32_t>& src, GLuint srcElemOffset);
+                      const RawBuffer<const uint32_t>& src,
+                      GLuint srcElemOffset);
 
   // -------------------------------------------------------------------------
   // Sampler Objects - WebGL2ContextSamplers.cpp

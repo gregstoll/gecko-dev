@@ -44,6 +44,8 @@ class HostWebGLCommandSink : public SyncCommandSink<size_t> {
 
   bool DispatchCommand(size_t command) override;
 
+  void ReportOOM() override;
+
   HostWebGLContext* mHostContext;
 };
 

@@ -148,7 +148,11 @@ struct PcqParamTraits<RawBuffer<T>> {
     }
 
     if (aArg) {
-      uint8_t* data = new uint8_t[len];
+      auto data =
+          new typename RemoveCV<typename ParamType::ElementType>::Type[len];
+      if (!data) {
+        return PcqStatus::PcqOOMError;
+      }
       aArg->mData = data;
       aArg->mLength = len;
       aArg->mOwnsData = true;
