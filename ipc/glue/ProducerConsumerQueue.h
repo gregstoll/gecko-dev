@@ -84,11 +84,15 @@ enum class PcqStatus {
   PcqNotReady,
   // The operation was typed and the type check failed.
   PcqTypeError,
-  // The operation failed for some reason that is unrecoverable.
-  PcqFatalError,
   // The operation required more room than the queue supports.
   // It should not be retried -- it will always fail.
-  PcqTooSmall
+  PcqTooSmall,
+  // The operation failed for some reason that is unrecoverable.
+  // All values below this value indicate a fata error.
+  PcqFatalError,
+  // Fatal error: Internal processing ran out of memory.  This is likely e.g.
+  // during de-serialization.
+  PcqOOMError,
 };
 
 bool IsSuccess(PcqStatus status) { return status == PcqStatus::Success; }
@@ -1382,7 +1386,7 @@ struct PcqParamTraits<nsACString> {
 
     char* buf = aArg ? new char[len + 1] : nullptr;
     if (aArg && (!buf)) {
-      return PcqStatus::PcqFatalError;
+      return PcqStatus::PcqOOMError;
     }
     status = IsSuccess(status) ? aConsumerView.Read(buf, len) : status;
     if (!IsSuccess(status)) {
@@ -1450,7 +1454,7 @@ struct PcqParamTraits<nsAString> {
       buf = static_cast<typename ParamType::char_type*>(
           malloc((len + 1) * sizeofchar));
       if (!buf) {
-        return PcqStatus::PcqFatalError;
+        return PcqStatus::PcqOOMError;
       }
     }
     status =
@@ -1517,8 +1521,8 @@ struct NSArrayPcqParamTraits<nsTArray<ElementType>, false> {
       return status;
     }
 
-    if (aArg && !aArg->AppendElements(arrayLen)) {
-      return PcqStatus::PcqFatalError;
+    if (aArg && !aArg->AppendElements(arrayLen, fallible)) {
+      return PcqStatus::PcqOOMError;
     }
 
     for (size_t i = 0; i < arrayLen; ++i) {
@@ -1568,8 +1572,8 @@ struct NSArrayPcqParamTraits<nsTArray<ElementType>, true> {
       return status;
     }
 
-    if (aArg && !aArg->AppendElements(arrayLen)) {
-      return PcqStatus::PcqFatalError;
+    if (aArg && !aArg->AppendElements(arrayLen, fallible)) {
+      return PcqStatus::PcqOOMError;
     }
 
     status = IsSuccess(status)

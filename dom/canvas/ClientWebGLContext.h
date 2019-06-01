@@ -447,28 +447,6 @@ class ClientWebGLContext : public nsICanvasRenderingContextInternal,
   typedef Arr<GLint, dom::Int32Array> Int32Arr;
   typedef Arr<GLuint, dom::Uint32Array> Uint32Arr;
 
-  static const nsTArray<float> ToNsTArray(
-      const dom::Float32ArrayOrUnrestrictedFloatSequence& list) {
-    const Float32Arr arr(Float32Arr::From(list));
-    nsTArray<float> ret;
-    ret.AppendElements(arr.elemBytes, arr.elemCount);
-    return ret;
-  }
-  static const nsTArray<int32_t> ToNsTArray(
-      const dom::Int32ArrayOrLongSequence& list) {
-    const Int32Arr arr(Int32Arr::From(list));
-    nsTArray<int32_t> ret;
-    ret.AppendElements(arr.elemBytes, arr.elemCount);
-    return ret;
-  }
-  static const nsTArray<uint32_t> ToNsTArray(
-      const dom::Uint32ArrayOrUnsignedLongSequence& list) {
-    const Uint32Arr arr(Uint32Arr::From(list));
-    nsTArray<uint32_t> ret;
-    ret.AppendElements(arr.elemBytes, arr.elemCount);
-    return ret;
-  }
-
   MaybeWebGLTexUnpackVariant From(TexImageTarget target, GLsizei rawWidth,
                                   GLsizei rawHeight, GLsizei rawDepth,
                                   GLint border, const TexImageSource& src);
@@ -1441,11 +1419,6 @@ class ClientWebGLContext : public nsICanvasRenderingContextInternal,
 
 #undef FOO
 
-  void UniformNiv(const nsCString& funcName, uint8_t N,
-                  const WebGLId<WebGLUniformLocation>& loc,
-                  const nsTArray<int32_t>& arr, GLuint elemOffset,
-                  GLuint elemCountOverride);
-
   void UniformBlockBinding(const WebGLId<WebGLProgram>& progId,
                            GLuint uniformBlockIndex,
                            GLuint uniformBlockBinding);
@@ -1748,7 +1721,19 @@ class ClientWebGLContext : public nsICanvasRenderingContextInternal,
     // This method is const so that const client methods can call it but the
     // RPC mechanism needs non-const.
     auto nonConstThis = const_cast<ClientWebGLContext*>(this);
-    nonConstThis->mCommandSource->RunAsyncCommand(command, aArgs...);
+    PcqStatus status =
+        nonConstThis->mCommandSource->RunAsyncCommand(command, aArgs...);
+    if (!IsSuccess(status)) {
+      if (status == PcqStatus::PcqOOMError) {
+        nonConstThis->PostWarning(
+            nsCString("Ran out-of-memory during WebGL IPC."));
+      }
+      // Not much to do but shut down.  Since this was a Pcq failure and
+      // may have been catastrophic, we don't try to revive it.  Make sure to
+      // post "webglcontextlost"
+      MOZ_ASSERT_UNREACHABLE(
+          "TODO: Make this shut down the context, actors, everything.");
+    }
   }
 
   template <size_t command, typename ReturnType, typename... Args>
@@ -1761,8 +1746,20 @@ class ClientWebGLContext : public nsICanvasRenderingContextInternal,
     // RPC mechanism needs non-const.
     auto nonConstThis = const_cast<ClientWebGLContext*>(this);
     ReturnType returnValue;
-    nonConstThis->mCommandSource->RunSyncCommand(command, returnValue,
-                                                 aArgs...);
+    PcqStatus status = nonConstThis->mCommandSource->RunSyncCommand(
+        command, returnValue, aArgs...);
+
+    if (!IsSuccess(status)) {
+      if (status == PcqStatus::PcqOOMError) {
+        nonConstThis->PostWarning(
+            nsCString("Ran out-of-memory during WebGL IPC."));
+      }
+      // Not much to do but shut down.  Since this was a Pcq failure and
+      // may have been catastrophic, we don't try to revive it.  Make sure to
+      // post "webglcontextlost"
+      MOZ_ASSERT_UNREACHABLE(
+          "TODO: Make this shut down the context, actors, everything.");
+    }
 
     // TODO: Should I really do this here or require overloads (in this class)
     // of each function that wants it?
@@ -1779,7 +1776,20 @@ class ClientWebGLContext : public nsICanvasRenderingContextInternal,
     // This method is const so that const client methods can call it but the
     // RPC mechanism needs non-const.
     auto nonConstThis = const_cast<ClientWebGLContext*>(this);
-    nonConstThis->mCommandSource->RunVoidSyncCommand(command, aArgs...);
+    PcqStatus status =
+        nonConstThis->mCommandSource->RunVoidSyncCommand(command, aArgs...);
+
+    if (!IsSuccess(status)) {
+      if (status == PcqStatus::PcqOOMError) {
+        nonConstThis->PostWarning(
+            nsCString("Ran out-of-memory during WebGL IPC."));
+      }
+      // Not much to do but shut down.  Since this was a Pcq failure and
+      // may have been catastrophic, we don't try to revive it.  Make sure to
+      // post "webglcontextlost"
+      MOZ_ASSERT_UNREACHABLE(
+          "TODO: Make this shut down the context, actors, everything.");
+    }
 
     // TODO: Should I really do this here or require overloads (in this class)
     // of each function that wants it?

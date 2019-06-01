@@ -255,7 +255,7 @@ void ClientWebGLContext::PostWarning(const nsCString& aWarning) {
   }
   JSContext* cx = api.cx();
   // no need to print to stderr, as JS::WarnASCII takes care of this for us.
-  WEBGL_BRIDGE_LOGD("[%p] Posting Warning to console: '%s'", this,
+  WEBGL_BRIDGE_LOGD("[%p] Posting message to console: '%s'", this,
                     aWarning.Data());
   JS::WarnASCII(cx, aWarning.Data());
 }
@@ -1594,6 +1594,9 @@ void ClientWebGLContext::DeleteRenderbuffer(
 void ClientWebGLContext::GetInternalformatParameter(
     JSContext* cx, GLenum target, GLenum internalformat, GLenum pname,
     JS::MutableHandleValue retval, ErrorResult& rv) {
+  // TODO: Make this return the maybeArray AND an ErrorResult (just the
+  // NSError). That way, we can report NS_ERROR_OUT_OF_MEMORY when
+  // WebGL2Context::GetInternalformatParameter's AppendElements fails
   Maybe<nsTArray<int32_t>> maybeArr =
       Run<RPROC(GetInternalformatParameter)>(target, internalformat, pname);
   if (!maybeArr) {
@@ -2098,12 +2101,15 @@ void ClientWebGLContext::Uniform4ui(const WebGLId<WebGLUniformLocation>& aLoc,
   Run<RPROC(UniformUIVec)>(aLoc, nsTArray<GLuint>({x, y, z, w}));
 }
 
-#define FOO(DIM)                                                              \
-  void ClientWebGLContext::Uniform##DIM##fv(                                  \
-      WebGLId<WebGLUniformLocation> loc, const Float32ListU& list,            \
-      GLuint elemOffset, GLuint elemCountOverride) {                          \
-    Run<RPROC(UniformNfv)>(nsCString("uniform" #DIM "fv"), (uint8_t)DIM, loc, \
-                           ToNsTArray(list), elemOffset, elemCountOverride);  \
+#define FOO(DIM)                                                          \
+  void ClientWebGLContext::Uniform##DIM##fv(                              \
+      WebGLId<WebGLUniformLocation> loc, const Float32ListU& list,        \
+      GLuint elemOffset, GLuint elemCountOverride) {                      \
+    const auto& arr = Float32Arr::From(list);                             \
+    Run<RPROC(UniformNfv)>(                                               \
+        nsCString("uniform" #DIM "fv"), (uint8_t)DIM, loc,                \
+        RawBuffer<const float>(arr.elemCount, arr.elemBytes), elemOffset, \
+        elemCountOverride);                                               \
   }
 
 FOO(1)
@@ -2115,12 +2121,15 @@ FOO(4)
 
 //////
 
-#define FOO(DIM)                                                              \
-  void ClientWebGLContext::Uniform##DIM##iv(                                  \
-      WebGLId<WebGLUniformLocation> loc, const Int32ListU& list,              \
-      GLuint elemOffset, GLuint elemCountOverride) {                          \
-    Run<RPROC(UniformNiv)>(nsCString("uniform" #DIM "iv"), (uint8_t)DIM, loc, \
-                           ToNsTArray(list), elemOffset, elemCountOverride);  \
+#define FOO(DIM)                                                            \
+  void ClientWebGLContext::Uniform##DIM##iv(                                \
+      WebGLId<WebGLUniformLocation> loc, const Int32ListU& list,            \
+      GLuint elemOffset, GLuint elemCountOverride) {                        \
+    const auto& arr = Int32Arr::From(list);                                 \
+    Run<RPROC(UniformNiv)>(                                                 \
+        nsCString("uniform" #DIM "iv"), (uint8_t)DIM, loc,                  \
+        RawBuffer<const int32_t>(arr.elemCount, arr.elemBytes), elemOffset, \
+        elemCountOverride);                                                 \
   }
 
 FOO(1)
@@ -2132,13 +2141,15 @@ FOO(4)
 
 //////
 
-#define FOO(DIM)                                                           \
-  void ClientWebGLContext::Uniform##DIM##uiv(                              \
-      WebGLId<WebGLUniformLocation> loc, const Uint32ListU& list,          \
-      GLuint elemOffset, GLuint elemCountOverride) {                       \
-    Run<RPROC(UniformNuiv)>(nsCString("uniform" #DIM "uiv"), (uint8_t)DIM, \
-                            loc, ToNsTArray(list), elemOffset,             \
-                            elemCountOverride);                            \
+#define FOO(DIM)                                                             \
+  void ClientWebGLContext::Uniform##DIM##uiv(                                \
+      WebGLId<WebGLUniformLocation> loc, const Uint32ListU& list,            \
+      GLuint elemOffset, GLuint elemCountOverride) {                         \
+    const auto& arr = Uint32Arr::From(list);                                 \
+    Run<RPROC(UniformNuiv)>(                                                 \
+        nsCString("uniform" #DIM "uiv"), (uint8_t)DIM, loc,                  \
+        RawBuffer<const uint32_t>(arr.elemCount, arr.elemBytes), elemOffset, \
+        elemCountOverride);                                                  \
   }
 
 FOO(1)
@@ -2154,9 +2165,11 @@ FOO(4)
   void ClientWebGLContext::UniformMatrix##DIM##fv(                             \
       WebGLId<WebGLUniformLocation> loc, bool transpose,                       \
       const Float32ListU& list, GLuint elemOffset, GLuint elemCountOverride) { \
+    const auto& arr = Float32Arr::From(list);                                  \
     Run<RPROC(UniformMatrixAxBfv)>(                                            \
         nsCString("uniformMatrix" #DIM "fv"), (uint8_t)ROW, (uint8_t)COL, loc, \
-        transpose, ToNsTArray(list), elemOffset, elemCountOverride);           \
+        transpose, RawBuffer<const float>(arr.elemCount, arr.elemBytes),       \
+        elemOffset, elemCountOverride);                                        \
   }
 
 FOO(2, 2, 2)
@@ -2172,14 +2185,6 @@ FOO(4x3, 4, 3)
 FOO(4, 4, 4)
 
 #undef FOO
-
-void ClientWebGLContext::UniformNiv(const nsCString& funcName, uint8_t N,
-                                    const WebGLId<WebGLUniformLocation>& loc,
-                                    const nsTArray<int32_t>& arr,
-                                    GLuint elemOffset,
-                                    GLuint elemCountOverride) {
-  Run<RPROC(UniformNiv)>(funcName, N, loc, arr, elemOffset, elemCountOverride);
-}
 
 void ClientWebGLContext::UniformBlockBinding(
     const WebGLId<WebGLProgram>& progId, GLuint uniformBlockIndex,
@@ -2511,8 +2516,10 @@ void ClientWebGLContext::DeleteBuffer(const WebGLId<WebGLBuffer>& aBuf) {
 void ClientWebGLContext::ClearBufferfv(GLenum buffer, GLint drawBuffer,
                                        const Float32ListU& list,
                                        GLuint srcElemOffset) {
-  Run<RPROC(ClearBufferfv)>(buffer, drawBuffer, ToNsTArray(list),
-                            srcElemOffset);
+  const auto& arr = Float32Arr::From(list);
+  Run<RPROC(ClearBufferfv)>(
+      buffer, drawBuffer, RawBuffer<const float>(arr.elemCount, arr.elemBytes),
+      srcElemOffset);
   // TODO: We need to invalidate if the target was the screen buffer.
   // As of right now we don't know so I'm being conservative.
   Invalidate();
@@ -2521,8 +2528,10 @@ void ClientWebGLContext::ClearBufferfv(GLenum buffer, GLint drawBuffer,
 void ClientWebGLContext::ClearBufferiv(GLenum buffer, GLint drawBuffer,
                                        const Int32ListU& list,
                                        GLuint srcElemOffset) {
-  Run<RPROC(ClearBufferiv)>(buffer, drawBuffer, ToNsTArray(list),
-                            srcElemOffset);
+  const auto& arr = Int32Arr::From(list);
+  Run<RPROC(ClearBufferiv)>(
+      buffer, drawBuffer,
+      RawBuffer<const int32_t>(arr.elemCount, arr.elemBytes), srcElemOffset);
   // TODO: We need to invalidate if the target was the screen buffer.
   // As of right now we don't know so I'm being conservative.
   Invalidate();
@@ -2531,8 +2540,10 @@ void ClientWebGLContext::ClearBufferiv(GLenum buffer, GLint drawBuffer,
 void ClientWebGLContext::ClearBufferuiv(GLenum buffer, GLint drawBuffer,
                                         const Uint32ListU& list,
                                         GLuint srcElemOffset) {
-  Run<RPROC(ClearBufferuiv)>(buffer, drawBuffer, ToNsTArray(list),
-                             srcElemOffset);
+  const auto& arr = Uint32Arr::From(list);
+  Run<RPROC(ClearBufferuiv)>(
+      buffer, drawBuffer,
+      RawBuffer<const uint32_t>(arr.elemCount, arr.elemBytes), srcElemOffset);
   // TODO: We need to invalidate if the target was the screen buffer.
   // As of right now we don't know so I'm being conservative.
   Invalidate();

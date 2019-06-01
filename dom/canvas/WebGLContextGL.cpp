@@ -1715,8 +1715,8 @@ static bool ValidateArrOffsetAndCount(WebGLContext* webgl, size_t elemsAvail,
 
 void WebGLContext::UniformNiv(const char* funcName, uint8_t N,
                               WebGLUniformLocation* loc,
-                              const nsTArray<GLint>& arr, GLuint elemOffset,
-                              GLuint elemCountOverride) {
+                              const RawBuffer<const GLint>& arr,
+                              GLuint elemOffset, GLuint elemCountOverride) {
   const FuncScope funcScope(*this, funcName);
 
   size_t elemCount;
@@ -1724,7 +1724,7 @@ void WebGLContext::UniformNiv(const char* funcName, uint8_t N,
                                  elemCountOverride, &elemCount)) {
     return;
   }
-  const auto elemBytes = arr.Elements() + elemOffset;
+  const auto elemBytes = arr.Data() + elemOffset;
 
   uint32_t numElementsToUpload;
   if (!ValidateUniformArraySetter(loc, N, webgl::AttribBaseType::Int, elemCount,
@@ -1747,8 +1747,8 @@ void WebGLContext::UniformNiv(const char* funcName, uint8_t N,
 
 void WebGLContext::UniformNuiv(const char* funcName, uint8_t N,
                                WebGLUniformLocation* loc,
-                               const nsTArray<GLuint>& arr, GLuint elemOffset,
-                               GLuint elemCountOverride) {
+                               const RawBuffer<const GLuint>& arr,
+                               GLuint elemOffset, GLuint elemCountOverride) {
   const FuncScope funcScope(*this, funcName);
 
   size_t elemCount;
@@ -1756,7 +1756,7 @@ void WebGLContext::UniformNuiv(const char* funcName, uint8_t N,
                                  elemCountOverride, &elemCount)) {
     return;
   }
-  const auto elemBytes = arr.Elements() + elemOffset;
+  const auto elemBytes = arr.Data() + elemOffset;
 
   uint32_t numElementsToUpload;
   if (!ValidateUniformArraySetter(loc, N, webgl::AttribBaseType::UInt,
@@ -1775,8 +1775,8 @@ void WebGLContext::UniformNuiv(const char* funcName, uint8_t N,
 
 void WebGLContext::UniformNfv(const char* funcName, uint8_t N,
                               WebGLUniformLocation* loc,
-                              const nsTArray<GLfloat>& arr, GLuint elemOffset,
-                              GLuint elemCountOverride) {
+                              const RawBuffer<const GLfloat>& arr,
+                              GLuint elemOffset, GLuint elemCountOverride) {
   const FuncScope funcScope(*this, funcName);
 
   size_t elemCount;
@@ -1784,7 +1784,7 @@ void WebGLContext::UniformNfv(const char* funcName, uint8_t N,
                                  elemCountOverride, &elemCount)) {
     return;
   }
-  const auto elemBytes = arr.Elements() + elemOffset;
+  const auto elemBytes = arr.Data() + elemOffset;
 
   uint32_t numElementsToUpload;
   if (!ValidateUniformArraySetter(loc, N, webgl::AttribBaseType::Float,
@@ -1815,7 +1815,7 @@ static inline void MatrixAxBToRowMajor(const uint8_t width,
 void WebGLContext::UniformMatrixAxBfv(const char* funcName, uint8_t A,
                                       uint8_t B, WebGLUniformLocation* loc,
                                       const bool transpose,
-                                      const nsTArray<float>& arr,
+                                      const RawBuffer<const float>& arr,
                                       GLuint elemOffset,
                                       GLuint elemCountOverride) {
   const FuncScope funcScope(*this, funcName);
@@ -1825,7 +1825,7 @@ void WebGLContext::UniformMatrixAxBfv(const char* funcName, uint8_t A,
                                  elemCountOverride, &elemCount)) {
     return;
   }
-  const auto elemBytes = arr.Elements() + elemOffset;
+  const auto elemBytes = arr.Data() + elemOffset;
 
   uint32_t numMatsToUpload;
   if (!ValidateUniformMatrixArraySetter(loc, A, B, webgl::AttribBaseType::Float,

@@ -136,10 +136,12 @@ struct PcqParamTraits<RawBuffer<T>> {
   static PcqStatus Write(ProducerView& aProducerView, const ParamType& aArg) {
     PcqStatus status = aProducerView.WriteParam(aArg.mLength);
     return ((aArg.mLength > 0) && IsSuccess(status))
-               ? aProducerView.Write(aArg.mData, aArg.mLength)
+               ? aProducerView.Write(aArg.mData, aArg.mLength*sizeof(T))
                : status;
   }
 
+  template <typename ElementType =
+              typename RemoveCV<typename ParamType::ElementType>::Type>
   static PcqStatus Read(ConsumerView& aConsumerView, ParamType* aArg) {
     size_t len;
     PcqStatus status = aConsumerView.ReadParam(&len);
@@ -148,13 +150,16 @@ struct PcqParamTraits<RawBuffer<T>> {
     }
 
     if (aArg) {
-      uint8_t* data = new uint8_t[len];
+      auto data = new ElementType[len];
+      if (!data) {
+        return PcqStatus::PcqOOMError;
+      }
       aArg->mData = data;
       aArg->mLength = len;
       aArg->mOwnsData = true;
-      return aConsumerView.Read(data, len);
+      return aConsumerView.Read(data, len*sizeof(ElementType));
     }
-    return aConsumerView.Read(nullptr, len);
+    return aConsumerView.Read(nullptr, len*sizeof(ElementType));
   }
 
   template <typename View>

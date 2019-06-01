@@ -600,18 +600,18 @@ class WebGLContext : public SupportsWeakPtr<WebGLContext> {
   //////////////////////////
 
   void UniformNfv(const char* funcName, uint8_t N, WebGLUniformLocation* loc,
-                  const nsTArray<GLfloat>& arr, GLuint elemOffset,
+                  const RawBuffer<const GLfloat>& arr, GLuint elemOffset,
                   GLuint elemCountOverride);
   void UniformNiv(const char* funcName, uint8_t N, WebGLUniformLocation* loc,
-                  const nsTArray<GLint>& arr, GLuint elemOffset,
+                  const RawBuffer<const GLint>& arr, GLuint elemOffset,
                   GLuint elemCountOverride);
   void UniformNuiv(const char* funcName, uint8_t N, WebGLUniformLocation* loc,
-                   const nsTArray<GLuint>& arr, GLuint elemOffset,
+                   const RawBuffer<const GLuint>& arr, GLuint elemOffset,
                    GLuint elemCountOverride);
 
   void UniformMatrixAxBfv(const char* funcName, uint8_t A, uint8_t B,
                           WebGLUniformLocation* loc, bool transpose,
-                          const nsTArray<float>& arr, GLuint elemOffset,
+                          const RawBuffer<const float>& arr, GLuint elemOffset,
                           GLuint elemCountOverride);
 
   ////////////////////////////////////

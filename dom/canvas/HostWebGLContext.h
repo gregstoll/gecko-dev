@@ -537,22 +537,22 @@ class HostWebGLContext : public WebGLContextEndpoint {
   // ------------------------ Uniforms and attributes ------------------------
   void UniformNfv(const nsCString& funcName, uint8_t N,
                   const WebGLId<WebGLUniformLocation>& loc,
-                  const nsTArray<float>& arr, GLuint elemOffset,
+                  const RawBuffer<const float>& arr, GLuint elemOffset,
                   GLuint elemCountOverride);
 
   void UniformNiv(const nsCString& funcName, uint8_t N,
                   const WebGLId<WebGLUniformLocation>& loc,
-                  const nsTArray<int32_t>& arr, GLuint elemOffset,
+                  const RawBuffer<const int32_t>& arr, GLuint elemOffset,
                   GLuint elemCountOverride);
 
   void UniformNuiv(const nsCString& funcName, uint8_t N,
                    const WebGLId<WebGLUniformLocation>& loc,
-                   const nsTArray<uint32_t>& arr, GLuint elemOffset,
+                   const RawBuffer<const uint32_t>& arr, GLuint elemOffset,
                    GLuint elemCountOverride);
 
   void UniformMatrixAxBfv(const nsCString& funcName, uint8_t A, uint8_t B,
                           const WebGLId<WebGLUniformLocation>& loc,
-                          bool transpose, const nsTArray<float>& arr,
+                          bool transpose, const RawBuffer<const float>& arr,
                           GLuint elemOffset, GLuint elemCountOverride);
 
   void UniformFVec(const WebGLId<WebGLUniformLocation>& aLoc,
@@ -612,11 +612,12 @@ class HostWebGLContext : public WebGLContextEndpoint {
 
   // --------------------------- Buffer Operations --------------------------
   void ClearBufferfv(GLenum buffer, GLint drawBuffer,
-                     const nsTArray<float>& src, GLuint srcElemOffset);
+                     const RawBuffer<const float>& src, GLuint srcElemOffset);
   void ClearBufferiv(GLenum buffer, GLint drawBuffer,
-                     const nsTArray<int32_t>& src, GLuint srcElemOffset);
+                     const RawBuffer<const int32_t>& src, GLuint srcElemOffset);
   void ClearBufferuiv(GLenum buffer, GLint drawBuffer,
-                      const nsTArray<uint32_t>& src, GLuint srcElemOffset);
+                      const RawBuffer<const uint32_t>& src,
+                      GLuint srcElemOffset);
   void ClearBufferfi(GLenum buffer, GLint drawBuffer, GLfloat depth,
                      GLint stencil);
 
@@ -683,10 +684,13 @@ class HostWebGLContext : public WebGLContextEndpoint {
   Maybe<WebGLActiveInfo> GetTransformFeedbackVarying(
       const WebGLId<WebGLProgram>& prog, GLuint index);
 
-  // ------------------------------ Debug ------------------------------------
+  // ------------------------------ WebGL Debug
+  // ------------------------------------
   void EnqueueError(GLenum aGLError, const nsCString& aMsg);
 
   void EnqueueWarning(const nsCString& aMsg);
+
+  void ReportOOMAndLoseContext();
 
   // -------------------------------------------------------------------------
   // Host-side extension methods.  Calls in the client are forwarded to the

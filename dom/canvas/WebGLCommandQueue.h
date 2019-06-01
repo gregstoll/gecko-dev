@@ -183,6 +183,9 @@ class CommandSink : public BasicSink {
         }
       case PcqStatus::PcqNotReady:
         return CommandResult::QueueEmpty;
+      case PcqStatus::PcqOOMError:
+        ReportOOM();
+        // intentional fall-through
       default:
         return CommandResult::Error;
     }
@@ -305,6 +308,12 @@ class CommandSink : public BasicSink {
    * that calls one of the Dispatch methods in this class.
    */
   virtual bool DispatchCommand(Command command) = 0;
+
+  /**
+   * Implementations can override this to detect out-of-memory during
+   * deserialization.
+   */
+  virtual void ReportOOM() {}
 
   template <typename... Args, size_t... Indices>
   PcqStatus CallTryRemove(std::tuple<Args...>& aArgs,
@@ -638,7 +647,7 @@ class SyncCommandSink : public CommandSink<Command> {
  * Can be used by a sink to find and execute the handler for a given commandId.
  */
 template <typename Derived>
-struct CommandDispatcher {
+struct CommandDispatchDriver {
   /**
    * Find and run the command.
    */
@@ -657,7 +666,7 @@ struct CommandDispatcher {
  * See DECLARE_FUNCTION_DISPATCHER and DEFINE_FUNCTION_DISPATCHER.
  */
 template <typename Derived, typename _SinkType>
-struct FunctionDispatcher : public CommandDispatcher<Derived> {
+struct FunctionDispatcher {
   using SinkType = _SinkType;
   template <CommandSyncType syncType>
   struct DispatchFunction;
@@ -687,7 +696,7 @@ struct FunctionDispatcher : public CommandDispatcher<Derived> {
  * See DECLARE_METHOD_DISPATCHER and DEFINE_METHOD_DISPATCHER.
  */
 template <typename Derived, typename _SinkType>
-struct MethodDispatcher : public CommandDispatcher<Derived> {
+struct MethodDispatcher {
   using SinkType = _SinkType;
   template <CommandSyncType syncType>
   struct DispatchMethod;
@@ -754,53 +763,55 @@ struct MethodDispatcher : public CommandDispatcher<Derived> {
 // id.  The handler uses a CommandSink to read parameters, call the
 // given function using the given synchronization protocol, and provide
 // compile-time lookup of the ID by function.
-#define DEFINE_FUNCTION_DISPATCHER(_DISPATCHER, _ID, _FUNC, _SYNC)       \
-  template <>                                                            \
-  bool _DISPATCHER::DispatchCommand<_ID>(size_t aId, SinkType & aSink) { \
-    return DispatchCommandHelper<_ID>(aId, aSink);                       \
-  }                                                                      \
-  template <>                                                            \
-  bool _DISPATCHER::Dispatch<_ID>(SinkType & aSink) {                    \
-    return DispatchFunction<_SYNC>::Run(aSink, &_FUNC);                  \
-  }                                                                      \
-  template <>                                                            \
-  struct _DISPATCHER::FuncInfo<_ID> {                                    \
-    using FuncType = decltype(&_FUNC);                                   \
-  };                                                                     \
-  template <>                                                            \
-  constexpr CommandSyncType _DISPATCHER::SyncType<_ID>() {               \
-    return _SYNC;                                                        \
-  }                                                                      \
-  template <>                                                            \
-  constexpr size_t _DISPATCHER::Id<decltype(&_FUNC), &_FUNC>() {         \
-    return _ID;                                                          \
+#define DEFINE_FUNCTION_DISPATCHER(_DISPATCHER, _ID, _FUNC, _SYNC)           \
+  template <>                                                                \
+  bool _DISPATCHER::DispatchCommand<_ID>(size_t aId, SinkType & aSink) {     \
+    return CommandDispatchDriver<_DISPATCHER>::DispatchCommandHelper(aId,    \
+                                                                     aSink); \
+  }                                                                          \
+  template <>                                                                \
+  bool _DISPATCHER::Dispatch<_ID>(SinkType & aSink) {                        \
+    return DispatchFunction<_SYNC>::Run(aSink, &_FUNC);                      \
+  }                                                                          \
+  template <>                                                                \
+  struct _DISPATCHER::FuncInfo<_ID> {                                        \
+    using FuncType = decltype(&_FUNC);                                       \
+  };                                                                         \
+  template <>                                                                \
+  constexpr CommandSyncType _DISPATCHER::SyncType<_ID>() {                   \
+    return _SYNC;                                                            \
+  }                                                                          \
+  template <>                                                                \
+  constexpr size_t _DISPATCHER::Id<decltype(&_FUNC), &_FUNC>() {             \
+    return _ID;                                                              \
   }
 
 // Defines a handler in the given dispatcher for the command with the given
 // id.  The handler uses a CommandSink to read parameters, call the
 // given method using the given synchronization protocol, and provide
 // compile-time lookup of the ID by class method.
-#define DEFINE_METHOD_DISPATCHER(_DISPATCHER, _ID, _METHOD, _SYNC)       \
-  template <>                                                            \
-  bool _DISPATCHER::DispatchCommand<_ID>(size_t aId, SinkType & aSink,   \
-                                         ObjectType & aObj) {            \
-    return DispatchCommandHelper<_ID>(aId, aSink, aObj);                 \
-  }                                                                      \
-  template <>                                                            \
-  bool _DISPATCHER::Dispatch<_ID>(SinkType & aSink, ObjectType & aObj) { \
-    return DispatchMethod<_SYNC>::Run(aSink, &_METHOD, aObj);            \
-  }                                                                      \
-  template <>                                                            \
-  struct _DISPATCHER::MethodInfo<_ID> {                                  \
-    using MethodType = decltype(&_METHOD);                               \
-  };                                                                     \
-  template <>                                                            \
-  constexpr CommandSyncType _DISPATCHER::SyncType<_ID>() {               \
-    return _SYNC;                                                        \
-  }                                                                      \
-  template <>                                                            \
-  constexpr size_t _DISPATCHER::Id<decltype(&_METHOD), &_METHOD>() {     \
-    return _ID;                                                          \
+#define DEFINE_METHOD_DISPATCHER(_DISPATCHER, _ID, _METHOD, _SYNC)         \
+  template <>                                                              \
+  bool _DISPATCHER::DispatchCommand<_ID>(size_t aId, SinkType & aSink,     \
+                                         ObjectType & aObj) {              \
+    return CommandDispatchDriver<_DISPATCHER>::DispatchCommandHelper<_ID>( \
+        aId, aSink, aObj);                                                 \
+  }                                                                        \
+  template <>                                                              \
+  bool _DISPATCHER::Dispatch<_ID>(SinkType & aSink, ObjectType & aObj) {   \
+    return DispatchMethod<_SYNC>::Run(aSink, &_METHOD, aObj);              \
+  }                                                                        \
+  template <>                                                              \
+  struct _DISPATCHER::MethodInfo<_ID> {                                    \
+    using MethodType = decltype(&_METHOD);                                 \
+  };                                                                       \
+  template <>                                                              \
+  constexpr CommandSyncType _DISPATCHER::SyncType<_ID>() {                 \
+    return _SYNC;                                                          \
+  }                                                                        \
+  template <>                                                              \
+  constexpr size_t _DISPATCHER::Id<decltype(&_METHOD), &_METHOD>() {       \
+    return _ID;                                                            \
   }
 
 namespace ipc {

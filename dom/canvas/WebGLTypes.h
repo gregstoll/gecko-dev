@@ -442,36 +442,6 @@ struct ICRData {
   bool isPremultAlpha;
 };
 
-#if 0
-/**
- * Objects need to be copyable for the Variant but Arrays by themselves
- * are not since that operation is neither guaranteed to be safe or
- * performant.  But we promise to be good.
- */
-template <typename T, size_t Length>
-class CopyableArray : public Array<T, Length> {
- public:
-  template <typename... Args>
-  MOZ_IMPLICIT constexpr CopyableArray(Args&&... aArgs)
-    : Array<T, Length>(aArgs...) { }
-
-  CopyableArray(const CopyableArray& aObj) {
-    mArr = aObj.mArr;
-  }
-
-  CopyableArray(CopyableArray&& aObj) {
-    mArr = aObj.mArr;
-  }
-};
-
-using Int32Array2 = CopyableArray<int32_t,2>;
-using Int32Array4 = CopyableArray<int32_t,4>;
-using Uint32Array4 = CopyableArray<uint32_t,4>;
-using Float32Array2 = CopyableArray<float,2>;
-using Float32Array4 = CopyableArray<float,4>;
-using BoolArray4 = CopyableArray<bool,4>;
-#endif
-
 using Int32Array2 = Array<int32_t, 2>;
 using Int32Array4 = Array<int32_t, 4>;
 using Uint32Array4 = Array<uint32_t, 4>;
@@ -552,8 +522,8 @@ AsSomeVariantT<T> AsSomeVariant(Maybe<T>&& aObj) {
  * TODO: This is wrong but I can probably fix it by removing
  * const/volatile/pointer from T and checking is_trivially_assignable.
  */
-template <typename T = uint8_t,
-          typename EnableIf<std::is_trivially_assignable<T&, T>::value,
+template <typename T = uint8_t, typename nonCV = typename RemoveCV<T>::Type,
+          typename EnableIf<std::is_trivially_assignable<nonCV&, nonCV>::value,
                             int>::Type = 0>
 class RawBuffer {
   T* mData = nullptr;
@@ -563,6 +533,8 @@ class RawBuffer {
   friend mozilla::ipc::PcqParamTraits<RawBuffer>;
 
  public:
+  using ElementType = T;
+
   RawBuffer(size_t len, T* data) : mData(data), mLength(len) {
     MOZ_ASSERT(mData);
   }
@@ -573,8 +545,12 @@ class RawBuffer {
   }
 
   uint32_t Length() const { return mLength; }
+
   T* Data() { return mData; }
   const T* Data() const { return mData; }
+
+  T& operator[](size_t idx) { return mData[idx]; }
+  const T& operator[](size_t idx) const { return mData[idx]; }
 
   void ReadArray(const nsTArray<T>& arr) {
     MOZ_ASSERT(Data() && (Length() <= arr.Length()));

@@ -21,4 +21,8 @@ bool HostWebGLCommandSink::DispatchCommand(size_t command) {
   return WebGLMethodDispatcher::DispatchCommand(command, *this, *mHostContext);
 }
 
+void HostWebGLCommandSink::ReportOOM() {
+  mHostContext->ReportOOMAndLoseContext();
+}
+
 }  // namespace mozilla

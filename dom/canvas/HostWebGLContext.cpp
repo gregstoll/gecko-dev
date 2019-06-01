@@ -718,15 +718,15 @@ GLint HostWebGLContext::GetFragDataLocation(const WebGLId<WebGLProgram>& progId,
 // ------------------------ Uniforms and attributes ------------------------
 void HostWebGLContext::UniformNfv(const nsCString& funcName, uint8_t N,
                                   const WebGLId<WebGLUniformLocation>& loc,
-                                  const nsTArray<float>& arr, GLuint elemOffset,
-                                  GLuint elemCountOverride) {
+                                  const RawBuffer<const float>& arr,
+                                  GLuint elemOffset, GLuint elemCountOverride) {
   mContext->UniformNfv(funcName.BeginReading(), N, Find(loc), arr, elemOffset,
                        elemCountOverride);
 }
 
 void HostWebGLContext::UniformNiv(const nsCString& funcName, uint8_t N,
                                   const WebGLId<WebGLUniformLocation>& loc,
-                                  const nsTArray<int32_t>& arr,
+                                  const RawBuffer<const int32_t>& arr,
                                   GLuint elemOffset, GLuint elemCountOverride) {
   mContext->UniformNiv(funcName.BeginReading(), N, Find(loc), arr, elemOffset,
                        elemCountOverride);
@@ -734,7 +734,7 @@ void HostWebGLContext::UniformNiv(const nsCString& funcName, uint8_t N,
 
 void HostWebGLContext::UniformNuiv(const nsCString& funcName, uint8_t N,
                                    const WebGLId<WebGLUniformLocation>& loc,
-                                   const nsTArray<uint32_t>& arr,
+                                   const RawBuffer<const uint32_t>& arr,
                                    GLuint elemOffset,
                                    GLuint elemCountOverride) {
   mContext->UniformNuiv(funcName.BeginReading(), N, Find(loc), arr, elemOffset,
@@ -744,7 +744,8 @@ void HostWebGLContext::UniformNuiv(const nsCString& funcName, uint8_t N,
 void HostWebGLContext::UniformMatrixAxBfv(
     const nsCString& funcName, uint8_t A, uint8_t B,
     const WebGLId<WebGLUniformLocation>& loc, bool transpose,
-    const nsTArray<float>& arr, GLuint elemOffset, GLuint elemCountOverride) {
+    const RawBuffer<const float>& arr, GLuint elemOffset,
+    GLuint elemCountOverride) {
   mContext->UniformMatrixAxBfv(funcName.BeginReading(), A, B, Find(loc),
                                transpose, arr, elemOffset, elemCountOverride);
 }
@@ -912,19 +913,19 @@ void HostWebGLContext::VertexAttribAnyPointer(bool isFuncInt, GLuint index,
 
 // --------------------------- Buffer Operations --------------------------
 void HostWebGLContext::ClearBufferfv(GLenum buffer, GLint drawBuffer,
-                                     const nsTArray<float>& src,
+                                     const RawBuffer<const float>& src,
                                      GLuint srcElemOffset) {
   GetWebGL2Context()->ClearBufferfv(buffer, drawBuffer, src, srcElemOffset);
 }
 
 void HostWebGLContext::ClearBufferiv(GLenum buffer, GLint drawBuffer,
-                                     const nsTArray<int32_t>& src,
+                                     const RawBuffer<const int32_t>& src,
                                      GLuint srcElemOffset) {
   GetWebGL2Context()->ClearBufferiv(buffer, drawBuffer, src, srcElemOffset);
 }
 
 void HostWebGLContext::ClearBufferuiv(GLenum buffer, GLint drawBuffer,
-                                      const nsTArray<uint32_t>& src,
+                                      const RawBuffer<const uint32_t>& src,
                                       GLuint srcElemOffset) {
   GetWebGL2Context()->ClearBufferuiv(buffer, drawBuffer, src, srcElemOffset);
 }
@@ -1036,13 +1037,19 @@ Maybe<WebGLActiveInfo> HostWebGLContext::GetTransformFeedbackVarying(
                                                          index);
 }
 
-// ------------------------------ Debug ------------------------------------
+// ------------------------------ WebGL Debug
+// ------------------------------------
 void HostWebGLContext::EnqueueError(GLenum aGLError, const nsCString& aMsg) {
   mContext->GenerateError(aGLError, aMsg.BeginReading());
 }
 
 void HostWebGLContext::EnqueueWarning(const nsCString& aMsg) {
   mContext->GenerateWarning(aMsg.BeginReading());
+}
+
+void HostWebGLContext::ReportOOMAndLoseContext() {
+  mContext->ErrorOutOfMemory("Ran out of memory in WebGL IPC.");
+  LoseContext(false);
 }
 
 // -------------------------------------------------------------------------
