@@ -398,7 +398,7 @@ struct WebGLTexPboOffset {
 
 using WebGLTexUnpackVariant = Variant<UniquePtr<webgl::TexUnpackBytes>,
                                       UniquePtr<webgl::TexUnpackSurface>,
-                                      WebGLTexImageData, WebGLTexPboOffset>;
+                                      UniquePtr<webgl::TexUnpackImage>>;
 
 using MaybeWebGLTexUnpackVariant = Maybe<WebGLTexUnpackVariant>;
 
@@ -519,8 +519,6 @@ AsSomeVariantT<T> AsSomeVariant(Maybe<T>&& aObj) {
 /**
  * Represents a block of memory that it may or may not own.  The
  * inner data type must be trivially copyable by memcpy.
- * TODO: This is wrong but I can probably fix it by removing
- * const/volatile/pointer from T and checking is_trivially_assignable.
  */
 template <typename T = uint8_t, typename nonCV = typename RemoveCV<T>::Type,
           typename EnableIf<std::is_trivially_assignable<nonCV&, nonCV>::value,
@@ -535,8 +533,12 @@ class RawBuffer {
  public:
   using ElementType = T;
 
-  RawBuffer(size_t len, T* data) : mData(data), mLength(len) {
-    MOZ_ASSERT(mData);
+  /**
+   * If aTakeData is true, RawBuffer will delete[] the memory when destroyed.
+   */
+  RawBuffer(size_t len, T* data, bool aTakeData = false)
+      : mData(data), mLength(len), mOwnsData(aTakeData) {
+    MOZ_ASSERT(mData && mLength);
   }
   ~RawBuffer() {
     if (mOwnsData) {
@@ -549,9 +551,17 @@ class RawBuffer {
   T* Data() { return mData; }
   const T* Data() const { return mData; }
 
-  T& operator[](size_t idx) { return mData[idx]; }
-  const T& operator[](size_t idx) const { return mData[idx]; }
+  T& operator[](size_t idx) {
+    MOZ_ASSERT(mData);
+    return mData[idx];
+  }
+  const T& operator[](size_t idx) const {
+    MOZ_ASSERT(mData);
+    return mData[idx];
+  }
 
+#if 0
+  // TODO: Remove
   void ReadArray(const nsTArray<T>& arr) {
     MOZ_ASSERT(Data() && (Length() <= arr.Length()));
     memcpy(Data(), arr.Elements(), Length() * sizeof(T));
@@ -562,8 +572,26 @@ class RawBuffer {
     MOZ_ASSERT(Data() && buf && (Length() <= shmem.Size<T>()));
     memcpy(Data(), buf, mLength * sizeof(T));
   }
+#endif
 
   RawBuffer() {}  // For PcqParamTraits and std::tuple
+  RawBuffer(const RawBuffer&) = delete;
+  RawBuffer& operator=(const RawBuffer&) = delete;
+  RawBuffer(RawBuffer&& o)
+      : mData(o.mData), mLength(o.mLength), mOwnsData(o.mOwnsData) {
+    o.mData = nullptr;
+    o.mLength = 0;
+    o.mOwnsData = false;
+  }
+  RawBuffer& operator=(RawBuffer&& o) {
+    mData = o.mData;
+    mLength = o.mLength;
+    mOwnsData = o.mOwnsData;
+    o.mData = nullptr;
+    o.mLength = 0;
+    o.mOwnsData = false;
+    return *this;
+  }
 };
 
 }  // namespace mozilla

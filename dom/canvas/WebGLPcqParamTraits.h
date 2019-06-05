@@ -136,12 +136,12 @@ struct PcqParamTraits<RawBuffer<T>> {
   static PcqStatus Write(ProducerView& aProducerView, const ParamType& aArg) {
     PcqStatus status = aProducerView.WriteParam(aArg.mLength);
     return ((aArg.mLength > 0) && IsSuccess(status))
-               ? aProducerView.Write(aArg.mData, aArg.mLength*sizeof(T))
+               ? aProducerView.Write(aArg.mData, aArg.mLength * sizeof(T))
                : status;
   }
 
   template <typename ElementType =
-              typename RemoveCV<typename ParamType::ElementType>::Type>
+                typename RemoveCV<typename ParamType::ElementType>::Type>
   static PcqStatus Read(ConsumerView& aConsumerView, ParamType* aArg) {
     size_t len;
     PcqStatus status = aConsumerView.ReadParam(&len);
@@ -157,36 +157,39 @@ struct PcqParamTraits<RawBuffer<T>> {
       aArg->mData = data;
       aArg->mLength = len;
       aArg->mOwnsData = true;
-      return aConsumerView.Read(data, len*sizeof(ElementType));
+      return aConsumerView.Read(data, len * sizeof(ElementType));
     }
-    return aConsumerView.Read(nullptr, len*sizeof(ElementType));
+    return aConsumerView.Read(nullptr, len * sizeof(ElementType));
   }
 
   template <typename View>
   static size_t MinSize(View& aView, const ParamType* aArg) {
     return aView.template MinSizeParam<size_t>() +
-      aView.MinSizeBytes(aArg ? aArg->mLength : 0);
+           aView.MinSizeBytes(aArg ? aArg->mLength : 0);
   }
 };
 
+// Specialization of PcqParamTraits that adapts the TexUnpack type in order to
+// efficiently convert types.  For example, a TexUnpackSurface may deserialize
+// as a TexUnpackBytes.
 template <>
-struct PcqParamTraits<PcqTexUnpack> {
-  using ParamType = PcqTexUnpack;
+struct PcqParamTraits<WebGLTexUnpackVariant> {
+  using ParamType = WebGLTexUnpackVariant;
 
   static PcqStatus Write(ProducerView& aProducerView, const ParamType& aArg) {
-    return const_cast<PcqTexUnpack&>(aArg).Write(aProducerView);
+    MOZ_ASSERT_UNREACHABLE("TODO:");
+    return PcqStatus::PcqFatalError;
   }
 
   static PcqStatus Read(ConsumerView& aConsumerView, ParamType* aArg) {
-    return PcqTexUnpack::Read(aArg, aConsumerView);
+    MOZ_ASSERT_UNREACHABLE("TODO:");
+    return PcqStatus::PcqFatalError;
   }
 
   template <typename View>
   static size_t MinSize(View& aView, const ParamType* aArg) {
-    if (!aArg) {
-      return 1;
-    }
-    return aArg->MinSize();
+    MOZ_ASSERT_UNREACHABLE("TODO:");
+    return 0;
   }
 };
 

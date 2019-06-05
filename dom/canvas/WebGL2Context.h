@@ -43,9 +43,9 @@ class WebGL2Context : public WebGLContext {
                          const BufferT& data);
 
  public:
-  Maybe<nsTArray<uint8_t>> GetBufferSubData(
-      GLenum target, WebGLintptr srcByteOffset, size_t byteLen,
-      const Maybe<mozilla::ipc::Shmem>& maybeShmem);
+  Maybe<UniquePtr<RawBuffer<>>> GetBufferSubData(GLenum target,
+                                                 WebGLintptr srcByteOffset,
+                                                 size_t byteLen);
 
   // -------------------------------------------------------------------------
   // Framebuffer objects - WebGL2ContextFramebuffers.cpp

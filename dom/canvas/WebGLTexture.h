@@ -25,7 +25,6 @@
 
 namespace mozilla {
 class ErrorResult;
-class PcqTexUnpack;
 class WebGLContext;
 class WebGLFramebuffer;
 class WebGLSampler;

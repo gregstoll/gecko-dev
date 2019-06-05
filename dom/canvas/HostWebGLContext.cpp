@@ -535,10 +535,9 @@ void HostWebGLContext::CopyBufferSubData(GLenum readTarget, GLenum writeTarget,
                                         writeOffset, size);
 }
 
-Maybe<nsTArray<uint8_t>> HostWebGLContext::GetBufferSubData(
-    GLenum target, GLintptr srcByteOffset, size_t byteLen, bool useShmem) {
-  return GetWebGL2Context()->GetBufferSubData(
-      target, srcByteOffset, byteLen, useShmem ? Some(PopShmem()) : Nothing());
+Maybe<UniquePtr<RawBuffer<>>> HostWebGLContext::GetBufferSubData(
+    GLenum target, GLintptr srcByteOffset, size_t byteLen) {
+  return GetWebGL2Context()->GetBufferSubData(target, srcByteOffset, byteLen);
 }
 
 void HostWebGLContext::BufferData(GLenum target, const RawBuffer<>& data,
@@ -635,48 +634,84 @@ void HostWebGLContext::TexStorage(uint8_t funcDims, GLenum target,
                                  width, height, depth);
 }
 
+template <typename TexUnpackType>
+struct ToTexUnpackTypeMatcher {
+  template <typename T, typename mozilla::EnableIf<
+                            mozilla::IsConvertible<T*, TexUnpackType*>::value,
+                            int>::Type = 0>
+  UniquePtr<TexUnpackType> operator()(UniquePtr<T>& x) {
+    return std::move(x);
+  }
+  template <typename T, typename mozilla::EnableIf<
+                            !mozilla::IsConvertible<T*, TexUnpackType*>::value,
+                            char>::Type = 0>
+  UniquePtr<TexUnpackType> operator()(UniquePtr<T>& x) {
+    MOZ_ASSERT_UNREACHABLE(
+        "Attempted to read TexUnpackBlob as something it was not");
+    return nullptr;
+  }
+  WebGLContext* mContext;
+};
+
+template <typename TexUnpackType>
+UniquePtr<TexUnpackType> AsTexUnpackType(WebGLContext* aContext,
+                                         MaybeWebGLTexUnpackVariant&& src) {
+  if (!src) {
+    return nullptr;
+  }
+
+  return src.ref().match(ToTexUnpackTypeMatcher<TexUnpackType>{aContext});
+}
+
 void HostWebGLContext::TexImage(uint8_t funcDims, GLenum target, GLint level,
                                 GLenum internalFormat, GLsizei width,
                                 GLsizei height, GLsizei depth, GLint border,
                                 GLenum unpackFormat, GLenum unpackType,
-                                PcqTexUnpack&& src, FuncScopeId aFuncId) {
+                                MaybeWebGLTexUnpackVariant&& src,
+                                FuncScopeId aFuncId) {
   const WebGLContext::FuncScope scope(*mContext, GetFuncScopeName(aFuncId));
-  mContext->TexImage(funcDims, target, level, internalFormat, width, height,
-                     depth, border, unpackFormat, unpackType,
-                     src.TakeBlob(mContext));
+  mContext->TexImage(
+      funcDims, target, level, internalFormat, width, height, depth, border,
+      unpackFormat, unpackType,
+      AsTexUnpackType<webgl::TexUnpackBlob>(mContext, std::move(src)));
 }
 
 void HostWebGLContext::TexSubImage(uint8_t funcDims, GLenum target, GLint level,
                                    GLint xOffset, GLint yOffset, GLint zOffset,
                                    GLsizei width, GLsizei height, GLsizei depth,
                                    GLenum unpackFormat, GLenum unpackType,
-                                   PcqTexUnpack&& src, FuncScopeId aFuncId) {
+                                   MaybeWebGLTexUnpackVariant&& src,
+                                   FuncScopeId aFuncId) {
   const WebGLContext::FuncScope scope(*mContext, GetFuncScopeName(aFuncId));
-  mContext->TexSubImage(funcDims, target, level, xOffset, yOffset, zOffset,
-                        width, height, depth, unpackFormat, unpackType,
-                        src.TakeBlob(mContext));
+  mContext->TexSubImage(
+      funcDims, target, level, xOffset, yOffset, zOffset, width, height, depth,
+      unpackFormat, unpackType,
+      AsTexUnpackType<webgl::TexUnpackBlob>(mContext, std::move(src)));
 }
 
 void HostWebGLContext::CompressedTexImage(
     uint8_t funcDims, GLenum target, GLint level, GLenum internalFormat,
     GLsizei width, GLsizei height, GLsizei depth, GLint border,
-    PcqTexUnpack&& src, const Maybe<GLsizei>& expectedImageSize,
+    MaybeWebGLTexUnpackVariant&& src, const Maybe<GLsizei>& expectedImageSize,
     FuncScopeId aFuncId) {
   const WebGLContext::FuncScope scope(*mContext, GetFuncScopeName(aFuncId));
-  mContext->CompressedTexImage(funcDims, target, level, internalFormat, width,
-                               height, depth, border, src.TakeBlob(mContext),
-                               expectedImageSize);
+  mContext->CompressedTexImage(
+      funcDims, target, level, internalFormat, width, height, depth, border,
+      AsTexUnpackType<webgl::TexUnpackBytes>(mContext, std::move(src)),
+      expectedImageSize);
 }
 
 void HostWebGLContext::CompressedTexSubImage(
     uint8_t funcDims, GLenum target, GLint level, GLint xOffset, GLint yOffset,
     GLint zOffset, GLsizei width, GLsizei height, GLsizei depth,
-    GLenum unpackFormat, PcqTexUnpack&& src,
+    GLenum unpackFormat, MaybeWebGLTexUnpackVariant&& src,
     const Maybe<GLsizei>& expectedImageSize, FuncScopeId aFuncId) {
   const WebGLContext::FuncScope scope(*mContext, GetFuncScopeName(aFuncId));
-  mContext->CompressedTexSubImage(funcDims, target, level, xOffset, yOffset,
-                                  zOffset, width, height, depth, unpackFormat,
-                                  src.TakeBlob(mContext), expectedImageSize);
+  mContext->CompressedTexSubImage(
+      funcDims, target, level, xOffset, yOffset, zOffset, width, height, depth,
+      unpackFormat,
+      AsTexUnpackType<webgl::TexUnpackBytes>(mContext, std::move(src)),
+      expectedImageSize);
 }
 
 void HostWebGLContext::CopyTexSubImage(uint8_t funcDims, GLenum target,
@@ -942,11 +977,10 @@ void HostWebGLContext::ReadPixels1(GLint x, GLint y, GLsizei width,
   mContext->ReadPixels(x, y, width, height, format, type, offset);
 }
 
-Maybe<nsTArray<uint8_t>> HostWebGLContext::ReadPixels2(
+Maybe<UniquePtr<RawBuffer<>>> HostWebGLContext::ReadPixels2(
     GLint x, GLint y, GLsizei width, GLsizei height, GLenum format, GLenum type,
-    size_t byteLen, bool useShmem) {
-  return mContext->ReadPixels(x, y, width, height, format, type, byteLen,
-                              useShmem ? Some(PopShmem()) : Nothing());
+    size_t byteLen) {
+  return mContext->ReadPixels(x, y, width, height, format, type, byteLen);
 }
 
 // ----------------------------- Sampler -----------------------------------

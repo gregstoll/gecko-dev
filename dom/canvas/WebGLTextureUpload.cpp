@@ -193,9 +193,13 @@ static MaybeWebGLTexUnpackVariant ClientFromPboOffset(
 
   GLsizei imgSize = expectedImageSize ? expectedImageSize.ref()
                                       : std::numeric_limits<int>::min();
-  return AsSomeVariant(
-      WebGLTexPboOffset{target, width, height, depth, pboOffset,
-                        static_cast<bool>(expectedImageSize), imgSize});
+
+  // TODO:
+  //  return AsSomeVariant(
+  //      WebGLTexPboOffset{target, width, height, depth, pboOffset,
+  //                        static_cast<bool>(expectedImageSize), imgSize});
+  Unused << imgSize;
+  return Nothing();
 }
 
 static MaybeWebGLTexUnpackVariant ClientFromImageBitmap(
@@ -387,11 +391,13 @@ MaybeWebGLTexUnpackVariant ClientWebGLContext::ClientFromDomElem(
   // Ok, we're good!
 
   if (layersImage) {
-    WebGLTexImageData texImageData{
-        target, static_cast<int32_t>(layersImage->GetSize().width),
-        width,  height,
-        depth,  sfer.mAlphaType};
-    return AsSomeVariant(std::move(texImageData));
+    // TODO:
+    //    WebGLTexImageData texImageData{
+    //        target, static_cast<int32_t>(layersImage->GetSize().width),
+    //        width,  height,
+    //        depth,  sfer.mAlphaType};
+    //    return AsSomeVariant(std::move(texImageData));
+    return Nothing();
   }
 
   MOZ_ASSERT(dataSurf);

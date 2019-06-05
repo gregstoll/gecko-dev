@@ -233,7 +233,7 @@ class ConsumerView {
   // object that we take ownership of, or a pointer to a block of
   // memory that we take ownership of (which may be null).
   using PcqReadBytesVariant =
-    Variant<PcqStatus, RefPtr<SharedMemoryBasic>, void*>;
+      Variant<PcqStatus, RefPtr<SharedMemoryBasic>, void*>;
 
   /**
    * Read bytes from the consumer if there is enough data.  aBuffer may
@@ -1199,7 +1199,7 @@ struct ProducerConsumerQueue {
     }
 
     UniquePtr<ProducerConsumerQueue> ret =
-      Create(shmem, aProtocol->OtherPid(), aQueueSize);
+        Create(shmem, aProtocol->OtherPid(), aQueueSize);
     if (!ret) {
       return ret;
     }
@@ -1240,9 +1240,8 @@ struct ProducerConsumerQueue {
         CrossProcessSemaphore::Create("webgl-notempty", 0));
     auto notfull = MakeRefPtr<detail::PcqRCSemaphore>(
         CrossProcessSemaphore::Create("webgl-notfull", 1));
-    return WrapUnique(
-        new ProducerConsumerQueue(aShmem, aOtherPid, aQueueSize, notempty,
-                                  notfull));
+    return WrapUnique(new ProducerConsumerQueue(aShmem, aOtherPid, aQueueSize,
+                                                notempty, notfull));
   }
 
   /**
@@ -1262,16 +1261,20 @@ struct ProducerConsumerQueue {
   }
 
  private:
-  ProducerConsumerQueue(Shmem& aShmem, base::ProcessId aOtherPid, size_t aQueueSize,
+  ProducerConsumerQueue(Shmem& aShmem, base::ProcessId aOtherPid,
+                        size_t aQueueSize,
                         RefPtr<detail::PcqRCSemaphore>& aMaybeNotEmptySem,
                         RefPtr<detail::PcqRCSemaphore>& aMaybeNotFullSem)
-      : mProducer(WrapUnique(new Producer(aShmem, aOtherPid, aQueueSize,
-                                          aMaybeNotEmptySem, aMaybeNotFullSem))),
-        mConsumer(WrapUnique(new Consumer(aShmem, aOtherPid, aQueueSize,
-                                          aMaybeNotEmptySem, aMaybeNotFullSem))) {
-    PCQ_LOGD("Constructed PCQ (%p).  Shmem Size = %zu. Queue Size = %zu.  "
-             "Other process ID: %08x.",
-             this, aShmem.Size<uint8_t>(), aQueueSize, (uint32_t)aOtherPid);
+      : mProducer(
+            WrapUnique(new Producer(aShmem, aOtherPid, aQueueSize,
+                                    aMaybeNotEmptySem, aMaybeNotFullSem))),
+        mConsumer(
+            WrapUnique(new Consumer(aShmem, aOtherPid, aQueueSize,
+                                    aMaybeNotEmptySem, aMaybeNotFullSem))) {
+    PCQ_LOGD(
+        "Constructed PCQ (%p).  Shmem Size = %zu. Queue Size = %zu.  "
+        "Other process ID: %08x.",
+        this, aShmem.Size<uint8_t>(), aQueueSize, (uint32_t)aOtherPid);
   }
 };
 
@@ -1458,7 +1461,7 @@ struct PcqParamTraits<nsACString> {
       return minSize;
     }
     minSize += aView.template MinSizeParam<uint32_t>(nullptr) +
-      aView.MinSizeBytes(aArg->Length());
+               aView.MinSizeBytes(aArg->Length());
     return minSize;
   }
 };
@@ -1788,20 +1791,59 @@ struct PcqParamTraits<Pair<TypeA, TypeB>> {
 
 // ---------------------------------------------------------------
 
+template <typename T>
+struct PcqParamTraits<UniquePtr<T>> {
+  using ParamType = UniquePtr<T>;
+
+  static PcqStatus Write(ProducerView& aProducerView, const ParamType& aArg) {
+    // TODO: Clean up move with PCQ
+    PcqStatus status = aProducerView.WriteParam(static_cast<bool>(aArg));
+    status = (aArg && IsSuccess(status)) ? aProducerView.WriteParam(*aArg.get())
+                                         : status;
+    if (aArg && IsSuccess(status)) {
+      const_cast<ParamType&>(aArg).reset();
+    }
+    return status;
+  }
+
+  static PcqStatus Read(ConsumerView& aConsumerView, ParamType* aArg) {
+    bool isNull;
+    PcqStatus status = aConsumerView.ReadParam(aArg ? &isNull : nullptr);
+    T* obj = (IsSuccess(status) && aArg && (!isNull)) ? new T() : nullptr;
+    if (aArg) {
+      aArg->reset(obj);
+    }
+    return (IsSuccess(status) && (!isNull)) ? aConsumerView.ReadParam(obj)
+                                            : status;
+  }
+
+  template <typename View>
+  static size_t MinSize(View& aView, const ParamType* aArg) {
+    if ((!aArg) || (!aArg->get())) {
+      return aView.template MinSizeParam<bool>(nullptr);
+    }
+    return aView.template MinSizeParam<bool>(nullptr) +
+           aView.MinSizeParam(aArg->get());
+  }
+};
+
+// ---------------------------------------------------------------
+
 // Both the Producer and the Consumer are required to maintain (i.e. close)
 // the FileDescriptor themselves.  The PCQ does not do this for you, nor does
 // it use FileDescriptor::auto_close.
 #if defined(OS_WIN)
-template<>
+template <>
 struct IsTriviallySerializable<base::SharedMemoryHandle> : TrueType {};
 #elif defined(OS_POSIX)
 // SharedMemoryHandle is typedefed to base::FileDescriptor
-template<>
+template <>
 struct PcqParamTraits<base::FileDescriptor> {
   using ParamType = base::FileDescriptor;
   static PcqStatus Write(ProducerView& aProducerView, const ParamType& aArg) {
     // PCQs don't use auto-close.
-    // Convert any negative (i.e. invalid) fds to -1, as done with ParamTraits (why?)
+    // Convert any negative (i.e. invalid) fds to -1, as done with ParamTraits
+    // (why?)
     return aProducerView.WriteParam(aArg.fd > 0 ? aArg.fd : -1);
   }
 

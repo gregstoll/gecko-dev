@@ -1874,18 +1874,12 @@ class ClientWebGLContext : public nsICanvasRenderingContextInternal,
 
   mozilla::dom::Document* GetOwnerDoc() const;
 
-  // Allocate a Shemem with at least nBytes free, or don't, depending on
-  // some opaque decision procedure.
-  Maybe<mozilla::ipc::Shmem> MaybeAllocateShmem(size_t nBytes);
-
   bool mContextLost = false;
   uint64_t mLastUseIndex = 0;
   bool mResetLayer = true;
   bool mOptionsFrozen = false;
   WebGLContextOptions mOptions;
   WebGLPixelStore mPixelStore;
-
-  static const size_t sMaxSizeInlineData = 1024;  // 1K
 };
 
 template <typename WebGLObjectType>

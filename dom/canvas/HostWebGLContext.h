@@ -438,9 +438,9 @@ class HostWebGLContext : public WebGLContextEndpoint {
                          GLintptr readOffset, GLintptr writeOffset,
                          GLsizeiptr size);
 
-  Maybe<nsTArray<uint8_t>> GetBufferSubData(GLenum target,
-                                            GLintptr srcByteOffset,
-                                            size_t byteLen, bool useShmem);
+  Maybe<UniquePtr<RawBuffer<>>> GetBufferSubData(GLenum target,
+                                                 GLintptr srcByteOffset,
+                                                 size_t byteLen);
 
   void BufferData(GLenum target, const RawBuffer<>& data, GLenum usage);
 
@@ -496,23 +496,26 @@ class HostWebGLContext : public WebGLContextEndpoint {
   void TexImage(uint8_t funcDims, GLenum target, GLint level,
                 GLenum internalFormat, GLsizei width, GLsizei height,
                 GLsizei depth, GLint border, GLenum unpackFormat,
-                GLenum unpackType, PcqTexUnpack&& src, FuncScopeId aFuncId);
+                GLenum unpackType, MaybeWebGLTexUnpackVariant&& src,
+                FuncScopeId aFuncId);
 
   void TexSubImage(uint8_t funcDims, GLenum target, GLint level, GLint xOffset,
                    GLint yOffset, GLint zOffset, GLsizei width, GLsizei height,
                    GLsizei depth, GLenum unpackFormat, GLenum unpackType,
-                   PcqTexUnpack&& src, FuncScopeId aFuncId);
+                   MaybeWebGLTexUnpackVariant&& src, FuncScopeId aFuncId);
 
   void CompressedTexImage(uint8_t funcDims, GLenum target, GLint level,
                           GLenum internalFormat, GLsizei width, GLsizei height,
-                          GLsizei depth, GLint border, PcqTexUnpack&& src,
+                          GLsizei depth, GLint border,
+                          MaybeWebGLTexUnpackVariant&& src,
                           const Maybe<GLsizei>& expectedImageSize,
                           FuncScopeId aFuncId);
 
   void CompressedTexSubImage(uint8_t funcDims, GLenum target, GLint level,
                              GLint xOffset, GLint yOffset, GLint zOffset,
                              GLsizei width, GLsizei height, GLsizei depth,
-                             GLenum unpackFormat, PcqTexUnpack&& src,
+                             GLenum unpackFormat,
+                             MaybeWebGLTexUnpackVariant&& src,
                              const Maybe<GLsizei>& expectedImageSize,
                              FuncScopeId aFuncId);
 
@@ -625,10 +628,9 @@ class HostWebGLContext : public WebGLContextEndpoint {
   void ReadPixels1(GLint x, GLint y, GLsizei width, GLsizei height,
                    GLenum format, GLenum type, WebGLsizeiptr offset);
 
-  Maybe<nsTArray<uint8_t>> ReadPixels2(GLint x, GLint y, GLsizei width,
-                                       GLsizei height, GLenum format,
-                                       GLenum type, size_t byteLen,
-                                       bool useShmem);
+  Maybe<UniquePtr<RawBuffer<>>> ReadPixels2(GLint x, GLint y, GLsizei width,
+                                            GLsizei height, GLenum format,
+                                            GLenum type, size_t byteLen);
 
   // ----------------------------- Sampler -----------------------------------
   void CreateSampler(const WebGLId<WebGLSampler>& aId);

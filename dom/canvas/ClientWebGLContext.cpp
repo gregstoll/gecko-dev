@@ -797,21 +797,6 @@ ClientWebGLContext::SetContextOptions(JSContext* cx,
   return NS_OK;
 }
 
-Maybe<mozilla::ipc::Shmem> ClientWebGLContext::MaybeAllocateShmem(
-    size_t nBytes) {
-  if (nBytes > sMaxSizeInlineData) {
-    return Nothing();
-  }
-
-  mozilla::ipc::Shmem shmem;
-  if (!mWebGLChild->AllocUnsafeShmem(nBytes, SharedMemory::TYPE_BASIC,
-                                     &shmem)) {
-    return Nothing();
-  }
-
-  return Some(shmem);
-}
-
 void ClientWebGLContext::AllowContextRestore() {
   Run<RPROC(AllowContextRestore)>();
 }
@@ -1427,21 +1412,13 @@ void ClientWebGLContext::GetBufferSubData(GLenum target, GLintptr srcByteOffset,
     return;
   }
 
-  Maybe<mozilla::ipc::Shmem> maybeShmem(MaybeAllocateShmem(byteLen));
-  Maybe<nsTArray<uint8_t>> result = Run<RPROC(GetBufferSubData)>(
-      target, srcByteOffset, byteLen, maybeShmem.isSome());
-  if (!maybeShmem) {
-    // The response went to the response queue
-    if (!result) {
-      return;
-    }
-    RawBuffer<>(byteLen, bytes).ReadArray(result.ref());
+  Maybe<UniquePtr<RawBuffer<>>> result =
+      Run<RPROC(GetBufferSubData)>(target, srcByteOffset, byteLen);
+  if (!result) {
     return;
   }
-
-  // The response went to the Shmem we just allocated
-  MOZ_ASSERT(!result);
-  RawBuffer<>(byteLen, bytes).ReadShmem(maybeShmem.ref());
+  MOZ_ASSERT(result.ref()->Length() == byteLen);
+  memcpy(bytes, result.ref()->Data(), byteLen);
 }
 
 ////
@@ -1779,8 +1756,8 @@ void ClientWebGLContext::TexImage2D(GLenum target, GLint level,
   }
 
   Run<RPROC(TexImage)>(funcDims, target, level, internalFormat, width, height,
-                       depth, border, unpackFormat, unpackType,
-                       PcqTexUnpack(std::move(blob)), GetFuncScopeId());
+                       depth, border, unpackFormat, unpackType, std::move(blob),
+                       GetFuncScopeId());
 }
 
 ////////////////////////////////////
@@ -1806,7 +1783,7 @@ void ClientWebGLContext::TexSubImage2D(GLenum target, GLint level,
 
   Run<RPROC(TexSubImage)>(funcDims, target, level, xOffset, yOffset, zOffset,
                           width, height, depth, unpackFormat, unpackType,
-                          PcqTexUnpack(std::move(blob)), GetFuncScopeId());
+                          std::move(blob), GetFuncScopeId());
 }
 
 ////////////////////////////////////
@@ -1825,8 +1802,8 @@ void ClientWebGLContext::TexImage3D(GLenum target, GLint level,
     return;
   }
   Run<RPROC(TexImage)>(funcDims, target, level, internalFormat, width, height,
-                       depth, border, unpackFormat, unpackType,
-                       PcqTexUnpack(std::move(blob)), GetFuncScopeId());
+                       depth, border, unpackFormat, unpackType, std::move(blob),
+                       GetFuncScopeId());
 }
 
 ////////////////////////////////////
@@ -1846,7 +1823,7 @@ void ClientWebGLContext::TexSubImage3D(GLenum target, GLint level,
   }
   Run<RPROC(TexSubImage)>(funcDims, target, level, xOffset, yOffset, zOffset,
                           width, height, depth, unpackFormat, unpackType,
-                          PcqTexUnpack(std::move(blob)), GetFuncScopeId());
+                          std::move(blob), GetFuncScopeId());
 }
 
 ////////////////////////////////////
@@ -1902,8 +1879,8 @@ void ClientWebGLContext::TexImage(uint8_t funcDims, GLenum target, GLint level,
     return;
   }
   Run<RPROC(TexImage)>(funcDims, target, level, internalFormat, width, height,
-                       depth, border, unpackFormat, unpackType,
-                       PcqTexUnpack(std::move(blob)), aFuncId);
+                       depth, border, unpackFormat, unpackType, std::move(blob),
+                       aFuncId);
 }
 
 void ClientWebGLContext::TexSubImage(uint8_t funcDims, GLenum target,
@@ -1919,7 +1896,7 @@ void ClientWebGLContext::TexSubImage(uint8_t funcDims, GLenum target,
   }
   Run<RPROC(TexSubImage)>(funcDims, target, level, xOffset, yOffset, zOffset,
                           width, height, depth, unpackFormat, unpackType,
-                          PcqTexUnpack(std::move(blob)), aFuncId);
+                          std::move(blob), aFuncId);
 }
 
 void ClientWebGLContext::CompressedTexImage(
@@ -1932,9 +1909,9 @@ void ClientWebGLContext::CompressedTexImage(
   if (!blob) {
     return;
   }
-  Run<RPROC(CompressedTexImage)>(
-      funcDims, target, level, internalFormat, width, height, depth, border,
-      PcqTexUnpack(std::move(blob)), expectedImageSize, aFuncId);
+  Run<RPROC(CompressedTexImage)>(funcDims, target, level, internalFormat, width,
+                                 height, depth, border, std::move(blob),
+                                 expectedImageSize, aFuncId);
 }
 
 void ClientWebGLContext::CompressedTexSubImage(
@@ -1949,7 +1926,7 @@ void ClientWebGLContext::CompressedTexSubImage(
   }
   Run<RPROC(CompressedTexSubImage)>(
       funcDims, target, level, xOffset, yOffset, zOffset, width, height, depth,
-      unpackFormat, PcqTexUnpack(std::move(blob)), expectedImageSize, aFuncId);
+      unpackFormat, std::move(blob), expectedImageSize, aFuncId);
 }
 
 // ------------------- Programs and shaders --------------------------------
@@ -2394,21 +2371,13 @@ void ClientWebGLContext::ReadPixels(GLint x, GLint y, GLsizei width,
     return;
   }
 
-  Maybe<mozilla::ipc::Shmem> maybeShmem(MaybeAllocateShmem(byteLen));
-  Maybe<nsTArray<uint8_t>> result = Run<RPROC(ReadPixels2)>(
-      x, y, width, height, format, type, byteLen, maybeShmem.isSome());
-  if (!maybeShmem) {
-    // The response went to the response queue
-    if (!result) {
-      return;
-    }
-    RawBuffer<>(byteLen, bytes).ReadArray(result.ref());
+  Maybe<UniquePtr<RawBuffer<>>> result =
+      Run<RPROC(ReadPixels2)>(x, y, width, height, format, type, byteLen);
+  if (!result) {
     return;
   }
-
-  // The response went to the Shmem we just allocated
-  MOZ_ASSERT(!result);
-  RawBuffer<>(byteLen, bytes).ReadShmem(maybeShmem.ref());
+  MOZ_ASSERT(result.ref()->Length() == byteLen);
+  memcpy(bytes, result.ref()->Data(), byteLen);
 }
 
 bool ClientWebGLContext::ReadPixels_SharedPrecheck(CallerType aCallerType,

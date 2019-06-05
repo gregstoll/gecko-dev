@@ -14,7 +14,6 @@ namespace mozilla {
 
 class ClientWebGLContext;
 class HostWebGLContext;
-class PcqTexUnpack;
 class WebGLActiveInfo;
 class WebGLBuffer;
 class WebGLContext;

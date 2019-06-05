@@ -178,38 +178,6 @@ class TexUnpackSurface final : public TexUnpackBlob {
 
 }  // namespace webgl
 
-/**
- * Simple wrapper for a TexUnpackBlobs so that they can be sent to another
- * process. The derived type of that underlying blob may change when represented
- * in a remote process.
- */
-class PcqTexUnpack final {
- public:
-  PcqTexUnpack(MaybeWebGLTexUnpackVariant&& aMaybeBlob)
-      : mMaybeBlob(std::move(aMaybeBlob)) {}
-
-  // Take the owned blob.  Returns null if the blob was already taken or if it
-  // is not a TexUnpackBytes.
-  UniquePtr<webgl::TexUnpackBlob> TakeBlob(WebGLContext* aContext);
-
-  PcqTexUnpack() = default;  // for PcqParamTraits and std::tuple
-  PcqTexUnpack(PcqTexUnpack&&) = default;
-
-  mozilla::ipc::PcqStatus Write(mozilla::ipc::ProducerView& aProducerView);
-
-  static mozilla::ipc::PcqStatus Read(
-      PcqTexUnpack* aPcqTexUnpack, mozilla::ipc::ConsumerView& aConsumerView);
-
-  size_t MinSize() const;
-
- protected:
-  PcqTexUnpack(const PcqTexUnpack&) = delete;
-  PcqTexUnpack& operator=(const PcqTexUnpack&) = delete;
-
-  friend mozilla::ipc::PcqParamTraits<PcqTexUnpack>;
-  MaybeWebGLTexUnpackVariant mMaybeBlob;
-};
-
 }  // namespace mozilla
 
 #endif  // TEX_UNPACK_BLOB_H_

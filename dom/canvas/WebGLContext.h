@@ -555,10 +555,9 @@ class WebGLContext : public SupportsWeakPtr<WebGLContext> {
   void ReadPixels(GLint x, GLint y, GLsizei width, GLsizei height,
                   GLenum format, GLenum type, WebGLsizeiptr offset);
 
-  Maybe<nsTArray<uint8_t>> ReadPixels(
-      GLint x, GLint y, GLsizei width, GLsizei height, GLenum format,
-      GLenum type, size_t byteLen,
-      const Maybe<mozilla::ipc::Shmem>& maybeShmem);
+  Maybe<UniquePtr<RawBuffer<>>> ReadPixels(GLint x, GLint y, GLsizei width,
+                                           GLsizei height, GLenum format,
+                                           GLenum type, size_t byteLen);
 
   ////
 
@@ -776,13 +775,13 @@ class WebGLContext : public SupportsWeakPtr<WebGLContext> {
   void CompressedTexImage(uint8_t funcDims, GLenum target, GLint level,
                           GLenum internalFormat, GLsizei width, GLsizei height,
                           GLsizei depth, GLint border,
-                          UniquePtr<webgl::TexUnpackBlob>&& src,
+                          UniquePtr<webgl::TexUnpackBytes>&& src,
                           const Maybe<GLsizei>& expectedImageSize);
   void CompressedTexSubImage(uint8_t funcDims, GLenum target, GLint level,
                              GLint xOffset, GLint yOffset, GLint zOffset,
                              GLsizei width, GLsizei height, GLsizei depth,
                              GLenum unpackFormat,
-                             UniquePtr<webgl::TexUnpackBlob>&& src,
+                             UniquePtr<webgl::TexUnpackBytes>&& src,
                              const Maybe<GLsizei>& expectedImageSize);
 
   ////////////////////////////////////
@@ -847,8 +846,6 @@ class WebGLContext : public SupportsWeakPtr<WebGLContext> {
                                  webgl::ImageInfo** const out_imageInfo);
   bool ValidateUnpackInfo(bool usePBOs, GLenum format, GLenum type,
                           webgl::PackingInfo* const out);
-  UniquePtr<webgl::TexUnpackBytes> AsTexUnpackBytes(
-      UniquePtr<webgl::TexUnpackBlob>&& aBlob);
 
   // -----------------------------------------------------------------------------
   // Vertices Feature (WebGLContextVertices.cpp)

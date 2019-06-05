@@ -85,9 +85,8 @@ void WebGL2Context::CopyBufferSubData(GLenum readTarget, GLenum writeTarget,
   writeBuffer->ResetLastUpdateFenceId();
 }
 
-Maybe<nsTArray<uint8_t>> WebGL2Context::GetBufferSubData(
-    GLenum target, WebGLintptr srcByteOffset, size_t byteLen,
-    const Maybe<mozilla::ipc::Shmem>& maybeShmem) {
+Maybe<UniquePtr<RawBuffer<>>> WebGL2Context::GetBufferSubData(
+    GLenum target, WebGLintptr srcByteOffset, size_t byteLen) {
   const FuncScope funcScope(*this, "getBufferSubData");
   if (IsContextLost()) return Nothing();
 
@@ -127,17 +126,11 @@ Maybe<nsTArray<uint8_t>> WebGL2Context::GetBufferSubData(
 
   ////
 
-  nsTArray<uint8_t> arr;
-  uint8_t* bytes;
-  if (!maybeShmem) {
-    arr.SetLength(byteLen);  // TODO: Make Fallible
-    bytes = arr.Elements();
-  } else {
-    bytes = maybeShmem.ref().get<uint8_t>();
-    MOZ_ASSERT(maybeShmem.ref().Size<uint8_t>() >= byteLen);
+  uint8_t* bytes = new uint8_t[byteLen];
+  if (!bytes) {
+    ErrorOutOfMemory("Could not allocate temp array");
+    return Nothing();
   }
-
-  MOZ_ASSERT(bytes);
 
   const ScopedLazyBind readBind(gl, target, buffer);
 
@@ -163,7 +156,9 @@ Maybe<nsTArray<uint8_t>> WebGL2Context::GetBufferSubData(
       gl->fBindTransformFeedback(LOCAL_GL_TRANSFORM_FEEDBACK, tfo);
     }
   }
-  return (!maybeShmem) ? Some(arr) : Nothing();
+
+  UniquePtr<RawBuffer<>> ret = MakeUnique<RawBuffer<>>(byteLen, bytes, true);
+  return Some(std::move(ret));
 }
 
 }  // namespace mozilla
