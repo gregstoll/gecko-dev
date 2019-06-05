@@ -466,17 +466,18 @@ class PcqBase {
   friend ProducerConsumerQueue;
 
   PcqBase()
-      : mQueue(nullptr),
+      : mOtherPid(0),
+        mQueue(nullptr),
         mQueueBufferSize(0),
         mUserReservedMemory(nullptr),
         mUserReservedSize(0),
         mRead(nullptr),
         mWrite(nullptr) {}
 
-  PcqBase(Shmem& aShmem, size_t aQueueSize,
+  PcqBase(Shmem& aShmem, base::ProcessId aOtherPid, size_t aQueueSize,
           RefPtr<PcqRCSemaphore> aMaybeNotEmptySem,
           RefPtr<PcqRCSemaphore> aMaybeNotFullSem) {
-    Set(aShmem, aQueueSize, aMaybeNotEmptySem, aMaybeNotFullSem);
+    Set(aShmem, aOtherPid, aQueueSize, aMaybeNotEmptySem, aMaybeNotFullSem);
   }
 
   PcqBase(const PcqBase&) = delete;
@@ -484,9 +485,10 @@ class PcqBase {
   PcqBase& operator=(const PcqBase&) = delete;
   PcqBase& operator=(PcqBase&&) = default;
 
-  void Set(Shmem& aShmem, size_t aQueueSize,
+  void Set(Shmem& aShmem, base::ProcessId aOtherPid, size_t aQueueSize,
            RefPtr<PcqRCSemaphore> aMaybeNotEmptySem,
            RefPtr<PcqRCSemaphore> aMaybeNotFullSem) {
+    mOtherPid = aOtherPid;
     mShmem = aShmem;
     mQueue = aShmem.get<uint8_t>();
 
@@ -575,6 +577,9 @@ class PcqBase {
    * positions.
    */
   size_t QueueBufferSize() { return mQueueBufferSize; }
+
+  // PID of process on the other end.  Both ends may run on the same process.
+  base::ProcessId mOtherPid;
 
   uint8_t* mQueue;
   size_t mQueueBufferSize;
@@ -779,10 +784,11 @@ class Producer : public detail::PcqBase {
         mQueue, QueueBufferSize(), aRead, aWrite, arg, aArgSize);
   }
 
-  Producer(Shmem& aShmem, size_t aQueueSize,
+  Producer(Shmem& aShmem, base::ProcessId aOtherPid, size_t aQueueSize,
            RefPtr<detail::PcqRCSemaphore> aMaybeNotEmptySem,
            RefPtr<detail::PcqRCSemaphore> aMaybeNotFullSem)
-      : PcqBase(aShmem, aQueueSize, aMaybeNotEmptySem, aMaybeNotFullSem) {
+      : PcqBase(aShmem, aOtherPid, aQueueSize, aMaybeNotEmptySem,
+                aMaybeNotFullSem) {
     // Since they are shared, this initializes mRead/mWrite in the Consumer
     // as well.
     *mRead = 0;
@@ -1072,10 +1078,11 @@ class Consumer : public detail::PcqBase {
         mQueue, QueueBufferSize(), aRead, aWrite, arg, aArgSize);
   }
 
-  Consumer(Shmem& aShmem, size_t aQueueSize,
+  Consumer(Shmem& aShmem, base::ProcessId aOtherPid, size_t aQueueSize,
            RefPtr<detail::PcqRCSemaphore> aMaybeNotEmptySem,
            RefPtr<detail::PcqRCSemaphore> aMaybeNotFullSem)
-      : PcqBase(aShmem, aQueueSize, aMaybeNotEmptySem, aMaybeNotFullSem) {}
+      : PcqBase(aShmem, aOtherPid, aQueueSize, aMaybeNotEmptySem,
+                aMaybeNotFullSem) {}
 
   Consumer(const Consumer&) = delete;
   Consumer& operator=(const Consumer&) = delete;
@@ -1155,7 +1162,8 @@ struct ProducerConsumerQueue {
       return nullptr;
     }
 
-    UniquePtr<ProducerConsumerQueue> ret = Create(shmem, aQueueSize);
+    UniquePtr<ProducerConsumerQueue> ret =
+      Create(shmem, aProtocol->OtherPid(), aQueueSize);
     if (!ret) {
       return ret;
     }
@@ -1175,13 +1183,14 @@ struct ProducerConsumerQueue {
   /**
    * Create a queue that is backed by aShmem, which must be:
    * (1) unsafe
-   * (2) made for use with any process that serves as an endpoint for the queue
+   * (2) made for use with aOtherPid (may be this process' PID)
    * (3) large enough to hold the queue contents and the shared meta-data of
    *     the queue (see GetMaxHeaderSize).  Any room left over will be available
    *     as user reserved memory.
    *     See GetUserReservedMemory() and GetUserReservedMemorySize()
    */
   static UniquePtr<ProducerConsumerQueue> Create(Shmem& aShmem,
+                                                 base::ProcessId aOtherPid,
                                                  size_t aQueueSize) {
     uint32_t totalShmemSize = aShmem.Size<uint8_t>();
 
@@ -1196,7 +1205,8 @@ struct ProducerConsumerQueue {
     auto notfull = MakeRefPtr<detail::PcqRCSemaphore>(
         CrossProcessSemaphore::Create("webgl-notfull", 1));
     return WrapUnique(
-        new ProducerConsumerQueue(aShmem, aQueueSize, notempty, notfull));
+        new ProducerConsumerQueue(aShmem, aOtherPid, aQueueSize, notempty,
+                                  notfull));
   }
 
   /**
@@ -1216,15 +1226,16 @@ struct ProducerConsumerQueue {
   }
 
  private:
-  ProducerConsumerQueue(Shmem& aShmem, size_t aQueueSize,
+  ProducerConsumerQueue(Shmem& aShmem, base::ProcessId aOtherPid, size_t aQueueSize,
                         RefPtr<detail::PcqRCSemaphore>& aMaybeNotEmptySem,
                         RefPtr<detail::PcqRCSemaphore>& aMaybeNotFullSem)
-      : mProducer(WrapUnique(new Producer(aShmem, aQueueSize, aMaybeNotEmptySem,
-                                          aMaybeNotFullSem))),
-        mConsumer(WrapUnique(new Consumer(aShmem, aQueueSize, aMaybeNotEmptySem,
-                                          aMaybeNotFullSem))) {
-    PCQ_LOGD("Constructed PCQ (%p).  Shmem Size = %zu. Queue Size = %zu.", this,
-             aShmem.Size<uint8_t>(), aQueueSize);
+      : mProducer(WrapUnique(new Producer(aShmem, aOtherPid, aQueueSize,
+                                          aMaybeNotEmptySem, aMaybeNotFullSem))),
+        mConsumer(WrapUnique(new Consumer(aShmem, aOtherPid, aQueueSize,
+                                          aMaybeNotEmptySem, aMaybeNotFullSem))) {
+    PCQ_LOGD("Constructed PCQ (%p).  Shmem Size = %zu. Queue Size = %zu.  "
+             "Other process ID: %08x.",
+             this, aShmem.Size<uint8_t>(), aQueueSize, (uint32_t)aOtherPid);
   }
 };
 
@@ -1235,9 +1246,14 @@ struct IPDLParamTraits<mozilla::detail::PcqBase> {
   static void Write(IPC::Message* aMsg, IProtocol* aActor, paramType& aParam) {
     WriteIPDLParam(aMsg, aActor, aParam.QueueSize());
     WriteIPDLParam(aMsg, aActor, std::move(aParam.mShmem));
+
+    // May not currently share a Producer or Consumer with a process that it's
+    // Shmem is not related to.
+    MOZ_ASSERT(aActor->OtherPid() == aParam.mOtherPid);
     WriteIPDLParam(
         aMsg, aActor,
         aParam.mMaybeNotEmptySem->ShareToProcess(aActor->OtherPid()));
+
     WriteIPDLParam(aMsg, aActor,
                    aParam.mMaybeNotFullSem->ShareToProcess(aActor->OtherPid()));
   }
@@ -1257,7 +1273,7 @@ struct IPDLParamTraits<mozilla::detail::PcqBase> {
     }
 
     MOZ_ASSERT(notEmptyHandle && notFullHandle);
-    aResult->Set(shmem, queueSize,
+    aResult->Set(shmem, aActor->OtherPid(), queueSize,
                  MakeRefPtr<detail::PcqRCSemaphore>(
                      CrossProcessSemaphore::Create(notEmptyHandle)),
                  MakeRefPtr<detail::PcqRCSemaphore>(
