@@ -11,6 +11,7 @@
 #include <atomic>
 #include <tuple>
 #include <vector>
+#include "mozilla/ipc/SharedMemoryBasic.h"
 #include "mozilla/Assertions.h"
 #include "mozilla/ipc/Shmem.h"
 #include "mozilla/ipc/ProtocolUtils.h"
@@ -211,6 +212,8 @@ class ProducerView {
         *this, aArg);
   }
 
+  size_t MinSizeBytes(size_t aNBytes);
+
  private:
   Producer* mProducer;
   size_t mRead;
@@ -226,11 +229,33 @@ class ConsumerView {
   ConsumerView(Consumer* aConsumer, size_t* aRead, size_t aWrite)
       : mConsumer(aConsumer), mRead(aRead), mWrite(aWrite) {}
 
+  // When reading raw memory blocks, we may get an error, a shared memory
+  // object that we take ownership of, or a pointer to a block of
+  // memory that we take ownership of (which may be null).
+  using PcqReadBytesVariant =
+    Variant<PcqStatus, RefPtr<SharedMemoryBasic>, void*>;
+
   /**
    * Read bytes from the consumer if there is enough data.  aBuffer may
    * be null (in which case the data is skipped)
    */
   PcqStatus Read(void* aBuffer, size_t aBufferSize);
+
+  /**
+   * Read into a variant.  The result may be an error, a block of shared
+   * memory, or a block of local memory.  If the result is local memory then
+   * the caller must call delete[] on it.  If aBuffer is not null and the
+   * result is local memory then the result will be _copied_ into
+   * aBuffer.  If aBuffer is null then the data is skipped as with Read
+   * and null is returned.
+   * If the result is shared memory then the caller is responsible for
+   * calling CloseHandle() on it when they are done with it.
+   *
+   * The only reason to use this instead of Read is if it is important to
+   * get the data without copying "large" items.  Few things are large
+   * enough to bother.
+   */
+  PcqReadBytesVariant ReadVariant(void* aBuffer, size_t aBufferSize);
 
   /**
    * Deserialize aArg using Arg's PcqParamTraits.
@@ -258,6 +283,8 @@ class ConsumerView {
     return mozilla::ipc::PcqParamTraits<typename RemoveCVR<Arg>::Type>::MinSize(
         *this, aArg);
   }
+
+  size_t MinSizeBytes(size_t aNBytes);
 
  private:
   Consumer* mConsumer;
@@ -329,6 +356,15 @@ size_t MinSizeofArgs(View& aView) {
 template <typename View, typename Arg>
 size_t MinSizeofArgs(View& aView) {
   return aView.MinSizeParam(nullptr);
+}
+
+// Currently, require any parameters expected to need more than 1/8 the total
+// number of bytes in the command queue to use their own SharedMemory.
+// TODO: Base this heuristic on something.  Also, if I made the PCQ size
+// (aTotal) a template parameter then this could be a compile-time check
+// in nearly all cases.
+bool NeedsSharedMemory(size_t aRequested, size_t aTotal) {
+  return (aTotal / 8) < aRequested;
 }
 
 /**
@@ -1421,7 +1457,8 @@ struct PcqParamTraits<nsACString> {
     if ((!aArg) || aArg->IsVoid()) {
       return minSize;
     }
-    minSize += aView.template MinSizeParam<uint32_t>(nullptr) + aArg->Length();
+    minSize += aView.template MinSizeParam<uint32_t>(nullptr) +
+      aView.MinSizeBytes(aArg->Length());
     return minSize;
   }
 };
@@ -1493,7 +1530,7 @@ struct PcqParamTraits<nsAString> {
     }
     uint32_t sizeofchar = sizeof(typename ParamType::char_type);
     minSize += aView.template MinSizeParam<uint32_t>(nullptr) +
-               aArg->Length() * sizeofchar;
+               aView.MinSizeBytes(aArg->Length() * sizeofchar);
     return minSize;
   }
 };
@@ -1606,7 +1643,7 @@ struct NSArrayPcqParamTraits<nsTArray<ElementType>, true> {
       return ret;
     }
 
-    ret += aArg->Length() * sizeof(ElementType);
+    ret += aView.MinSizeBytes(aArg->Length() * sizeof(ElementType));
     return ret;
   }
 };
@@ -1672,7 +1709,7 @@ struct ArrayPcqParamTraits<Array<ElementType, Length>, true> {
 
   template <typename View>
   static size_t MinSize(View& aView, const ParamType* aArg) {
-    return sizeof(ElementType[Length]);
+    return aView.MinSizeBytes(sizeof(ElementType[Length]));
   }
 };
 
@@ -1748,6 +1785,42 @@ struct PcqParamTraits<Pair<TypeA, TypeB>> {
            aView.MinSizeParam(aArg ? aArg->second() : nullptr);
   }
 };
+
+// ---------------------------------------------------------------
+
+// Both the Producer and the Consumer are required to maintain (i.e. close)
+// the FileDescriptor themselves.  The PCQ does not do this for you, nor does
+// it use FileDescriptor::auto_close.
+#if defined(OS_WIN)
+template<>
+struct IsTriviallySerializable<base::SharedMemoryHandle> : TrueType {};
+#elif defined(OS_POSIX)
+// SharedMemoryHandle is typedefed to base::FileDescriptor
+template<>
+struct PcqParamTraits<base::FileDescriptor> {
+  using ParamType = base::FileDescriptor;
+  static PcqStatus Write(ProducerView& aProducerView, const ParamType& aArg) {
+    // PCQs don't use auto-close.
+    // Convert any negative (i.e. invalid) fds to -1, as done with ParamTraits (why?)
+    return aProducerView.WriteParam(aArg.fd > 0 ? aArg.fd : -1);
+  }
+
+  static PcqStatus Read(ConsumerView& aConsumerView, ParamType* aArg) {
+    int fd;
+    PcqStatus status = aConsumerView.ReadParam(aArg ? &fd : nullptr);
+    if (aArg) {
+      aArg->fd = IsSuccess(status) ? fd : -1;
+      aArg->auto_close = false;  // PCQs don't use auto-close.
+    }
+    return status;
+  }
+
+  template <typename View>
+  static size_t MinSize(View& aView, const ParamType* aArg) {
+    return aView.MinSizeParam(aArg ? &aArg->fd : nullptr);
+  }
+};
+#endif
 
 // ---------------------------------------------------------------
 

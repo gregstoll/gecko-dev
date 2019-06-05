@@ -164,7 +164,8 @@ struct PcqParamTraits<RawBuffer<T>> {
 
   template <typename View>
   static size_t MinSize(View& aView, const ParamType* aArg) {
-    return aView.template MinSizeParam<size_t>() + (aArg ? aArg->mLength : 0);
+    return aView.template MinSizeParam<size_t>() +
+      aView.MinSizeBytes(aArg ? aArg->mLength : 0);
   }
 };
 
