@@ -1571,9 +1571,6 @@ void ClientWebGLContext::DeleteRenderbuffer(
 void ClientWebGLContext::GetInternalformatParameter(
     JSContext* cx, GLenum target, GLenum internalformat, GLenum pname,
     JS::MutableHandleValue retval, ErrorResult& rv) {
-  // TODO: Make this return the maybeArray AND an ErrorResult (just the
-  // NSError). That way, we can report NS_ERROR_OUT_OF_MEMORY when
-  // WebGL2Context::GetInternalformatParameter's AppendElements fails
   Maybe<nsTArray<int32_t>> maybeArr =
       Run<RPROC(GetInternalformatParameter)>(target, internalformat, pname);
   if (!maybeArr) {
@@ -1582,7 +1579,10 @@ void ClientWebGLContext::GetInternalformatParameter(
   }
 
   nsTArray<int32_t>& arr = maybeArr.ref();
-  JSObject* obj = dom::Int32Array::Create(cx, this, arr.Length(), &arr[0]);
+  // zero-length array indicates out-of-memory
+  JSObject* obj = arr.Length()
+                      ? dom::Int32Array::Create(cx, this, arr.Length(), &arr[0])
+                      : nullptr;
   if (!obj) {
     rv = NS_ERROR_OUT_OF_MEMORY;
   }

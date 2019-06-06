@@ -63,9 +63,15 @@ Maybe<nsTArray<int32_t>> WebGL2Context::GetInternalformatParameter(
   gl->fGetInternalformativ(LOCAL_GL_RENDERBUFFER, internalformat,
                            LOCAL_GL_NUM_SAMPLE_COUNTS, 1, &sampleCount);
   if (sampleCount > 0) {
-    GLint* samples = static_cast<GLint*>(obj.AppendElements(sampleCount));
-    gl->fGetInternalformativ(LOCAL_GL_RENDERBUFFER, internalformat,
-                             LOCAL_GL_SAMPLES, sampleCount, samples);
+    GLint* samples =
+        static_cast<GLint*>(obj.AppendElements(sampleCount, fallible));
+    // If we don't have 'samples' then we will return a zero-length array, which
+    // will be interpreted by the ClientWebGLContext as an out-of-memory
+    // condition.
+    if (samples) {
+      gl->fGetInternalformativ(LOCAL_GL_RENDERBUFFER, internalformat,
+                               LOCAL_GL_SAMPLES, sampleCount, samples);
+    }
   }
 
   return Some(obj);

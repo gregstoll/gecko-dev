@@ -1217,15 +1217,6 @@ bool WebGLContext::Present() {
   layers::SurfaceDescriptor surfaceDescriptor;
   screen->Front()->Surf()->ToSurfaceDescriptor(&surfaceDescriptor);
 
-  // TODO: TEST:
-  {
-    static uint32_t sCount = 0;
-    char fname[512];
-    sprintf(fname, "\\PresentSurface-%03d.png", sCount++);
-    bool needsPremult = screen->Front()->Surf()->mHasAlpha && IsPremultAlpha();
-    WriteFrontToFile(gl, screen, fname, needsPremult);
-  }
-
   if (!mCompositableHost) {
     return false;
   }

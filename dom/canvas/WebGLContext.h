@@ -813,6 +813,7 @@ class WebGLContext : public SupportsWeakPtr<WebGLContext> {
                    uint32_t height, uint32_t depth, GLenum unpackFormat,
                    GLenum unpackType, UniquePtr<webgl::TexUnpackBlob>&& src);
 
+  // TODO: DLP: Remember to re-add this test
   bool ValidateNullPixelUnpackBuffer() {
     if (mBoundPixelUnpackBuffer) {
       ErrorInvalidOperation("PIXEL_UNPACK_BUFFER must be null.");

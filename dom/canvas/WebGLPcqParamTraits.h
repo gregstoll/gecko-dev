@@ -149,23 +149,43 @@ struct PcqParamTraits<RawBuffer<T>> {
       return status;
     }
 
-    if (aArg) {
-      auto data = new ElementType[len];
-      if (!data) {
-        return PcqStatus::PcqOOMError;
-      }
-      aArg->mData = data;
-      aArg->mLength = len;
-      aArg->mOwnsData = true;
-      return aConsumerView.Read(data, len * sizeof(ElementType));
+    if (!aArg) {
+      return aConsumerView.Read(nullptr, len * sizeof(T));
     }
-    return aConsumerView.Read(nullptr, len * sizeof(ElementType));
+
+    struct RawBufferReadMatcher {
+      PcqStatus operator()(RefPtr<mozilla::ipc::SharedMemoryBasic>& smem) {
+        if (!smem) {
+          return PcqStatus::PcqFatalError;
+        }
+        mArg->mSmem = smem;
+        mArg->mData = static_cast<ElementType*>(smem->memory());
+        mArg->mLength = mLength;
+        mArg->mOwnsData = false;
+        return PcqStatus::Success;
+      }
+      PcqStatus operator()() {
+        mArg->mSmem = nullptr;
+        ElementType* buf = new ElementType[mLength];
+        mArg->mData = buf;
+        mArg->mLength = mLength;
+        mArg->mOwnsData = true;
+        return mConsumerView.Read(buf, mLength * sizeof(T));
+      }
+
+      ConsumerView& mConsumerView;
+      ParamType* mArg;
+      size_t mLength;
+    };
+
+    return aConsumerView.ReadVariant(
+        len * sizeof(T), RawBufferReadMatcher{aConsumerView, aArg, len});
   }
 
   template <typename View>
   static size_t MinSize(View& aView, const ParamType* aArg) {
     return aView.template MinSizeParam<size_t>() +
-           aView.MinSizeBytes(aArg ? aArg->mLength : 0);
+           aView.MinSizeBytes(aArg ? aArg->mLength * sizeof(T) : 0);
   }
 };
 

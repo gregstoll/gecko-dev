@@ -164,7 +164,6 @@ UNIFIED_SOURCES += [
     'MessagePump.cpp',
     'ProcessChild.cpp',
     'ProcessUtils_common.cpp',
-    'ProducerConsumerQueue.cpp',
     'ProtocolUtils.cpp',
     'ScopedXREEmbed.cpp',
     'SharedMemory.cpp',

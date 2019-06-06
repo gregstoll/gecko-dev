@@ -183,7 +183,7 @@ class ProducerView {
    * Write bytes from aBuffer to the producer if there is enough room.
    * aBufferSize must not be 0.
    */
-  PcqStatus Write(const void* aBuffer, size_t aBufferSize);
+  inline PcqStatus Write(const void* aBuffer, size_t aBufferSize);
 
   /**
    * Serialize aArg using Arg's PcqParamTraits.
@@ -212,7 +212,7 @@ class ProducerView {
         *this, aArg);
   }
 
-  size_t MinSizeBytes(size_t aNBytes);
+  inline size_t MinSizeBytes(size_t aNBytes);
 
  private:
   Producer* mProducer;
@@ -231,7 +231,8 @@ class ConsumerView {
 
   // When reading raw memory blocks, we may get an error, a shared memory
   // object that we take ownership of, or a pointer to a block of
-  // memory that we take ownership of (which may be null).
+  // memory that is only guaranteed to exist as long as the ReadVariant
+  // call.
   using PcqReadBytesVariant =
       Variant<PcqStatus, RefPtr<SharedMemoryBasic>, void*>;
 
@@ -239,23 +240,26 @@ class ConsumerView {
    * Read bytes from the consumer if there is enough data.  aBuffer may
    * be null (in which case the data is skipped)
    */
-  PcqStatus Read(void* aBuffer, size_t aBufferSize);
+  inline PcqStatus Read(void* aBuffer, size_t aBufferSize);
 
   /**
-   * Read into a variant.  The result may be an error, a block of shared
-   * memory, or a block of local memory.  If the result is local memory then
-   * the caller must call delete[] on it.  If aBuffer is not null and the
-   * result is local memory then the result will be _copied_ into
-   * aBuffer.  If aBuffer is null then the data is skipped as with Read
-   * and null is returned.
-   * If the result is shared memory then the caller is responsible for
-   * calling CloseHandle() on it when they are done with it.
+   * Calls a Matcher that returns a PcqStatus when told that the next bytes are
+   * in the queue or are in shared memory.
+   *
+   * The matcher looks like this:
+   * struct MyMatcher {
+   *   PcqStatus operator()(RefPtr<SharedMemoryBasic>& x) {
+   *     Read or copy x; take responsibility for closing x.
+   *   }
+   *   PcqStatus operator()() { Data is in queue.  Use ConsumerView::Read. }
+   * };
    *
    * The only reason to use this instead of Read is if it is important to
    * get the data without copying "large" items.  Few things are large
    * enough to bother.
    */
-  PcqReadBytesVariant ReadVariant(void* aBuffer, size_t aBufferSize);
+  template <typename Matcher>
+  inline PcqStatus ReadVariant(size_t aBufferSize, Matcher&& aMatcher);
 
   /**
    * Deserialize aArg using Arg's PcqParamTraits.
@@ -284,7 +288,7 @@ class ConsumerView {
         *this, aArg);
   }
 
-  size_t MinSizeBytes(size_t aNBytes);
+  inline size_t MinSizeBytes(size_t aNBytes);
 
  private:
   Consumer* mConsumer;
@@ -1123,6 +1127,99 @@ class Consumer : public detail::PcqBase {
   Consumer(const Consumer&) = delete;
   Consumer& operator=(const Consumer&) = delete;
 };
+
+PcqStatus ProducerView::Write(const void* aBuffer, size_t aBufferSize) {
+  MOZ_ASSERT(aBuffer && (aBufferSize > 0));
+  if (detail::NeedsSharedMemory(aBufferSize, mProducer->Size())) {
+    RefPtr<SharedMemoryBasic> smem = MakeRefPtr<SharedMemoryBasic>();
+    if (!smem->Create(aBufferSize) || !smem->Map(aBufferSize)) {
+      return PcqStatus::PcqFatalError;
+    }
+    SharedMemoryBasic::Handle handle;
+    if (!smem->ShareToProcess(mProducer->mOtherPid, &handle)) {
+      return PcqStatus::PcqFatalError;
+    }
+    memcpy(smem->memory(), aBuffer, aBufferSize);
+    smem->CloseHandle();
+    return WriteParam(handle);
+  }
+
+  return mProducer->WriteObject(mRead, mWrite, aBuffer, aBufferSize);
+}
+
+size_t ProducerView::MinSizeBytes(size_t aNBytes) {
+  return detail::NeedsSharedMemory(aNBytes, mProducer->Size())
+             ? MinSizeParam((SharedMemoryBasic::Handle*)nullptr)
+             : aNBytes;
+}
+
+PcqStatus ConsumerView::Read(void* aBuffer, size_t aBufferSize) {
+  struct PcqReadBytesMatcher {
+    PcqStatus operator()(RefPtr<SharedMemoryBasic>& smem) {
+      MOZ_ASSERT(smem);
+      PcqStatus ret;
+      if (smem->memory()) {
+        if (mBuffer) {
+          memcpy(mBuffer, smem->memory(), mBufferSize);
+        }
+        ret = PcqStatus::Success;
+      } else {
+        ret = PcqStatus::PcqFatalError;
+      }
+      // TODO: Problem: CloseHandle should only be called on the remove/skip
+      // call.  A peek should not CloseHandle!
+      smem->CloseHandle();
+      return ret;
+    }
+    PcqStatus operator()() {
+      return mConsumer.ReadObject(mRead, mWrite, mBuffer, mBufferSize);
+    }
+
+    Consumer& mConsumer;
+    size_t* mRead;
+    size_t mWrite;
+    void* mBuffer;
+    size_t mBufferSize;
+  };
+
+  MOZ_ASSERT(aBufferSize > 0);
+
+  return ReadVariant(aBufferSize,
+                     PcqReadBytesMatcher{*(this->mConsumer), mRead, mWrite,
+                                         aBuffer, aBufferSize});
+}
+
+template <typename Matcher>
+PcqStatus ConsumerView::ReadVariant(size_t aBufferSize, Matcher&& aMatcher) {
+  if (detail::NeedsSharedMemory(aBufferSize, mConsumer->Size())) {
+    // Always read shared-memory -- don't just skip.
+    SharedMemoryBasic::Handle handle;
+    PcqStatus status = ReadParam(&handle);
+    if (!IsSuccess(status)) {
+      return status;
+    }
+
+    // TODO: Find some way to MOZ_RELEASE_ASSERT that buffersize exactly matches
+    // what was in queue.  This doesn't appear to be possible with the
+    // information available.
+    // TODO: This needs to return the same refptr even when peeking/during
+    // transactions that get aborted/rewound.  So this is wrong.
+    RefPtr<SharedMemoryBasic> sharedMem = MakeRefPtr<SharedMemoryBasic>();
+    if (!sharedMem->IsHandleValid(handle) ||
+        !sharedMem->SetHandle(handle,
+                              mozilla::ipc::SharedMemory::RightsReadWrite)) {
+      return PcqStatus::PcqFatalError;
+    }
+    return aMatcher(sharedMem);
+  }
+  return aMatcher();
+}
+
+size_t ConsumerView::MinSizeBytes(size_t aNBytes) {
+  return detail::NeedsSharedMemory(aNBytes, mConsumer->Size())
+             ? MinSizeParam((SharedMemoryBasic::Handle*)nullptr)
+             : aNBytes;
+}
 
 using mozilla::detail::GetCacheLineSize;
 using mozilla::detail::GetMaxHeaderSize;

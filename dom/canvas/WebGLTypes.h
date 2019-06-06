@@ -15,7 +15,7 @@
 
 #include "nsTArray.h"
 #include "mozilla/dom/WebGLRenderingContextBinding.h"
-#include "mozilla/ipc/Shmem.h"
+#include "mozilla/ipc/SharedMemoryBasic.h"
 #include "WebGLShaderPrecisionFormat.h"
 #include "WebGLStrongTypes.h"
 
@@ -518,16 +518,22 @@ AsSomeVariantT<T> AsSomeVariant(Maybe<T>&& aObj) {
 
 /**
  * Represents a block of memory that it may or may not own.  The
- * inner data type must be trivially copyable by memcpy.
+ * inner data type must be trivially copyable by memcpy.  A RawBuffer
+ * may be backed by local memory or shared memory.
  */
 template <typename T = uint8_t, typename nonCV = typename RemoveCV<T>::Type,
           typename EnableIf<std::is_trivially_assignable<nonCV&, nonCV>::value,
                             int>::Type = 0>
 class RawBuffer {
+  // The SharedMemoryBasic that owns mData, if any.
+  RefPtr<mozilla::ipc::SharedMemoryBasic> mSmem;
+  // Pointer to the raw memory block
   T* mData = nullptr;
   // Length is the number of elements of size T in the array
   size_t mLength = 0;
+  // true if we should delete[] the mData on destruction
   bool mOwnsData = false;
+
   friend mozilla::ipc::PcqParamTraits<RawBuffer>;
 
  public:
@@ -540,9 +546,20 @@ class RawBuffer {
       : mData(data), mLength(len), mOwnsData(aTakeData) {
     MOZ_ASSERT(mData && mLength);
   }
+
+  RawBuffer(size_t len, RefPtr<mozilla::ipc::SharedMemoryBasic>& aSmem)
+      : mSmem(aSmem), mData(aSmem->memory()), mLength(len), mOwnsData(false) {
+    MOZ_ASSERT(mData && mLength);
+  }
+
   ~RawBuffer() {
+    // If we have a SharedMemoryBasic then it must own mData.
+    MOZ_ASSERT((!mSmem) || (!mOwnsData));
     if (mOwnsData) {
       delete[] mData;
+    }
+    if (mSmem) {
+      mSmem->CloseHandle();
     }
   }
 
@@ -560,33 +577,27 @@ class RawBuffer {
     return mData[idx];
   }
 
-#if 0
-  // TODO: Remove
-  void ReadArray(const nsTArray<T>& arr) {
-    MOZ_ASSERT(Data() && (Length() <= arr.Length()));
-    memcpy(Data(), arr.Elements(), Length() * sizeof(T));
-  }
-
-  void ReadShmem(const mozilla::ipc::Shmem& shmem) {
-    const T* buf = shmem.get<T>();
-    MOZ_ASSERT(Data() && buf && (Length() <= shmem.Size<T>()));
-    memcpy(Data(), buf, mLength * sizeof(T));
-  }
-#endif
-
   RawBuffer() {}  // For PcqParamTraits and std::tuple
   RawBuffer(const RawBuffer&) = delete;
   RawBuffer& operator=(const RawBuffer&) = delete;
+
   RawBuffer(RawBuffer&& o)
-      : mData(o.mData), mLength(o.mLength), mOwnsData(o.mOwnsData) {
+      : mSmem(o.mSmem),
+        mData(o.mData),
+        mLength(o.mLength),
+        mOwnsData(o.mOwnsData) {
+    o.mSmem = nullptr;
     o.mData = nullptr;
     o.mLength = 0;
     o.mOwnsData = false;
   }
+
   RawBuffer& operator=(RawBuffer&& o) {
+    mSmem = o.mSmem;
     mData = o.mData;
     mLength = o.mLength;
     mOwnsData = o.mOwnsData;
+    o.mSmem = nullptr;
     o.mData = nullptr;
     o.mLength = 0;
     o.mOwnsData = false;
