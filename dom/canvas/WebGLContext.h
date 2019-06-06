@@ -813,7 +813,6 @@ class WebGLContext : public SupportsWeakPtr<WebGLContext> {
                    uint32_t height, uint32_t depth, GLenum unpackFormat,
                    GLenum unpackType, UniquePtr<webgl::TexUnpackBlob>&& src);
 
-  // TODO: DLP: Remember to re-add this test
   bool ValidateNullPixelUnpackBuffer() {
     if (mBoundPixelUnpackBuffer) {
       ErrorInvalidOperation("PIXEL_UNPACK_BUFFER must be null.");
@@ -822,12 +821,10 @@ class WebGLContext : public SupportsWeakPtr<WebGLContext> {
     return true;
   }
 
-  UniquePtr<webgl::TexUnpackBlob> TexUnpackBytesFromTexImageData(
+  UniquePtr<webgl::TexUnpackBlob> ToTexUnpackBytes(
       const WebGLTexImageData& imageData);
 
-  UniquePtr<webgl::TexUnpackBlob> TexUnpackBytesFromTexPboOffset(
-      TexImageTarget target, uint32_t width, uint32_t height, uint32_t depth,
-      WebGLsizeiptr pboOffset, const Maybe<GLsizei>& expectedImageSize);
+  UniquePtr<webgl::TexUnpackBytes> ToTexUnpackBytes(WebGLTexPboOffset& aPbo);
 
   ////////////////////////////////////
   // WebGLTextureUpload.cpp

@@ -66,6 +66,8 @@ class WebGLActiveInfo {
 
  protected:
   friend mozilla::ipc::PcqParamTraits<WebGLActiveInfo>;
+  friend Maybe<WebGLActiveInfo>;
+
   explicit WebGLActiveInfo()
       : mElemCount(0),
         mElemType(0),

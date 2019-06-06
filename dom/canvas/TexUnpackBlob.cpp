@@ -408,15 +408,11 @@ TexUnpackBytes::TexUnpackBytes(const WebGLPixelStore& pixelStore,
     : TexUnpackBlob(pixelStore, target,
                     FallbackOnZero(pixelStore.mUnpackRowLength, width), width,
                     height, depth, gfxAlphaType::NonPremult),
-      mIsClientData(isClientData),
-      mPtr(ptr),
-      mAvailBytes(availBytes) {}
+      mPtr(RawBuffer<const uint8_t>(availBytes, ptr)) {}
 
 bool TexUnpackBytes::Validate(WebGLContext* webgl,
                               const webgl::PackingInfo& pi) {
-  if (mIsClientData && !mPtr) return true;
-
-  return ValidateUnpackBytes(webgl, pi, mAvailBytes, this);
+  return ValidateUnpackBytes(webgl, pi, mPtr.Length(), this);
 }
 
 bool TexUnpackBytes::TexOrSubImage(bool isSubImage, bool needsRespec,
@@ -431,11 +427,11 @@ bool TexUnpackBytes::TexOrSubImage(bool isSubImage, bool needsRespec,
   const auto format = FormatForPackingInfo(pi);
   const auto bytesPerPixel = webgl::BytesPerPixel(pi);
 
-  const uint8_t* uploadPtr = mPtr;
+  const uint8_t* uploadPtr = mPtr.Data();
   UniqueBuffer tempBuffer;
 
   do {
-    if (!mIsClientData || !mPtr) break;
+    if (!mPtr) break;
 
     if (!webgl->mPixelStore.mFlipY && !webgl->mPixelStore.mPremultiplyAlpha) {
       break;
@@ -460,8 +456,8 @@ bool TexUnpackBytes::TexOrSubImage(bool isSubImage, bool needsRespec,
     const uint32_t rowCount = mHeight * mDepth;
     const auto stride =
         RoundUpToMultipleOf(rowLength * bytesPerPixel, mAlignment);
-    if (!ConvertIfNeeded(webgl, rowLength, rowCount, format, mPtr, stride,
-                         format, stride, &uploadPtr, &tempBuffer)) {
+    if (!ConvertIfNeeded(webgl, rowLength, rowCount, format, mPtr.Data(),
+                         stride, format, stride, &uploadPtr, &tempBuffer)) {
       return false;
     }
   } while (false);
@@ -726,8 +722,8 @@ bool TexUnpackImage::TexOrSubImage(bool isSubImage, bool needsRespec,
     return false;
   }
 
-  const TexUnpackSurface surfBlob(webgl, target, mWidth, mHeight, mDepth,
-                                  dataSurf, mSrcAlphaType);
+  const TexUnpackSurface surfBlob(webgl->GetPixelStore(), target, mWidth,
+                                  mHeight, mDepth, dataSurf, mSrcAlphaType);
 
   return surfBlob.TexOrSubImage(isSubImage, needsRespec, tex, target, level,
                                 dui, xOffset, yOffset, zOffset, pi, out_error);
@@ -737,30 +733,31 @@ bool TexUnpackImage::TexOrSubImage(bool isSubImage, bool needsRespec,
 ////////////////////////////////////////////////////////////////////////////////
 // TexUnpackSurface
 
-TexUnpackSurface::TexUnpackSurface(const ClientWebGLContext* webgl,
+TexUnpackSurface::TexUnpackSurface(const WebGLPixelStore& pixelStore,
                                    TexImageTarget target, uint32_t width,
                                    uint32_t height, uint32_t depth,
                                    gfx::DataSourceSurface* surf,
                                    gfxAlphaType srcAlphaType)
-    : TexUnpackBlob(webgl->GetPixelStore(), target, surf->GetSize().width,
-                    width, height, depth, srcAlphaType),
-      mSurf(surf) {}
+    : TexUnpackBlob(pixelStore, target, surf->GetSize().width, width, height,
+                    depth, srcAlphaType),
+      mSize(surf->GetSize()),
+      mFormat(surf->GetFormat()),
+      mStride(0),
+      mMap(new gfx::DataSourceSurface::ScopedMap(
+          surf, gfx::DataSourceSurface::MapType::READ)) {
+  if ((!mMap) || (!mMap->IsMapped())) {
+    return;
+  }
 
-TexUnpackSurface::TexUnpackSurface(const WebGLContext* webgl,
-                                   TexImageTarget target, uint32_t width,
-                                   uint32_t height, uint32_t depth,
-                                   gfx::DataSourceSurface* surf,
-                                   gfxAlphaType srcAlphaType)
-    : TexUnpackBlob(webgl->GetPixelStore(), target, surf->GetSize().width,
-                    width, height, depth, srcAlphaType),
-      mSurf(surf) {}
+  mStride = mMap->GetStride();
+  mData = RawBuffer<>(mSize.height * mStride, mMap->GetData());
+}
 
 //////////
 
-static bool GetFormatForSurf(gfx::SourceSurface* surf,
+static bool GetFormatForSurf(gfx::SurfaceFormat surfFormat,
                              WebGLTexelFormat* const out_texelFormat,
                              uint8_t* const out_bpp) {
-  const auto surfFormat = surf->GetFormat();
   switch (surfFormat) {
     case gfx::SurfaceFormat::B8G8R8A8:
       *out_texelFormat = WebGLTexelFormat::BGRA8;
@@ -810,7 +807,7 @@ bool TexUnpackSurface::Validate(WebGLContext* webgl,
                                 const webgl::PackingInfo& pi) {
   if (!ValidatePIForDOM(webgl, pi)) return false;
 
-  const auto fullRows = mSurf->GetSize().height;
+  const auto fullRows = mSize.height;
   return ValidateUnpackPixels(webgl, fullRows, 0, this);
 }
 
@@ -823,8 +820,8 @@ bool TexUnpackSurface::TexOrSubImage(
 
   ////
 
-  const auto rowLength = mSurf->GetSize().width;
-  const auto rowCount = mSurf->GetSize().height;
+  const auto rowLength = mSize.width;
+  const auto rowCount = mSize.height;
 
   const auto& dstBPP = webgl::BytesPerPixel(dstPI);
   const auto dstFormat = FormatForPackingInfo(dstPI);
@@ -833,23 +830,17 @@ bool TexUnpackSurface::TexOrSubImage(
 
   WebGLTexelFormat srcFormat;
   uint8_t srcBPP;
-  if (!GetFormatForSurf(mSurf, &srcFormat, &srcBPP)) {
+  if (!GetFormatForSurf(mFormat, &srcFormat, &srcBPP)) {
     webgl->ErrorImplementationBug(
         "GetFormatForSurf failed for"
         " WebGLTexelFormat::%u.",
-        uint32_t(mSurf->GetFormat()));
+        uint32_t(mFormat));
     return false;
   }
 
-  gfx::DataSourceSurface::ScopedMap map(mSurf,
-                                        gfx::DataSourceSurface::MapType::READ);
-  if (!map.IsMapped()) {
-    webgl->ErrorOutOfMemory("Failed to map source surface for upload.");
-    return false;
-  }
-
-  const auto& srcBegin = map.GetData();
-  const auto& srcStride = map.GetStride();
+  MOZ_ASSERT(mData && mStride);
+  const auto& srcBegin = mData.Data();
+  const auto& srcStride = mStride;
 
   ////
 
@@ -904,84 +895,6 @@ bool TexUnpackSurface::TexOrSubImage(
 
   return true;
 }
-
-//////////
-
-mozilla::ipc::PcqStatus TexUnpackBytes::Write(
-    mozilla::ipc::ProducerView& aView) {
-  PcqStatus status = aView.WriteParam(mAlignment);
-  status = IsSuccess(status) ? aView.WriteParam(mRowLength) : status;
-  status = IsSuccess(status) ? aView.WriteParam(mImageHeight) : status;
-  status = IsSuccess(status) ? aView.WriteParam(mSkipPixels) : status;
-  status = IsSuccess(status) ? aView.WriteParam(mSkipRows) : status;
-  status = IsSuccess(status) ? aView.WriteParam(mSkipImages) : status;
-  status = IsSuccess(status) ? aView.WriteParam(mWidth) : status;
-  status = IsSuccess(status) ? aView.WriteParam(mHeight) : status;
-  status = IsSuccess(status) ? aView.WriteParam(mDepth) : status;
-  status = IsSuccess(status) ? aView.WriteParam(mSrcAlphaType) : status;
-  status = IsSuccess(status) ? aView.WriteParam(mAvailBytes) : status;
-  return IsSuccess(status) ? aView.Write(mPtr, mAvailBytes) : status;
-}
-
-/* static */ mozilla::ipc::PcqStatus TexUnpackBytes::Read(
-    mozilla::ipc::ConsumerView& aView, webgl::TexUnpackBytes* aTexBytes) {
-  PcqStatus status =
-      aView.ReadParam(aTexBytes ? &aTexBytes->mAlignment : nullptr);
-  status = IsSuccess(status)
-               ? aView.ReadParam(aTexBytes ? &aTexBytes->mRowLength : nullptr)
-               : status;
-  status = IsSuccess(status)
-               ? aView.ReadParam(aTexBytes ? &aTexBytes->mImageHeight : nullptr)
-               : status;
-  status = IsSuccess(status)
-               ? aView.ReadParam(aTexBytes ? &aTexBytes->mSkipPixels : nullptr)
-               : status;
-  status = IsSuccess(status)
-               ? aView.ReadParam(aTexBytes ? &aTexBytes->mSkipRows : nullptr)
-               : status;
-  status = IsSuccess(status)
-               ? aView.ReadParam(aTexBytes ? &aTexBytes->mSkipImages : nullptr)
-               : status;
-  status = IsSuccess(status)
-               ? aView.ReadParam(aTexBytes ? &aTexBytes->mWidth : nullptr)
-               : status;
-  status = IsSuccess(status)
-               ? aView.ReadParam(aTexBytes ? &aTexBytes->mHeight : nullptr)
-               : status;
-  status = IsSuccess(status)
-               ? aView.ReadParam(aTexBytes ? &aTexBytes->mDepth : nullptr)
-               : status;
-  status =
-      IsSuccess(status)
-          ? aView.ReadParam(aTexBytes ? &aTexBytes->mSrcAlphaType : nullptr)
-          : status;
-  uint8_t* ptr = nullptr;
-  size_t availBytes;
-  status = IsSuccess(status) ? aView.ReadParam(&availBytes) : status;
-
-  if (aTexBytes) {
-    aTexBytes->mAvailBytes = availBytes;
-    // TODO: ??? Dunno what this was supposed to be but probably dont need it
-    aTexBytes->mIsClientData = true;
-    // TODO: Does anything ever free this stuff?
-    ptr = static_cast<uint8_t*>(malloc(availBytes));
-    aTexBytes->mPtr = ptr;
-  }
-
-  return IsSuccess(status) ? aView.Read(ptr, availBytes) : status;
-}
-
-size_t TexUnpackBytes::Size() const {
-  return (9 * sizeof(uint32_t)) + sizeof(gfxAlphaType) + sizeof(size_t) +
-         mAvailBytes;
-}
-
-mozilla::ipc::PcqStatus TexUnpackSurface::Write(
-    mozilla::ipc::ProducerView& aView) {
-  MOZ_ASSERT_UNREACHABLE("TODO: Write as TexUnpackBytes");
-}
-
-size_t TexUnpackSurface::Size() const { MOZ_ASSERT_UNREACHABLE("TODO:"); }
 
 }  // namespace webgl
 

@@ -396,9 +396,10 @@ struct WebGLTexPboOffset {
   GLsizei mExpectedImageSize;
 };
 
-using WebGLTexUnpackVariant = Variant<UniquePtr<webgl::TexUnpackBytes>,
-                                      UniquePtr<webgl::TexUnpackSurface>,
-                                      UniquePtr<webgl::TexUnpackImage>>;
+using WebGLTexUnpackVariant =
+    Variant<UniquePtr<webgl::TexUnpackBytes>,
+            UniquePtr<webgl::TexUnpackSurface>,
+            UniquePtr<webgl::TexUnpackImage>, WebGLTexPboOffset>;
 
 using MaybeWebGLTexUnpackVariant = Maybe<WebGLTexUnpackVariant>;
 
@@ -419,6 +420,7 @@ struct WebGLContextOptions {
   dom::WebGLPowerPreference powerPreference =
       dom::WebGLPowerPreference::Default;
   bool shouldResistFingerprinting = true;
+  bool enableDebugRendererInfo = false;
 
   WebGLContextOptions();
   bool operator==(const WebGLContextOptions&) const;
@@ -569,15 +571,17 @@ class RawBuffer {
   const T* Data() const { return mData; }
 
   T& operator[](size_t idx) {
-    MOZ_ASSERT(mData);
+    MOZ_ASSERT(mData && (idx < mLength));
     return mData[idx];
   }
   const T& operator[](size_t idx) const {
-    MOZ_ASSERT(mData);
+    MOZ_ASSERT(mData && (idx < mLength));
     return mData[idx];
   }
 
-  RawBuffer() {}  // For PcqParamTraits and std::tuple
+  operator bool() const { return mData && mLength; }
+
+  RawBuffer() {}
   RawBuffer(const RawBuffer&) = delete;
   RawBuffer& operator=(const RawBuffer&) = delete;
 

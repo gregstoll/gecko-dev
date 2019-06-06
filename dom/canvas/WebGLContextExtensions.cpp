@@ -203,7 +203,7 @@ bool WebGLContext::IsExtensionSupported(WebGLExtensionID ext) const {
       return WebGLExtensionCompressedTextureS3TC_SRGB::IsSupported(this);
 
     case WebGLExtensionID::WEBGL_debug_renderer_info:
-      return Preferences::GetBool("webgl.enable-debug-renderer-info", false) &&
+      return mOptions.enableDebugRendererInfo &&
              !mOptions.shouldResistFingerprinting;
 
     case WebGLExtensionID::WEBGL_debug_shaders:
@@ -546,6 +546,7 @@ ClientWebGLExtensionBase* ClientWebGLContext::UseExtension(
       return new ClientWebGLExtensionLoseContext(this);
     default:
       MOZ_ASSERT_UNREACHABLE("illegal extension enum");
+      return nullptr;
   }
 }
 

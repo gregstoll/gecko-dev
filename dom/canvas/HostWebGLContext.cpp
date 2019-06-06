@@ -650,6 +650,10 @@ struct ToTexUnpackTypeMatcher {
         "Attempted to read TexUnpackBlob as something it was not");
     return nullptr;
   }
+  UniquePtr<TexUnpackType> operator()(WebGLTexPboOffset& aPbo) {
+    UniquePtr<webgl::TexUnpackBytes> bytes = mContext->ToTexUnpackBytes(aPbo);
+    return operator()(bytes);
+  }
   WebGLContext* mContext;
 };
 
@@ -657,6 +661,10 @@ template <typename TexUnpackType>
 UniquePtr<TexUnpackType> AsTexUnpackType(WebGLContext* aContext,
                                          MaybeWebGLTexUnpackVariant&& src) {
   if (!src) {
+    return nullptr;
+  }
+  if ((!src.ref().is<WebGLTexPboOffset>()) &&
+      (!aContext->ValidateNullPixelUnpackBuffer())) {
     return nullptr;
   }
 

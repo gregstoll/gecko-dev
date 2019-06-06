@@ -100,20 +100,18 @@ class TexUnpackBlob {
 
 class TexUnpackBytes final : public TexUnpackBlob {
  public:
-  bool mIsClientData;
-  const uint8_t* mPtr;
-  size_t mAvailBytes;
+  RawBuffer<const uint8_t> mPtr;
 
   TexUnpackBytes(const WebGLPixelStore& pixelStore, TexImageTarget target,
                  uint32_t width, uint32_t height, uint32_t depth,
                  bool isClientData, const uint8_t* ptr, size_t availBytes);
 
   // For IPC
-  TexUnpackBytes() : mIsClientData(true), mPtr(nullptr), mAvailBytes(0) {}
+  TexUnpackBytes() {}
 
   TexUnpackBytes* AsTexUnpackBytes() override { return this; }
 
-  virtual bool HasData() const override { return !mIsClientData || bool(mPtr); }
+  virtual bool HasData() const override { return mPtr && mPtr.Data(); }
 
   virtual bool Validate(WebGLContext* webgl,
                         const webgl::PackingInfo& pi) override;
@@ -123,11 +121,6 @@ class TexUnpackBytes final : public TexUnpackBlob {
                              GLint xOffset, GLint yOffset, GLint zOffset,
                              const webgl::PackingInfo& pi,
                              GLenum* const out_error) const override;
-
-  static mozilla::ipc::PcqStatus Read(mozilla::ipc::ConsumerView& aView,
-                                      webgl::TexUnpackBytes* aTexBytes);
-  mozilla::ipc::PcqStatus Write(mozilla::ipc::ProducerView& aView);
-  size_t Size() const;
 };
 
 class TexUnpackImage final : public TexUnpackBlob {
@@ -151,17 +144,23 @@ class TexUnpackImage final : public TexUnpackBlob {
                              GLenum* const out_error) const override;
 };
 
+// If constructed from a surface, the surface is mapped as long as this object
+// exists.
 class TexUnpackSurface final : public TexUnpackBlob {
  public:
-  RefPtr<gfx::DataSourceSurface> mSurf;
+  gfx::IntSize mSize;
+  gfx::SurfaceFormat mFormat;
+  RawBuffer<> mData;
+  int32_t mStride;
+  // Map may be null in host process because memory is mapped in the client
+  UniquePtr<gfx::DataSourceSurface::ScopedMap> mMap;
 
-  TexUnpackSurface(const ClientWebGLContext* webgl, TexImageTarget target,
+  TexUnpackSurface(const WebGLPixelStore& pixelStore, TexImageTarget target,
                    uint32_t width, uint32_t height, uint32_t depth,
                    gfx::DataSourceSurface* surf, gfxAlphaType srcAlphaType);
 
-  TexUnpackSurface(const WebGLContext* webgl, TexImageTarget target,
-                   uint32_t width, uint32_t height, uint32_t depth,
-                   gfx::DataSourceSurface* surf, gfxAlphaType srcAlphaType);
+  // For PcqParamTraits
+  TexUnpackSurface() : mStride(0), mMap(nullptr) {}
 
   virtual bool Validate(WebGLContext* webgl,
                         const webgl::PackingInfo& pi) override;
@@ -171,9 +170,6 @@ class TexUnpackSurface final : public TexUnpackBlob {
                              GLint xOffset, GLint yOffset, GLint zOffset,
                              const webgl::PackingInfo& dstPI,
                              GLenum* const out_error) const override;
-
-  mozilla::ipc::PcqStatus Write(mozilla::ipc::ProducerView& aView);
-  size_t Size() const;
 };
 
 }  // namespace webgl

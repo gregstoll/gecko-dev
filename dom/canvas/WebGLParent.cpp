@@ -76,8 +76,7 @@ bool WebGLParent::RunCommandQueue() {
     return true;
   }
 
-  static const uint32_t MaxWebGLCommandTimeSliceMs =
-      1000 / 30;  // 33ms or about 30fps
+  static const uint32_t MaxWebGLCommandTimeSliceMs = 1;  // 1ms is alot
   TimeDuration timeSlice =
       TimeDuration::FromMilliseconds(MaxWebGLCommandTimeSliceMs);
   CommandResult result = mHost->RunCommandsForDuration(timeSlice);

@@ -1207,7 +1207,8 @@ PcqStatus ConsumerView::ReadVariant(size_t aBufferSize, Matcher&& aMatcher) {
     RefPtr<SharedMemoryBasic> sharedMem = MakeRefPtr<SharedMemoryBasic>();
     if (!sharedMem->IsHandleValid(handle) ||
         !sharedMem->SetHandle(handle,
-                              mozilla::ipc::SharedMemory::RightsReadWrite)) {
+                              mozilla::ipc::SharedMemory::RightsReadWrite) ||
+        !sharedMem->Map(aBufferSize)) {
       return PcqStatus::PcqFatalError;
     }
     return aMatcher(sharedMem);
@@ -1842,11 +1843,55 @@ struct PcqParamTraits<Maybe<ElementType>> {
     }
     if (isSome) {
       if (aArg) {
-        aArg->mIsSome = true;
+        aArg->emplace();
         status =
-            aConsumerView.ReadParam(static_cast<ElementType*>(aArg->data()));
+            aConsumerView.ReadParam(static_cast<ElementType*>(aArg->ptr()));
       } else {
         status = aConsumerView.ReadParam<ElementType>(nullptr);
+      }
+    } else if (aArg) {
+      aArg->reset();
+    }
+    return status;
+  }
+
+  template <typename View>
+  static size_t MinSize(View& aView, const ParamType* aArg) {
+    return aView.template MinSizeParam<bool>(nullptr) +
+           ((aArg && aArg->isSome()) ? aView.MinSizeParam(&aArg->ref()) : 0);
+  }
+};
+
+// ---------------------------------------------------------------
+
+// Maybe<Variant> needs special behavior since Variant is not default
+// constructable.  The Variant's first type must be default constructible.
+template <typename T, typename... Ts>
+struct PcqParamTraits<Maybe<Variant<T, Ts...>>> {
+  using ParamType = Maybe<Variant<T, Ts...>>;
+
+  static PcqStatus Write(ProducerView& aProducerView, const ParamType& aArg) {
+    PcqStatus status = aProducerView.WriteParam(aArg.mIsSome);
+    if (aArg.mIsSome) {
+      status =
+          IsSuccess(status) ? aProducerView.WriteParam(aArg.ref()) : status;
+    }
+    return status;
+  }
+
+  static PcqStatus Read(ConsumerView& aConsumerView, ParamType* aArg) {
+    bool isSome;
+    PcqStatus status = aConsumerView.ReadParam(&isSome);
+    if (!IsSuccess(status)) {
+      return status;
+    }
+    if (isSome) {
+      if (aArg) {
+        aArg->emplace(VariantType<T>());
+        status = aConsumerView.ReadParam(
+            static_cast<Variant<T, Ts...>*>(aArg->ptr()));
+      } else {
+        status = aConsumerView.ReadParam<Variant<T, Ts...>>(nullptr);
       }
     } else if (aArg) {
       aArg->reset();
@@ -1894,7 +1939,7 @@ struct PcqParamTraits<UniquePtr<T>> {
 
   static PcqStatus Write(ProducerView& aProducerView, const ParamType& aArg) {
     // TODO: Clean up move with PCQ
-    PcqStatus status = aProducerView.WriteParam(static_cast<bool>(aArg));
+    PcqStatus status = aProducerView.WriteParam(!static_cast<bool>(aArg));
     status = (aArg && IsSuccess(status)) ? aProducerView.WriteParam(*aArg.get())
                                          : status;
     if (aArg && IsSuccess(status)) {

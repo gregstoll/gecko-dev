@@ -106,7 +106,7 @@ static bool ValidateUnpackInfo(WebGLContext* webgl,
 
 ////////////////////////////////////////////////////////////////////////////////
 
-UniquePtr<webgl::TexUnpackBlob> WebGLContext::TexUnpackBytesFromTexImageData(
+UniquePtr<webgl::TexUnpackBlob> WebGLContext::ToTexUnpackBytes(
     const WebGLTexImageData& imageData) {
   MOZ_ASSERT_UNREACHABLE("TODO: Texure Upload Image fast path");
   return nullptr;
@@ -118,10 +118,9 @@ UniquePtr<webgl::TexUnpackBlob> WebGLContext::TexUnpackBytesFromTexImageData(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-UniquePtr<webgl::TexUnpackBlob> WebGLContext::TexUnpackBytesFromTexPboOffset(
-    TexImageTarget target, uint32_t width, uint32_t height, uint32_t depth,
-    WebGLsizeiptr pboOffset, const Maybe<GLsizei>& expectedImageSize) {
-  if (pboOffset < 0) {
+UniquePtr<webgl::TexUnpackBytes> WebGLContext::ToTexUnpackBytes(
+    WebGLTexPboOffset& aPbo) {
+  if (aPbo.mPboOffset < 0) {
     ErrorInvalidValue("offset cannot be negative.");
     return nullptr;
   }
@@ -130,30 +129,30 @@ UniquePtr<webgl::TexUnpackBlob> WebGLContext::TexUnpackBytesFromTexPboOffset(
   if (!buffer) return nullptr;
 
   size_t availBufferBytes = buffer->ByteLength();
-  if (size_t(pboOffset) > availBufferBytes) {
+  if (size_t(aPbo.mPboOffset) > availBufferBytes) {
     ErrorInvalidOperation("Offset is passed end of buffer.");
     return nullptr;
   }
-  availBufferBytes -= pboOffset;
-  if (expectedImageSize.isSome()) {
-    if (expectedImageSize.ref() < 0) {
+  availBufferBytes -= aPbo.mPboOffset;
+  if (aPbo.mHasExpectedImageSize) {
+    if (aPbo.mExpectedImageSize < 0) {
       ErrorInvalidValue("ImageSize can't be less than 0.");
       return nullptr;
     }
-    if (size_t(expectedImageSize.ref()) != availBufferBytes) {
+    if (size_t(aPbo.mExpectedImageSize) != availBufferBytes) {
       ErrorInvalidOperation(
           "ImageSize doesn't match the required upload byte size.");
       return nullptr;
     }
-    availBufferBytes = size_t(expectedImageSize.ref());
+    availBufferBytes = size_t(aPbo.mExpectedImageSize);
   }
 
   const bool isClientData = false;
-  const auto ptr = (const uint8_t*)pboOffset;
+  const auto ptr = (const uint8_t*)aPbo.mPboOffset;
   UniquePtr<webgl::TexUnpackBytes> texUnpackBlob =
-      MakeUnique<webgl::TexUnpackBytes>(GetPixelStore(), target, width, height,
-                                        depth, isClientData, ptr,
-                                        availBufferBytes);
+      MakeUnique<webgl::TexUnpackBytes>(GetPixelStore(), aPbo.mTarget,
+                                        aPbo.mWidth, aPbo.mHeight, aPbo.mDepth,
+                                        isClientData, ptr, availBufferBytes);
   return texUnpackBlob;
 }
 
@@ -194,16 +193,13 @@ static MaybeWebGLTexUnpackVariant ClientFromPboOffset(
   GLsizei imgSize = expectedImageSize ? expectedImageSize.ref()
                                       : std::numeric_limits<int>::min();
 
-  // TODO:
-  //  return AsSomeVariant(
-  //      WebGLTexPboOffset{target, width, height, depth, pboOffset,
-  //                        static_cast<bool>(expectedImageSize), imgSize});
-  Unused << imgSize;
-  return Nothing();
+  return AsSomeVariant(
+      WebGLTexPboOffset{target, width, height, depth, pboOffset,
+                        static_cast<bool>(expectedImageSize), imgSize});
 }
 
 static MaybeWebGLTexUnpackVariant ClientFromImageBitmap(
-    ClientWebGLContext* webgl, TexImageTarget target, uint32_t width,
+    const WebGLPixelStore& pixelStore, TexImageTarget target, uint32_t width,
     uint32_t height, uint32_t depth, const dom::ImageBitmap& imageBitmap,
     ErrorResult* aRv) {
   if (imageBitmap.IsWriteOnly()) {
@@ -229,10 +225,10 @@ static MaybeWebGLTexUnpackVariant ClientFromImageBitmap(
   // WhatWG "HTML Living Standard" (30 October 2015):
   // "The getImageData(sx, sy, sw, sh) method [...] Pixels must be returned as
   // non-premultiplied alpha values."
-  UniquePtr<webgl::TexUnpackSurface> texUnpackBlob =
-      MakeUnique<webgl::TexUnpackSurface>(webgl, target, width, height, depth,
-                                          surf, cloneData->mAlphaType);
-  return AsSomeVariant(std::move(texUnpackBlob));
+  UniquePtr<webgl::TexUnpackSurface> texUnpackSurf =
+      MakeUnique<webgl::TexUnpackSurface>(pixelStore, target, width, height,
+                                          depth, surf, cloneData->mAlphaType);
+  return AsSomeVariant(std::move(texUnpackSurf));
 }
 
 static MaybeWebGLTexUnpackVariant ClientFromImageData(
@@ -280,8 +276,8 @@ static MaybeWebGLTexUnpackVariant ClientFromImageData(
   ////
 
   UniquePtr<webgl::TexUnpackSurface> texUnpackBlob =
-      MakeUnique<webgl::TexUnpackSurface>(webgl, target, width, height, depth,
-                                          surf, alphaType);
+      MakeUnique<webgl::TexUnpackSurface>(webgl->GetPixelStore(), target, width,
+                                          height, depth, surf, alphaType);
   return AsSomeVariant(std::move(texUnpackBlob));
 }
 
@@ -401,10 +397,15 @@ MaybeWebGLTexUnpackVariant ClientWebGLContext::ClientFromDomElem(
   }
 
   MOZ_ASSERT(dataSurf);
-  UniquePtr<webgl::TexUnpackSurface> texUnpackBlob =
-      MakeUnique<webgl::TexUnpackSurface>(this, target, width, height, depth,
-                                          dataSurf, sfer.mAlphaType);
-  return AsSomeVariant(std::move(texUnpackBlob));
+  UniquePtr<webgl::TexUnpackSurface> texUnpackSurf =
+      MakeUnique<webgl::TexUnpackSurface>(GetPixelStore(), target, width,
+                                          height, depth, dataSurf,
+                                          sfer.mAlphaType);
+  if ((!texUnpackSurf) || (!texUnpackSurf->mData)) {
+    EnqueueErrorOutOfMemory("Failed to map source surface for upload.");
+    return Nothing();
+  }
+  return AsSomeVariant(std::move(texUnpackSurf));
 }
 
 ////////////////////////////////////////
@@ -1315,7 +1316,7 @@ void WebGLTexture::CompressedTexImage(TexImageTarget target, GLint level,
   // Get source info
 
   if (!ValidateCompressedTexUnpack(mContext, blob->mWidth, blob->mHeight,
-                                   blob->mDepth, format, blob->mAvailBytes)) {
+                                   blob->mDepth, format, blob->mPtr.Length())) {
     return;
   }
 
@@ -1337,7 +1338,7 @@ void WebGLTexture::CompressedTexImage(TexImageTarget target, GLint level,
   // Warning: Possibly shared memory.  See bug 1225033.
   const auto error = DoCompressedTexImage(
       mContext->gl, target, level, internalFormat, blob->mWidth, blob->mHeight,
-      blob->mDepth, blob->mAvailBytes, blob->mPtr);
+      blob->mDepth, blob->mPtr.Length(), blob->mPtr.Data());
   mContext->OnDataAllocCall();
   if (error == LOCAL_GL_OUT_OF_MEMORY) {
     mContext->ErrorOutOfMemory("Ran out of memory during upload.");
@@ -1348,7 +1349,7 @@ void WebGLTexture::CompressedTexImage(TexImageTarget target, GLint level,
     const nsPrintfCString call(
         "DoCompressedTexImage(0x%04x, %i, 0x%04x, %u,%u,%u, %u) -> 0x%04x",
         target.get(), level, internalFormat, blob->mWidth, blob->mHeight,
-        blob->mDepth, uint32_t(blob->mAvailBytes), error);
+        blob->mDepth, uint32_t(blob->mPtr.Length()), error);
     gfxCriticalError() << "Unexpected error from driver: "
                        << call.BeginReading();
     return;
@@ -1421,7 +1422,7 @@ void WebGLTexture::CompressedTexSubImage(
   auto format = srcUsage->format;
   MOZ_ASSERT(format == dstFormat);
   if (!ValidateCompressedTexUnpack(mContext, blob->mWidth, blob->mHeight,
-                                   blob->mDepth, format, blob->mAvailBytes)) {
+                                   blob->mDepth, format, blob->mPtr.Length())) {
     return;
   }
 
@@ -1478,8 +1479,8 @@ void WebGLTexture::CompressedTexSubImage(
   // Warning: Possibly shared memory.  See bug 1225033.
   const auto error = DoCompressedTexSubImage(
       mContext->gl, target, level, xOffset, yOffset, zOffset, blob->mWidth,
-      blob->mHeight, blob->mDepth, sizedUnpackFormat, blob->mAvailBytes,
-      blob->mPtr);
+      blob->mHeight, blob->mDepth, sizedUnpackFormat, blob->mPtr.Length(),
+      blob->mPtr.Data());
   if (error == LOCAL_GL_OUT_OF_MEMORY) {
     mContext->ErrorOutOfMemory("Ran out of memory during upload.");
     return;
@@ -1491,7 +1492,7 @@ void WebGLTexture::CompressedTexSubImage(
         "-> 0x%04x",
         target.get(), level, xOffset, yOffset, zOffset, blob->mWidth,
         blob->mHeight, blob->mDepth, sizedUnpackFormat,
-        uint32_t(blob->mAvailBytes), error);
+        uint32_t(blob->mPtr.Length()), error);
     gfxCriticalError() << "Unexpected error from driver: "
                        << call.BeginReading();
     return;
@@ -2092,8 +2093,8 @@ MaybeWebGLTexUnpackVariant ClientWebGLContext::From(
   }
 
   if (src.mImageBitmap) {
-    return ClientFromImageBitmap(this, target, width, height, depth,
-                                 *(src.mImageBitmap), src.mOut_error);
+    return ClientFromImageBitmap(this->GetPixelStore(), target, width, height,
+                                 depth, *(src.mImageBitmap), src.mOut_error);
   }
 
   if (src.mImageData) {

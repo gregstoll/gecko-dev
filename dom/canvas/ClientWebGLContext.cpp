@@ -154,7 +154,7 @@ ClientWebGLContext::MakeCrossProcessWebGLContext(WebGLVersion aVersion) {
 /* static */ RefPtr<ClientWebGLContext> ClientWebGLContext::Create(
     WebGLVersion aVersion) {
   bool shouldRemoteWebGL = gfxPrefs::WebGLIsRemoted();
-  bool isHostProcess = XRE_IsGPUProcess() || XRE_IsParentProcess();
+  DebugOnly<bool> isHostProcess = XRE_IsGPUProcess() || XRE_IsParentProcess();
   MOZ_ASSERT(!isHostProcess);
 
   if (shouldRemoteWebGL) {
@@ -742,6 +742,8 @@ ClientWebGLContext::SetContextOptions(JSContext* cx,
   newOpts.failIfMajorPerformanceCaveat =
       attributes.mFailIfMajorPerformanceCaveat;
   newOpts.powerPreference = attributes.mPowerPreference;
+  newOpts.enableDebugRendererInfo =
+      Preferences::GetBool("webgl.enable-debug-renderer-info", false);
   MOZ_ASSERT(mCanvasElement || mOffscreenCanvas);
   newOpts.shouldResistFingerprinting =
       mCanvasElement ?

@@ -49,6 +49,9 @@ template <>
 struct IsTriviallySerializable<gfx::IntSize> : TrueType {};
 
 template <>
+struct IsTriviallySerializable<webgl::TexUnpackBlob> : TrueType {};
+
+template <>
 struct PcqParamTraits<ExtensionSets> {
   using ParamType = ExtensionSets;
 
@@ -189,6 +192,76 @@ struct PcqParamTraits<RawBuffer<T>> {
   }
 };
 
+enum TexUnpackTypes : uint8_t { Bytes, Surface, Image, Pbo };
+
+template <>
+struct PcqParamTraits<webgl::TexUnpackBytes> {
+  using ParamType = webgl::TexUnpackBytes;
+
+  static PcqStatus Write(ProducerView& aProducerView, const ParamType& aArg) {
+    // Write TexUnpackBlob base class, then the RawBuffer.
+    PcqStatus status = aProducerView.WriteParam(
+        static_cast<const webgl::TexUnpackBlob&>(aArg));
+    return IsSuccess(status) ? aProducerView.WriteParam(aArg.mPtr) : status;
+  }
+
+  static PcqStatus Read(ConsumerView& aConsumerView, ParamType* aArg) {
+    // Read TexUnpackBlob base class, then the RawBuffer.
+    PcqStatus status =
+        aConsumerView.ReadParam(static_cast<webgl::TexUnpackBlob*>(aArg));
+    return IsSuccess(status)
+               ? aConsumerView.ReadParam(aArg ? &aArg->mPtr : nullptr)
+               : status;
+  }
+
+  template <typename View>
+  static size_t MinSize(View& aView, const ParamType* aArg) {
+    return aView.MinSizeParam(static_cast<const webgl::TexUnpackBlob*>(aArg)) +
+           aView.MinSizeParam(aArg ? &aArg->mPtr : nullptr);
+  }
+};
+
+template <>
+struct PcqParamTraits<webgl::TexUnpackSurface> {
+  using ParamType = webgl::TexUnpackSurface;
+
+  static PcqStatus Write(ProducerView& aProducerView, const ParamType& aArg) {
+    PcqStatus status = aProducerView.WriteParam(
+        static_cast<const webgl::TexUnpackBlob&>(aArg));
+    status = IsSuccess(status) ? aProducerView.WriteParam(aArg.mSize) : status;
+    status =
+        IsSuccess(status) ? aProducerView.WriteParam(aArg.mFormat) : status;
+    status = IsSuccess(status) ? aProducerView.WriteParam(aArg.mData) : status;
+    return IsSuccess(status) ? aProducerView.WriteParam(aArg.mStride) : status;
+  }
+
+  static PcqStatus Read(ConsumerView& aConsumerView, ParamType* aArg) {
+    PcqStatus status =
+        aConsumerView.ReadParam(static_cast<webgl::TexUnpackBlob*>(aArg));
+    status = IsSuccess(status)
+                 ? aConsumerView.ReadParam(aArg ? &aArg->mSize : nullptr)
+                 : status;
+    status = IsSuccess(status)
+                 ? aConsumerView.ReadParam(aArg ? &aArg->mFormat : nullptr)
+                 : status;
+    status = IsSuccess(status)
+                 ? aConsumerView.ReadParam(aArg ? &aArg->mData : nullptr)
+                 : status;
+    return IsSuccess(status)
+               ? aConsumerView.ReadParam(aArg ? &aArg->mStride : nullptr)
+               : status;
+  }
+
+  template <typename View>
+  static size_t MinSize(View& aView, const ParamType* aArg) {
+    return aView.MinSizeParam(static_cast<const webgl::TexUnpackBlob*>(aArg)) +
+           aView.MinSizeParam(aArg ? &aArg->mSize : nullptr) +
+           aView.MinSizeParam(aArg ? &aArg->mFormat : nullptr) +
+           aView.MinSizeParam(aArg ? &aArg->mData : nullptr) +
+           aView.MinSizeParam(aArg ? &aArg->mStride : nullptr);
+  }
+};
+
 // Specialization of PcqParamTraits that adapts the TexUnpack type in order to
 // efficiently convert types.  For example, a TexUnpackSurface may deserialize
 // as a TexUnpackBytes.
@@ -197,19 +270,85 @@ struct PcqParamTraits<WebGLTexUnpackVariant> {
   using ParamType = WebGLTexUnpackVariant;
 
   static PcqStatus Write(ProducerView& aProducerView, const ParamType& aArg) {
-    MOZ_ASSERT_UNREACHABLE("TODO:");
-    return PcqStatus::PcqFatalError;
+    struct TexUnpackWriteMatcher {
+      PcqStatus operator()(const UniquePtr<webgl::TexUnpackBytes>& x) {
+        PcqStatus status = mProducerView.WriteParam(TexUnpackTypes::Bytes);
+        return IsSuccess(status) ? mProducerView.WriteParam(x) : status;
+      }
+      PcqStatus operator()(const UniquePtr<webgl::TexUnpackSurface>& x) {
+        PcqStatus status = mProducerView.WriteParam(TexUnpackTypes::Surface);
+        return IsSuccess(status) ? mProducerView.WriteParam(x) : status;
+      }
+      PcqStatus operator()(const UniquePtr<webgl::TexUnpackImage>& x) {
+        MOZ_ASSERT_UNREACHABLE("TODO:");
+        return PcqStatus::PcqFatalError;
+      }
+      PcqStatus operator()(const WebGLTexPboOffset& x) {
+        PcqStatus status = mProducerView.WriteParam(TexUnpackTypes::Pbo);
+        return IsSuccess(status) ? mProducerView.WriteParam(x) : status;
+      }
+      ProducerView& mProducerView;
+    };
+    return aArg.match(TexUnpackWriteMatcher{aProducerView});
   }
 
   static PcqStatus Read(ConsumerView& aConsumerView, ParamType* aArg) {
-    MOZ_ASSERT_UNREACHABLE("TODO:");
+    if (!aArg) {
+      // Not a great estimate but we can't do much better.
+      return aConsumerView.template ReadParam<TexUnpackTypes>();
+    }
+    TexUnpackTypes unpackType;
+    PcqStatus status = aConsumerView.ReadParam(&unpackType);
+    if (!IsSuccess(status)) {
+      return status;
+    }
+    switch (unpackType) {
+      case TexUnpackTypes::Bytes:
+        *aArg = AsVariant(UniquePtr<webgl::TexUnpackBytes>());
+        status = aConsumerView.ReadParam(
+            &aArg->as<UniquePtr<webgl::TexUnpackBytes>>());
+        return status;
+      case TexUnpackTypes::Surface:
+        *aArg = AsVariant(UniquePtr<webgl::TexUnpackSurface>());
+        status = aConsumerView.ReadParam(
+            &aArg->as<UniquePtr<webgl::TexUnpackSurface>>());
+        return status;
+      case TexUnpackTypes::Image:
+        MOZ_ASSERT_UNREACHABLE("TODO:");
+        return PcqStatus::PcqFatalError;
+      case TexUnpackTypes::Pbo:
+        *aArg = AsVariant(WebGLTexPboOffset());
+        status = aConsumerView.ReadParam(&aArg->as<WebGLTexPboOffset>());
+        return status;
+    }
+    MOZ_ASSERT_UNREACHABLE("Illegal texture unpack type");
     return PcqStatus::PcqFatalError;
   }
 
   template <typename View>
   static size_t MinSize(View& aView, const ParamType* aArg) {
-    MOZ_ASSERT_UNREACHABLE("TODO:");
-    return 0;
+    size_t ret = aView.template MinSizeParam<TexUnpackTypes>();
+    if (!aArg) {
+      return ret;
+    }
+
+    struct TexUnpackMinSizeMatcher {
+      size_t operator()(const UniquePtr<webgl::TexUnpackBytes>& x) {
+        return mView.MinSizeParam(&x);
+      }
+      size_t operator()(const UniquePtr<webgl::TexUnpackSurface>& x) {
+        return mView.MinSizeParam(&x);
+      }
+      size_t operator()(const UniquePtr<webgl::TexUnpackImage>& x) {
+        MOZ_ASSERT_UNREACHABLE("TODO:");
+        return 0;
+      }
+      size_t operator()(const WebGLTexPboOffset& x) {
+        return mView.MinSizeParam(&x);
+      }
+      View& mView;
+    };
+    return ret + aArg->match(TexUnpackMinSizeMatcher{aView});
   }
 };
 
