@@ -6,6 +6,7 @@
 #ifndef WEBGL_CONTEXT_LOSS_HANDLER_H_
 #define WEBGL_CONTEXT_LOSS_HANDLER_H_
 
+#include "mozilla/Atomics.h"
 #include "mozilla/WeakPtr.h"
 #include "mozilla/RefPtr.h"
 #include "nsThreadUtils.h"
@@ -16,6 +17,7 @@ class WebGLContext;
 class WebGLContextLossHandler final
     : public SupportsWeakPtr<WebGLContextLossHandler> {
   RefPtr<Runnable> mRunnable;
+  Atomic<bool> mTimerIsScheduled;
 
  public:
   MOZ_DECLARE_WEAKREFERENCE_TYPENAME(WebGLContextLossHandler)
@@ -24,6 +26,8 @@ class WebGLContextLossHandler final
   ~WebGLContextLossHandler();
 
   void RunTimer();
+  // Allow future queueing of context loss timer.
+  void ClearTimer();
 };
 
 }  // namespace mozilla

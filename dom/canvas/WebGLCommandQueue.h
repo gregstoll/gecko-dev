@@ -652,7 +652,8 @@ struct CommandDispatchDriver {
    * Find and run the command.
    */
   template <size_t commandId, typename... Args>
-  static bool DispatchCommandHelper(size_t aId, Args&... aArgs) {
+  static MOZ_ALWAYS_INLINE bool DispatchCommandHelper(size_t aId,
+                                                      Args&... aArgs) {
     if (commandId == aId) {
       return Derived::template Dispatch<commandId>(aArgs...);
     }
@@ -675,7 +676,7 @@ struct FunctionDispatcher {
   template <>
   struct DispatchFunction<CommandSyncType::ASYNC> {
     template <typename FunctionType>
-    static bool Run(SinkType& aSink, FunctionType function) {
+    static MOZ_ALWAYS_INLINE bool Run(SinkType& aSink, FunctionType function) {
       return aSink.DispatchAsyncFunction(function);
     }
   };
@@ -684,7 +685,7 @@ struct FunctionDispatcher {
   template <>
   struct DispatchFunction<CommandSyncType::SYNC> {
     template <typename FunctionType>
-    static bool Run(SinkType& aSink, FunctionType function) {
+    static MOZ_ALWAYS_INLINE bool Run(SinkType& aSink, FunctionType function) {
       return aSink.DispatchSyncFunction(function);
     }
   };
@@ -705,7 +706,8 @@ struct MethodDispatcher {
   template <>
   struct DispatchMethod<CommandSyncType::ASYNC> {
     template <typename MethodType, typename ObjectType>
-    static bool Run(SinkType& aSink, MethodType mMethod, ObjectType& aObj) {
+    static MOZ_ALWAYS_INLINE bool Run(SinkType& aSink, MethodType mMethod,
+                                      ObjectType& aObj) {
       return aSink.DispatchAsyncMethod(aObj, mMethod);
     }
   };
@@ -714,7 +716,8 @@ struct MethodDispatcher {
   template <>
   struct DispatchMethod<CommandSyncType::SYNC> {
     template <typename MethodType, typename ObjectType>
-    static bool Run(SinkType& aSink, MethodType aMethod, ObjectType& aObj) {
+    static MOZ_ALWAYS_INLINE bool Run(SinkType& aSink, MethodType aMethod,
+                                      ObjectType& aObj) {
       return aSink.DispatchSyncMethod(aObj, aMethod);
     }
   };
@@ -724,12 +727,12 @@ struct MethodDispatcher {
 #define DECLARE_FUNCTION_DISPATCHER(_DISPATCHER, _SINKTYPE)                \
   struct _DISPATCHER : public FunctionDispatcher<_DISPATCHER, _SINKTYPE> { \
     template <size_t commandId = 0>                                        \
-    static bool DispatchCommand(size_t aId) {                              \
+    static MOZ_ALWAYS_INLINE bool DispatchCommand(size_t aId) {            \
       MOZ_ASSERT_UNREACHABLE("Unhandled command ID");                      \
       return false;                                                        \
     }                                                                      \
     template <size_t commandId>                                            \
-    static bool Dispatch(SinkType& aSink);                                 \
+    static MOZ_ALWAYS_INLINE bool Dispatch(SinkType& aSink);               \
     template <size_t commandId>                                            \
     struct FuncInfo;                                                       \
     template <size_t commandId>                                            \
@@ -740,23 +743,23 @@ struct MethodDispatcher {
 
 // Declares a MethodDispatcher with the given name and CommandSink type.
 // The ObjectType is the type of the object this class will dispatch methods to.
-#define DECLARE_METHOD_DISPATCHER(_DISPATCHER, _SINKTYPE, _OBJECTTYPE)   \
-  struct _DISPATCHER : public MethodDispatcher<_DISPATCHER, _SINKTYPE> { \
-    using ObjectType = _OBJECTTYPE;                                      \
-    template <size_t commandId = 0>                                      \
-    static bool DispatchCommand(size_t aId, SinkType& aSink,             \
-                                ObjectType& aObj) {                      \
-      MOZ_ASSERT_UNREACHABLE("Unhandled command ID");                    \
-      return false;                                                      \
-    }                                                                    \
-    template <size_t commandId>                                          \
-    static bool Dispatch(SinkType& aSink, ObjectType& aObj);             \
-    template <size_t commandId>                                          \
-    struct MethodInfo;                                                   \
-    template <size_t commandId>                                          \
-    static constexpr CommandSyncType SyncType();                         \
-    template <typename MethodType, MethodType method>                    \
-    static constexpr size_t Id();                                        \
+#define DECLARE_METHOD_DISPATCHER(_DISPATCHER, _SINKTYPE, _OBJECTTYPE)         \
+  struct _DISPATCHER : public MethodDispatcher<_DISPATCHER, _SINKTYPE> {       \
+    using ObjectType = _OBJECTTYPE;                                            \
+    template <size_t commandId = 0>                                            \
+    static MOZ_ALWAYS_INLINE bool DispatchCommand(size_t aId, SinkType& aSink, \
+                                                  ObjectType& aObj) {          \
+      MOZ_ASSERT_UNREACHABLE("Unhandled command ID");                          \
+      return false;                                                            \
+    }                                                                          \
+    template <size_t commandId>                                                \
+    static MOZ_ALWAYS_INLINE bool Dispatch(SinkType& aSink, ObjectType& aObj); \
+    template <size_t commandId>                                                \
+    struct MethodInfo;                                                         \
+    template <size_t commandId>                                                \
+    static constexpr CommandSyncType SyncType();                               \
+    template <typename MethodType, MethodType method>                          \
+    static constexpr size_t Id();                                              \
   };
 
 // Defines a handler in the given dispatcher for the command with the given

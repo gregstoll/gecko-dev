@@ -17,7 +17,7 @@ void MaybeUpdateContextLoss(WeakPtr<WebGLContext> weakCxt) {
 }
 
 WebGLContextLossHandler::WebGLContextLossHandler(WebGLContext* webgl)
-{
+    : mTimerIsScheduled(false) {
   MOZ_ASSERT(webgl);
   WeakPtr<WebGLContext> weakCxt = webgl;
   mRunnable = NS_NewRunnableFunction("WebGLContextLossHandler", [weakCxt]() {
@@ -33,7 +33,12 @@ WebGLContextLossHandler::~WebGLContextLossHandler() {}
 void WebGLContextLossHandler::RunTimer() {
   const uint32_t kDelayMS = 1000;
   MOZ_ASSERT(MessageLoop::current());
-  MessageLoop::current()->PostDelayedTask(do_AddRef(mRunnable), kDelayMS);
+  // Only create a new task if one isn't already queued.
+  if (mTimerIsScheduled.compareExchange(false, true)) {
+    MessageLoop::current()->PostDelayedTask(do_AddRef(mRunnable), kDelayMS);
+  }
 }
+
+void WebGLContextLossHandler::ClearTimer() { mTimerIsScheduled = false; }
 
 }  // namespace mozilla

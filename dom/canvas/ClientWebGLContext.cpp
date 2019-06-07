@@ -224,7 +224,7 @@ void ClientWebGLContext::DrainErrorQueue(bool toReissue) {
       NewRunnableFunction("DrainWebGLError", &DrainWebGLError, weakThis);
   if ((!success) ||
       NS_FAILED(NS_DelayedDispatchToCurrentThread(
-          drainErrorRunnable.downcast<nsIRunnable>(), 1 /* ms */))) {
+          drainErrorRunnable.downcast<nsIRunnable>(), 10 /* ms */))) {
     MOZ_ASSERT_UNREACHABLE(
         "DrainErrorQueue failed to reissue.  The "
         "error/warning queue will no longer be drained.");
