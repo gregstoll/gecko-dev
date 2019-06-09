@@ -76,9 +76,14 @@ bool WebGLParent::RunCommandQueue() {
     return true;
   }
 
-  static const uint32_t MaxWebGLCommandTimeSliceMs = 1;  // 1ms is alot
+  // Drain the queue for up to kMaxWebGLCommandTimeSliceMs, then
+  // repeat no sooner than kDrainDelayMs later.
+  // TODO: Tune these.
+  static const uint32_t kMaxWebGLCommandTimeSliceMs = 1;
+  static const uint32_t kDrainDelayMs = 0;
+
   TimeDuration timeSlice =
-      TimeDuration::FromMilliseconds(MaxWebGLCommandTimeSliceMs);
+      TimeDuration::FromMilliseconds(kMaxWebGLCommandTimeSliceMs);
   CommandResult result = mHost->RunCommandsForDuration(timeSlice);
   bool success = (result == CommandResult::Success) ||
                  (result == CommandResult::QueueEmpty);
@@ -93,7 +98,8 @@ bool WebGLParent::RunCommandQueue() {
   // Re-issue the task
   MOZ_ASSERT(mRunCommandsRunnable);
   MOZ_ASSERT(MessageLoop::current());
-  MessageLoop::current()->PostTask(do_AddRef(mRunCommandsRunnable));
+  MessageLoop::current()->PostDelayedTask(do_AddRef(mRunCommandsRunnable),
+                                          kDrainDelayMs);
   return true;
 }
 

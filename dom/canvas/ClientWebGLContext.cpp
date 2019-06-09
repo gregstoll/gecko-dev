@@ -92,8 +92,8 @@ ClientWebGLContext::MakeCrossProcessWebGLContext(WebGLVersion aVersion) {
   // process to the host for execution.  It takes a response queue that is used
   // to return responses to synchronous messages.
   // TODO: Be smarter in choosing these.
-  static const size_t CommandQueueSize = 16 * 1024;  // 16K
-  static const size_t ResponseQueueSize = 1 * 1024;  // 1K
+  static const size_t CommandQueueSize = 256 * 1024;  // 256K
+  static const size_t ResponseQueueSize = 8 * 1024;   // 8K
 
   UniquePtr<ProducerConsumerQueue> commandPcq =
       ProducerConsumerQueue::Create(cbc, CommandQueueSize);

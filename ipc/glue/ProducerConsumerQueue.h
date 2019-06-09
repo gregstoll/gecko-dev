@@ -362,13 +362,13 @@ size_t MinSizeofArgs(View& aView) {
   return aView.MinSizeParam(nullptr);
 }
 
-// Currently, require any parameters expected to need more than 1/8 the total
+// Currently, require any parameters expected to need more than 1/16 the total
 // number of bytes in the command queue to use their own SharedMemory.
 // TODO: Base this heuristic on something.  Also, if I made the PCQ size
 // (aTotal) a template parameter then this could be a compile-time check
 // in nearly all cases.
 bool NeedsSharedMemory(size_t aRequested, size_t aTotal) {
-  return (aTotal / 8) < aRequested;
+  return (aTotal / 16) < aRequested;
 }
 
 /**
@@ -759,39 +759,7 @@ class Producer : public detail::PcqBase {
    */
   template <typename... Args>
   PcqStatus TryWaitInsert(Maybe<TimeDuration> aDuration, Args&&... aArgs) {
-    // Wait up to aDuration for the not-full semaphore to be signaled.
-    // If we run out of time then quit.
-    TimeStamp start(TimeStamp::Now());
-    if (!mMaybeNotFullSem->Wait(aDuration)) {
-      return PcqStatus::PcqNotReady;
-    }
-
-    // Attempt to insert all args.  No waiting is done here.
-    PcqStatus status = TryInsert(std::forward<Args>(aArgs)...);
-
-    TimeStamp now;
-    if (IsSuccess(status)) {
-      // If our local view of the queue is that it is still not full then
-      // we know it won't get full without us (we are the only producer).
-      // So re-set the not-full semaphore unless it's already set.
-      // (We are also the only not-full semaphore decrementer so it can't
-      // become 0.)
-      if ((!IsFull()) && (!mMaybeNotFullSem->IsAvailable())) {
-        mMaybeNotFullSem->Signal();
-      }
-    } else if ((status == PcqStatus::PcqNotReady) &&
-               (aDuration.isNothing() ||
-                ((now = TimeStamp::Now()) - start) < aDuration.value())) {
-      // We don't have enough room but still have time, e.g. because
-      // the consumer read some data but not enough or because the
-      // not-full semaphore gave a false positive.  Either way, retry.
-      status = aDuration.isNothing()
-                   ? TryWaitInsert(aDuration, std::forward<Args>(aArgs)...)
-                   : TryWaitInsert(Some(aDuration.value() - (now - start)),
-                                   std::forward<Args>(aArgs)...);
-    }
-
-    return status;
+    return TryWaitInsertImpl(false, aDuration, std::forward<Args>(aArgs)...);
   }
 
   template <typename... Args>
@@ -815,6 +783,45 @@ class Producer : public detail::PcqBase {
   template <typename Arg>
   PcqStatus TryInsertItem(ProducerView& aView, const Arg& aArg) {
     return PcqParamTraits<typename RemoveCVR<Arg>::Type>::Write(aView, aArg);
+  }
+
+  template <typename... Args>
+  PcqStatus TryWaitInsertImpl(bool aRecursed, Maybe<TimeDuration> aDuration,
+                              Args&&... aArgs) {
+    // Wait up to aDuration for the not-full semaphore to be signaled.
+    // If we run out of time then quit.
+    TimeStamp start(TimeStamp::Now());
+    if (aRecursed && (!mMaybeNotFullSem->Wait(aDuration))) {
+      return PcqStatus::PcqNotReady;
+    }
+
+    // Attempt to insert all args.  No waiting is done here.
+    PcqStatus status = TryInsert(std::forward<Args>(aArgs)...);
+
+    TimeStamp now;
+    if (aRecursed && IsSuccess(status)) {
+      // If our local view of the queue is that it is still not full then
+      // we know it won't get full without us (we are the only producer).
+      // So re-set the not-full semaphore unless it's already set.
+      // (We are also the only not-full semaphore decrementer so it can't
+      // become 0.)
+      if ((!IsFull()) && (!mMaybeNotFullSem->IsAvailable())) {
+        mMaybeNotFullSem->Signal();
+      }
+    } else if ((status == PcqStatus::PcqNotReady) &&
+               (aDuration.isNothing() ||
+                ((now = TimeStamp::Now()) - start) < aDuration.value())) {
+      // We don't have enough room but still have time, e.g. because
+      // the consumer read some data but not enough or because the
+      // not-full semaphore gave a false positive.  Either way, retry.
+      status =
+          aDuration.isNothing()
+              ? TryWaitInsertImpl(true, aDuration, std::forward<Args>(aArgs)...)
+              : TryWaitInsertImpl(true, Some(aDuration.value() - (now - start)),
+                                  std::forward<Args>(aArgs)...);
+    }
+
+    return status;
   }
 
   template <typename Arg>
@@ -1050,11 +1057,20 @@ class Consumer : public detail::PcqBase {
   }
 
   template <bool isRemove, typename... Args>
-  PcqStatus TryWaitPeekOrRemove(Maybe<TimeDuration> aDuration, Args&... aArgs) {
+  PcqStatus TryWaitPeekOrRemove(Maybe<TimeDuration> aDuration,
+                                Args&&... aArgs) {
+    return TryWaitPeekOrRemoveImpl<isRemove>(false, aDuration,
+                                             std::forward<Args>(aArgs)...);
+  }
+
+  template <bool isRemove, typename... Args>
+  PcqStatus TryWaitPeekOrRemoveImpl(bool aRecursed,
+                                    Maybe<TimeDuration> aDuration,
+                                    Args&... aArgs) {
     // Wait up to aDuration for the not-empty semaphore to be signaled.
     // If we run out of time then quit.
     TimeStamp start(TimeStamp::Now());
-    if (!mMaybeNotEmptySem->Wait(aDuration)) {
+    if (aRecursed && (!mMaybeNotEmptySem->Wait(aDuration))) {
       return PcqStatus::PcqNotReady;
     }
 
@@ -1062,7 +1078,7 @@ class Consumer : public detail::PcqBase {
     PcqStatus status = isRemove ? TryRemove(aArgs...) : TryPeek(aArgs...);
 
     TimeStamp now;
-    if (IsSuccess(status)) {
+    if (aRecursed && IsSuccess(status)) {
       // If our local view of the queue is that it is still not empty then
       // we know it won't get empty without us (we are the only consumer).
       // So re-set the not-empty semaphore unless it's already set.
@@ -1077,10 +1093,11 @@ class Consumer : public detail::PcqBase {
       // We don't have enough data but still have time, e.g. because
       // the producer wrote some data but not enough or because the
       // not-empty semaphore gave a false positive.  Either way, retry.
-      status = aDuration.isNothing()
-                   ? TryWaitPeekOrRemove<isRemove>(aDuration, aArgs...)
-                   : TryWaitPeekOrRemove<isRemove>(
-                         Some(aDuration.value() - (now - start)), aArgs...);
+      status =
+          aDuration.isNothing()
+              ? TryWaitPeekOrRemoveImpl<isRemove>(true, aDuration, aArgs...)
+              : TryWaitPeekOrRemoveImpl<isRemove>(
+                    true, Some(aDuration.value() - (now - start)), aArgs...);
     }
 
     return status;
