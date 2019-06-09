@@ -56,16 +56,13 @@ struct PcqParamTraits<ExtensionSets> {
   using ParamType = ExtensionSets;
 
   static PcqStatus Write(ProducerView& aProducerView, const ParamType& aArg) {
-    PcqStatus status = aProducerView.WriteParam(aArg.mNonSystem);
-    return IsSuccess(status) ? aProducerView.WriteParam(aArg.mSystem) : status;
+    aProducerView.WriteParam(aArg.mNonSystem);
+    return aProducerView.WriteParam(aArg.mSystem);
   }
 
   static PcqStatus Read(ConsumerView& aConsumerView, ParamType* aArg) {
-    PcqStatus status =
-        aConsumerView.ReadParam(aArg ? &aArg->mNonSystem : nullptr);
-    return IsSuccess(status)
-               ? aConsumerView.ReadParam(aArg ? &aArg->mSystem : nullptr)
-               : status;
+    aConsumerView.ReadParam(aArg ? &aArg->mNonSystem : nullptr);
+    return aConsumerView.ReadParam(aArg ? &aArg->mSystem : nullptr);
   }
 
   template <typename View>
@@ -80,44 +77,23 @@ struct PcqParamTraits<WebGLActiveInfo> {
   using ParamType = WebGLActiveInfo;
 
   static PcqStatus Write(ProducerView& aProducerView, const ParamType& aArg) {
-    PcqStatus status = aProducerView.WriteParam(aArg.mElemCount);
-    status =
-        IsSuccess(status) ? aProducerView.WriteParam(aArg.mElemType) : status;
-    status = IsSuccess(status) ? aProducerView.WriteParam(aArg.mBaseUserName)
-                               : status;
-    status =
-        IsSuccess(status) ? aProducerView.WriteParam(aArg.mIsArray) : status;
-    status =
-        IsSuccess(status) ? aProducerView.WriteParam(aArg.mElemSize) : status;
-    status = IsSuccess(status) ? aProducerView.WriteParam(aArg.mBaseMappedName)
-                               : status;
-    return IsSuccess(status) ? aProducerView.WriteParam(aArg.mBaseType)
-                             : status;
+    aProducerView.WriteParam(aArg.mElemCount);
+    aProducerView.WriteParam(aArg.mElemType);
+    aProducerView.WriteParam(aArg.mBaseUserName);
+    aProducerView.WriteParam(aArg.mIsArray);
+    aProducerView.WriteParam(aArg.mElemSize);
+    aProducerView.WriteParam(aArg.mBaseMappedName);
+    return aProducerView.WriteParam(aArg.mBaseType);
   }
 
   static PcqStatus Read(ConsumerView& aConsumerView, ParamType* aArg) {
-    PcqStatus status =
-        aConsumerView.ReadParam(aArg ? &aArg->mElemCount : nullptr);
-    status = IsSuccess(status)
-                 ? aConsumerView.ReadParam(aArg ? &aArg->mElemType : nullptr)
-                 : status;
-    status =
-        IsSuccess(status)
-            ? aConsumerView.ReadParam(aArg ? &aArg->mBaseUserName : nullptr)
-            : status;
-    status = IsSuccess(status)
-                 ? aConsumerView.ReadParam(aArg ? &aArg->mIsArray : nullptr)
-                 : status;
-    status = IsSuccess(status)
-                 ? aConsumerView.ReadParam(aArg ? &aArg->mElemSize : nullptr)
-                 : status;
-    status =
-        IsSuccess(status)
-            ? aConsumerView.ReadParam(aArg ? &aArg->mBaseMappedName : nullptr)
-            : status;
-    return IsSuccess(status)
-               ? aConsumerView.ReadParam(aArg ? &aArg->mBaseType : nullptr)
-               : status;
+    aConsumerView.ReadParam(aArg ? &aArg->mElemCount : nullptr);
+    aConsumerView.ReadParam(aArg ? &aArg->mElemType : nullptr);
+    aConsumerView.ReadParam(aArg ? &aArg->mBaseUserName : nullptr);
+    aConsumerView.ReadParam(aArg ? &aArg->mIsArray : nullptr);
+    aConsumerView.ReadParam(aArg ? &aArg->mElemSize : nullptr);
+    aConsumerView.ReadParam(aArg ? &aArg->mBaseMappedName : nullptr);
+    return aConsumerView.ReadParam(aArg ? &aArg->mBaseType : nullptr);
   }
 
   template <typename View>
@@ -137,10 +113,10 @@ struct PcqParamTraits<RawBuffer<T>> {
   using ParamType = RawBuffer<T>;
 
   static PcqStatus Write(ProducerView& aProducerView, const ParamType& aArg) {
-    PcqStatus status = aProducerView.WriteParam(aArg.mLength);
-    return ((aArg.mLength > 0) && IsSuccess(status))
+    aProducerView.WriteParam(aArg.mLength);
+    return (aArg.mLength > 0)
                ? aProducerView.Write(aArg.mData, aArg.mLength * sizeof(T))
-               : status;
+               : aProducerView.Status();
   }
 
   template <typename ElementType =
@@ -148,8 +124,16 @@ struct PcqParamTraits<RawBuffer<T>> {
   static PcqStatus Read(ConsumerView& aConsumerView, ParamType* aArg) {
     size_t len;
     PcqStatus status = aConsumerView.ReadParam(&len);
-    if ((len == 0) || (!IsSuccess(status))) {
+    if (!status) {
       return status;
+    }
+
+    if (len == 0) {
+      if (aArg) {
+        aArg->mLength = 0;
+        aArg->mData = nullptr;
+      }
+      return PcqStatus::Success;
     }
 
     if (!aArg) {
@@ -200,18 +184,14 @@ struct PcqParamTraits<webgl::TexUnpackBytes> {
 
   static PcqStatus Write(ProducerView& aProducerView, const ParamType& aArg) {
     // Write TexUnpackBlob base class, then the RawBuffer.
-    PcqStatus status = aProducerView.WriteParam(
-        static_cast<const webgl::TexUnpackBlob&>(aArg));
-    return IsSuccess(status) ? aProducerView.WriteParam(aArg.mPtr) : status;
+    aProducerView.WriteParam(static_cast<const webgl::TexUnpackBlob&>(aArg));
+    return aProducerView.WriteParam(aArg.mPtr);
   }
 
   static PcqStatus Read(ConsumerView& aConsumerView, ParamType* aArg) {
     // Read TexUnpackBlob base class, then the RawBuffer.
-    PcqStatus status =
-        aConsumerView.ReadParam(static_cast<webgl::TexUnpackBlob*>(aArg));
-    return IsSuccess(status)
-               ? aConsumerView.ReadParam(aArg ? &aArg->mPtr : nullptr)
-               : status;
+    aConsumerView.ReadParam(static_cast<webgl::TexUnpackBlob*>(aArg));
+    return aConsumerView.ReadParam(aArg ? &aArg->mPtr : nullptr);
   }
 
   template <typename View>
@@ -226,30 +206,19 @@ struct PcqParamTraits<webgl::TexUnpackSurface> {
   using ParamType = webgl::TexUnpackSurface;
 
   static PcqStatus Write(ProducerView& aProducerView, const ParamType& aArg) {
-    PcqStatus status = aProducerView.WriteParam(
-        static_cast<const webgl::TexUnpackBlob&>(aArg));
-    status = IsSuccess(status) ? aProducerView.WriteParam(aArg.mSize) : status;
-    status =
-        IsSuccess(status) ? aProducerView.WriteParam(aArg.mFormat) : status;
-    status = IsSuccess(status) ? aProducerView.WriteParam(aArg.mData) : status;
-    return IsSuccess(status) ? aProducerView.WriteParam(aArg.mStride) : status;
+    aProducerView.WriteParam(static_cast<const webgl::TexUnpackBlob&>(aArg));
+    aProducerView.WriteParam(aArg.mSize);
+    aProducerView.WriteParam(aArg.mFormat);
+    aProducerView.WriteParam(aArg.mData);
+    return aProducerView.WriteParam(aArg.mStride);
   }
 
   static PcqStatus Read(ConsumerView& aConsumerView, ParamType* aArg) {
-    PcqStatus status =
-        aConsumerView.ReadParam(static_cast<webgl::TexUnpackBlob*>(aArg));
-    status = IsSuccess(status)
-                 ? aConsumerView.ReadParam(aArg ? &aArg->mSize : nullptr)
-                 : status;
-    status = IsSuccess(status)
-                 ? aConsumerView.ReadParam(aArg ? &aArg->mFormat : nullptr)
-                 : status;
-    status = IsSuccess(status)
-                 ? aConsumerView.ReadParam(aArg ? &aArg->mData : nullptr)
-                 : status;
-    return IsSuccess(status)
-               ? aConsumerView.ReadParam(aArg ? &aArg->mStride : nullptr)
-               : status;
+    aConsumerView.ReadParam(static_cast<webgl::TexUnpackBlob*>(aArg));
+    aConsumerView.ReadParam(aArg ? &aArg->mSize : nullptr);
+    aConsumerView.ReadParam(aArg ? &aArg->mFormat : nullptr);
+    aConsumerView.ReadParam(aArg ? &aArg->mData : nullptr);
+    return aConsumerView.ReadParam(aArg ? &aArg->mStride : nullptr);
   }
 
   template <typename View>
@@ -272,20 +241,20 @@ struct PcqParamTraits<WebGLTexUnpackVariant> {
   static PcqStatus Write(ProducerView& aProducerView, const ParamType& aArg) {
     struct TexUnpackWriteMatcher {
       PcqStatus operator()(const UniquePtr<webgl::TexUnpackBytes>& x) {
-        PcqStatus status = mProducerView.WriteParam(TexUnpackTypes::Bytes);
-        return IsSuccess(status) ? mProducerView.WriteParam(x) : status;
+        mProducerView.WriteParam(TexUnpackTypes::Bytes);
+        return mProducerView.WriteParam(x);
       }
       PcqStatus operator()(const UniquePtr<webgl::TexUnpackSurface>& x) {
-        PcqStatus status = mProducerView.WriteParam(TexUnpackTypes::Surface);
-        return IsSuccess(status) ? mProducerView.WriteParam(x) : status;
+        mProducerView.WriteParam(TexUnpackTypes::Surface);
+        return mProducerView.WriteParam(x);
       }
       PcqStatus operator()(const UniquePtr<webgl::TexUnpackImage>& x) {
         MOZ_ASSERT_UNREACHABLE("TODO:");
         return PcqStatus::PcqFatalError;
       }
       PcqStatus operator()(const WebGLTexPboOffset& x) {
-        PcqStatus status = mProducerView.WriteParam(TexUnpackTypes::Pbo);
-        return IsSuccess(status) ? mProducerView.WriteParam(x) : status;
+        mProducerView.WriteParam(TexUnpackTypes::Pbo);
+        return mProducerView.WriteParam(x);
       }
       ProducerView& mProducerView;
     };
@@ -298,28 +267,24 @@ struct PcqParamTraits<WebGLTexUnpackVariant> {
       return aConsumerView.template ReadParam<TexUnpackTypes>();
     }
     TexUnpackTypes unpackType;
-    PcqStatus status = aConsumerView.ReadParam(&unpackType);
-    if (!IsSuccess(status)) {
-      return status;
+    if (!aConsumerView.ReadParam(&unpackType)) {
+      return aConsumerView.Status();
     }
     switch (unpackType) {
       case TexUnpackTypes::Bytes:
         *aArg = AsVariant(UniquePtr<webgl::TexUnpackBytes>());
-        status = aConsumerView.ReadParam(
+        return aConsumerView.ReadParam(
             &aArg->as<UniquePtr<webgl::TexUnpackBytes>>());
-        return status;
       case TexUnpackTypes::Surface:
         *aArg = AsVariant(UniquePtr<webgl::TexUnpackSurface>());
-        status = aConsumerView.ReadParam(
+        return aConsumerView.ReadParam(
             &aArg->as<UniquePtr<webgl::TexUnpackSurface>>());
-        return status;
       case TexUnpackTypes::Image:
         MOZ_ASSERT_UNREACHABLE("TODO:");
         return PcqStatus::PcqFatalError;
       case TexUnpackTypes::Pbo:
         *aArg = AsVariant(WebGLTexPboOffset());
-        status = aConsumerView.ReadParam(&aArg->as<WebGLTexPboOffset>());
-        return status;
+        return aConsumerView.ReadParam(&aArg->as<WebGLTexPboOffset>());
     }
     MOZ_ASSERT_UNREACHABLE("Illegal texture unpack type");
     return PcqStatus::PcqFatalError;

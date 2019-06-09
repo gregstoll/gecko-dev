@@ -76,24 +76,30 @@ extern LazyLogModule gPCQLog;
 #define PCQ_LOGD(...) PCQ_LOG_(LogLevel::Debug, __VA_ARGS__)
 #define PCQ_LOGE(...) PCQ_LOG_(LogLevel::Error, __VA_ARGS__)
 
-enum class PcqStatus {
-  // Operation was successful
-  Success,
-  // The operation failed because the queue isn't ready for it.
-  // Either the queue is too full for an insert or too empty for a remove.
-  // The operation may succeed if retried.
-  PcqNotReady,
-  // The operation was typed and the type check failed.
-  PcqTypeError,
-  // The operation required more room than the queue supports.
-  // It should not be retried -- it will always fail.
-  PcqTooSmall,
-  // The operation failed for some reason that is unrecoverable.
-  // All values below this value indicate a fata error.
-  PcqFatalError,
-  // Fatal error: Internal processing ran out of memory.  This is likely e.g.
-  // during de-serialization.
-  PcqOOMError,
+struct PcqStatus {
+  enum EStatus {
+    // Operation was successful
+    Success,
+    // The operation failed because the queue isn't ready for it.
+    // Either the queue is too full for an insert or too empty for a remove.
+    // The operation may succeed if retried.
+    PcqNotReady,
+    // The operation was typed and the type check failed.
+    PcqTypeError,
+    // The operation required more room than the queue supports.
+    // It should not be retried -- it will always fail.
+    PcqTooSmall,
+    // The operation failed for some reason that is unrecoverable.
+    // All values below this value indicate a fata error.
+    PcqFatalError,
+    // Fatal error: Internal processing ran out of memory.  This is likely e.g.
+    // during de-serialization.
+    PcqOOMError,
+  } mValue;
+
+  PcqStatus(EStatus status = Success) : mValue(status) {}
+  operator bool() { return mValue == Success; }
+  bool operator==(const EStatus& o) { return mValue == o; }
 };
 
 bool IsSuccess(PcqStatus status) { return status == PcqStatus::Success; }
@@ -173,11 +179,16 @@ struct PcqTypedArg {
 /**
  * Used to give PcqParamTraits a way to write to the Producer without
  * actually altering it, in case the transaction fails.
+ * THis object maintains the error state of the transaction and
+ * discards commands issued after an error is encountered.
  */
 class ProducerView {
  public:
   ProducerView(Producer* aProducer, size_t aRead, size_t* aWrite)
-      : mProducer(aProducer), mRead(aRead), mWrite(aWrite) {}
+      : mProducer(aProducer),
+        mRead(aRead),
+        mWrite(aWrite),
+        mStatus(PcqStatus::Success) {}
 
   /**
    * Write bytes from aBuffer to the producer if there is enough room.
@@ -214,10 +225,13 @@ class ProducerView {
 
   inline size_t MinSizeBytes(size_t aNBytes);
 
+  PcqStatus Status() { return mStatus; }
+
  private:
   Producer* mProducer;
   size_t mRead;
   size_t* mWrite;
+  PcqStatus mStatus;
 };
 
 /**
@@ -227,7 +241,10 @@ class ProducerView {
 class ConsumerView {
  public:
   ConsumerView(Consumer* aConsumer, size_t* aRead, size_t aWrite)
-      : mConsumer(aConsumer), mRead(aRead), mWrite(aWrite) {}
+      : mConsumer(aConsumer),
+        mRead(aRead),
+        mWrite(aWrite),
+        mStatus(PcqStatus::Success) {}
 
   // When reading raw memory blocks, we may get an error, a shared memory
   // object that we take ownership of, or a pointer to a block of
@@ -263,6 +280,7 @@ class ConsumerView {
 
   /**
    * Deserialize aArg using Arg's PcqParamTraits.
+   * If the return value is not Success then aArg is not changed.
    */
   template <typename Arg>
   PcqStatus ReadParam(Arg* aArg = nullptr) {
@@ -272,6 +290,7 @@ class ConsumerView {
 
   /**
    * Deserialize aArg using Arg's PcqParamTraits and PcqTypeInfo.
+   * If the return value is not Success then aArg is not changed.
    */
   template <typename Arg>
   PcqStatus ReadTypedParam(Arg* aArg = nullptr) {
@@ -290,10 +309,13 @@ class ConsumerView {
 
   inline size_t MinSizeBytes(size_t aNBytes);
 
+  PcqStatus Status() { return mStatus; }
+
  private:
   Consumer* mConsumer;
   size_t* mRead;
   size_t mWrite;
+  PcqStatus mStatus;
 };
 
 }  // namespace ipc
@@ -717,7 +739,7 @@ class Producer : public detail::PcqBase {
     // failure but we can expect occasional failure here if the user's
     // PcqParamTraits::MinSize method was inexact.
     PcqStatus status = TryInsertHelper(view, aArgs...);
-    if (!IsSuccess(status)) {
+    if (!status) {
       PCQ_LOGD(
           "Failed to insert with error (%d).  Has: %zu (%zu,%zu).  "
           "Estimate of bytes needed: %zu",
@@ -1013,7 +1035,7 @@ class Consumer : public detail::PcqBase {
     // Only update the queue if the operation was successful and we aren't
     // peeking.
     PcqStatus status = aOperation(view);
-    if (!IsSuccess(status)) {
+    if (!status) {
       return status;
     }
 
@@ -1147,6 +1169,10 @@ class Consumer : public detail::PcqBase {
 
 PcqStatus ProducerView::Write(const void* aBuffer, size_t aBufferSize) {
   MOZ_ASSERT(aBuffer && (aBufferSize > 0));
+  if (!mStatus) {
+    return mStatus;
+  }
+
   if (detail::NeedsSharedMemory(aBufferSize, mProducer->Size())) {
     RefPtr<SharedMemoryBasic> smem = MakeRefPtr<SharedMemoryBasic>();
     if (!smem->Create(aBufferSize) || !smem->Map(aBufferSize)) {
@@ -1200,6 +1226,9 @@ PcqStatus ConsumerView::Read(void* aBuffer, size_t aBufferSize) {
   };
 
   MOZ_ASSERT(aBufferSize > 0);
+  if (!mStatus) {
+    return mStatus;
+  }
 
   return ReadVariant(aBufferSize,
                      PcqReadBytesMatcher{*(this->mConsumer), mRead, mWrite,
@@ -1208,12 +1237,15 @@ PcqStatus ConsumerView::Read(void* aBuffer, size_t aBufferSize) {
 
 template <typename Matcher>
 PcqStatus ConsumerView::ReadVariant(size_t aBufferSize, Matcher&& aMatcher) {
+  if (!mStatus) {
+    return mStatus;
+  }
+
   if (detail::NeedsSharedMemory(aBufferSize, mConsumer->Size())) {
     // Always read shared-memory -- don't just skip.
     SharedMemoryBasic::Handle handle;
-    PcqStatus status = ReadParam(&handle);
-    if (!IsSuccess(status)) {
-      return status;
+    if (!ReadParam(&handle)) {
+      return Status();
     }
 
     // TODO: Find some way to MOZ_RELEASE_ASSERT that buffersize exactly matches
@@ -1461,17 +1493,16 @@ struct PcqParamTraits<PcqTypedArg<Arg>> {
   template <PcqTypeInfoID ArgTypeId = PcqTypeInfo<Arg>::ID>
   static PcqStatus Write(ProducerView& aProducerView, const ParamType& aArg) {
     MOZ_ASSERT(aArg.mWrite);
-    PcqStatus status = aProducerView.WriteParam(ArgTypeId);
-    return IsSuccess(status) ? aProducerView.WriteParam(*aArg.mWrite) : status;
+    aProducerView.WriteParam(ArgTypeId);
+    return aProducerView.WriteParam(*aArg.mWrite);
   }
 
   template <PcqTypeInfoID ArgTypeId = PcqTypeInfo<Arg>::ID>
   static PcqStatus Read(ConsumerView& aConsumerView, ParamType* aArg) {
     MOZ_ASSERT(aArg.mRead);
     PcqTypeInfoID typeId;
-    PcqStatus status = aConsumerView.ReadParam(&typeId);
-    if (!IsSuccess(status)) {
-      return status;
+    if (!aConsumerView.ReadParam(&typeId)) {
+      return aConsumerView.Status();
     }
     return (typeId == ArgTypeId) ? aConsumerView.ReadParam(aArg)
                                  : PcqStatus::PcqTypeError;
@@ -1519,54 +1550,63 @@ struct PcqParamTraits {
 // ---------------------------------------------------------------
 
 template <>
+struct IsTriviallySerializable<PcqStatus> : TrueType {};
+
+// ---------------------------------------------------------------
+
+template <>
 struct PcqParamTraits<nsACString> {
   using ParamType = nsACString;
 
   static PcqStatus Write(ProducerView& aProducerView, const ParamType& aArg) {
-    PcqStatus status = aProducerView.WriteParam(aArg.IsVoid());
-    if (aArg.IsVoid()) {
-      return status;
+    if ((!aProducerView.WriteParam(aArg.IsVoid())) || aArg.IsVoid()) {
+      return aProducerView.Status();
     }
 
     uint32_t len = aArg.Length();
-    status = IsSuccess(status) ? aProducerView.WriteParam(len) : status;
-    if (len == 0) {
-      return status;
+    if ((!aProducerView.WriteParam(len)) || (len == 0)) {
+      return aProducerView.Status();
     }
-    status = IsSuccess(status) ? aProducerView.Write(aArg.BeginReading(), len)
-                               : status;
-    return status;
+
+    return aProducerView.Write(aArg.BeginReading(), len);
   }
 
   static PcqStatus Read(ConsumerView& aConsumerView, ParamType* aArg) {
     bool isVoid = false;
-    PcqStatus status = aConsumerView.ReadParam(&isVoid);
+    if (!aConsumerView.ReadParam(&isVoid)) {
+      return aConsumerView.Status();
+    }
     if (aArg) {
       aArg->SetIsVoid(isVoid);
     }
-    if ((isVoid) || (!IsSuccess(status))) {
-      return status;
+    if (isVoid) {
+      return PcqStatus::Success;
     }
 
     uint32_t len = 0;
-    status = IsSuccess(status) ? aConsumerView.ReadParam(&len) : status;
-    if ((len == 0) || (!IsSuccess(status))) {
-      return status;
+    if (!aConsumerView.ReadParam(&len)) {
+      return aConsumerView.Status();
+    }
+
+    if (len == 0) {
+      if (aArg) {
+        *aArg = "";
+      }
+      return PcqStatus::Success;
     }
 
     char* buf = aArg ? new char[len + 1] : nullptr;
     if (aArg && (!buf)) {
       return PcqStatus::PcqOOMError;
     }
-    status = IsSuccess(status) ? aConsumerView.Read(buf, len) : status;
-    if (!IsSuccess(status)) {
-      return status;
+    if (!aConsumerView.Read(buf, len)) {
+      return aConsumerView.Status();
     }
     buf[len] = '\0';
     if (aArg) {
       aArg->Adopt(buf, len);
     }
-    return status;
+    return PcqStatus::Success;
   }
 
   template <typename View>
@@ -1586,39 +1626,43 @@ struct PcqParamTraits<nsAString> {
   using ParamType = nsAString;
 
   static PcqStatus Write(ProducerView& aProducerView, const ParamType& aArg) {
-    PcqStatus status = aProducerView.WriteParam(aArg.IsVoid());
-    if (aArg.IsVoid()) {
-      return status;
+    if ((!aProducerView.WriteParam(aArg.IsVoid())) || (aArg.IsVoid())) {
+      return aProducerView.Status();
     }
     // DLP: No idea if this includes null terminator
     uint32_t len = aArg.Length();
-    status = IsSuccess(status) ? aProducerView.WriteParam(len) : status;
-    if (len == 0) {
-      return status;
+    if ((!aProducerView.WriteParam(len)) || (len == 0)) {
+      return aProducerView.Status();
     }
     constexpr const uint32_t sizeofchar = sizeof(typename ParamType::char_type);
-    status = IsSuccess(status)
-                 ? aProducerView.Write(aArg.BeginReading(), len * sizeofchar)
-                 : status;
-    return status;
+    return aProducerView.Write(aArg.BeginReading(), len * sizeofchar);
   }
 
   static PcqStatus Read(ConsumerView& aConsumerView, ParamType* aArg) {
     bool isVoid = false;
-    PcqStatus status = aConsumerView.ReadParam(&isVoid);
+    if (!aConsumerView.ReadParam(&isVoid)) {
+      return aConsumerView.Status();
+    }
     if (aArg) {
       aArg->SetIsVoid(isVoid);
     }
-    if ((isVoid) || (!IsSuccess(status))) {
-      return status;
+    if (isVoid) {
+      return PcqStatus::Success;
     }
 
     // DLP: No idea if this includes null terminator
     uint32_t len = 0;
-    status = IsSuccess(status) ? aConsumerView.ReadParam(&len) : status;
-    if ((len == 0) || (!IsSuccess(status))) {
-      return status;
+    if (!aConsumerView.ReadParam(&len)) {
+      return aConsumerView.Status();
     }
+
+    if (len == 0) {
+      if (aArg) {
+        *aArg = L"";
+      }
+      return PcqStatus::Success;
+    }
+
     uint32_t sizeofchar = sizeof(typename ParamType::char_type);
     typename ParamType::char_type* buf = nullptr;
     if (aArg) {
@@ -1628,16 +1672,17 @@ struct PcqParamTraits<nsAString> {
         return PcqStatus::PcqOOMError;
       }
     }
-    status =
-        IsSuccess(status) ? aConsumerView.Read(buf, len * sizeofchar) : status;
-    if (!IsSuccess(status)) {
-      return status;
+
+    if (!aConsumerView.Read(buf, len * sizeofchar)) {
+      return aConsumerView.Status();
     }
+
     buf[len] = L'\0';
     if (aArg) {
       aArg->Adopt(buf, len);
     }
-    return status;
+
+    return PcqStatus::Success;
   }
 
   template <typename View>
@@ -1678,18 +1723,17 @@ struct NSArrayPcqParamTraits<nsTArray<ElementType>, false> {
 
   static PcqStatus Write(ProducerView& aProducerView, const ParamType& aArg) {
     size_t arrayLen = aArg.Length();
-    PcqStatus status = aProducerView.WriteParam(arrayLen);
+    aProducerView.WriteParam(arrayLen);
     for (size_t i = 0; i < aArg.Length(); ++i) {
-      status = IsSuccess(status) ? aProducerView.WriteParam(aArg[i]) : status;
+      aProducerView.WriteParam(aArg[i]);
     }
-    return status;
+    return aProducerView.Status();
   }
 
   static PcqStatus Read(ConsumerView& aConsumerView, ParamType* aArg) {
     size_t arrayLen;
-    PcqStatus status = aConsumerView.ReadParam(&arrayLen);
-    if (!IsSuccess(status)) {
-      return status;
+    if (!aConsumerView.ReadParam(&arrayLen)) {
+      return aConsumerView.Status();
     }
 
     if (aArg && !aArg->AppendElements(arrayLen, fallible)) {
@@ -1698,9 +1742,9 @@ struct NSArrayPcqParamTraits<nsTArray<ElementType>, false> {
 
     for (size_t i = 0; i < arrayLen; ++i) {
       ElementType* elt = aArg ? (&aArg->ElementAt(i)) : nullptr;
-      status = IsSuccess(status) ? aConsumerView.ReadParam(elt) : status;
+      aConsumerView.ReadParam(elt);
     }
-    return status;
+    return aConsumerView.Status();
   }
 
   template <typename View>
@@ -1728,30 +1772,21 @@ struct NSArrayPcqParamTraits<nsTArray<ElementType>, true> {
 
   static PcqStatus Write(ProducerView& aProducerView, const ParamType& aArg) {
     size_t arrayLen = aArg.Length();
-    PcqStatus status = aProducerView.WriteParam(arrayLen);
-    status =
-        IsSuccess(status)
-            ? aProducerView.Write(&aArg[0], aArg.Length() * sizeof(ElementType))
-            : status;
-    return status;
+    aProducerView.WriteParam(arrayLen);
+    return aProducerView.Write(&aArg[0], aArg.Length() * sizeof(ElementType));
   }
 
   static PcqStatus Read(ConsumerView& aConsumerView, ParamType* aArg) {
     size_t arrayLen;
-    PcqStatus status = aConsumerView.ReadParam(&arrayLen);
-    if (!IsSuccess(status)) {
-      return status;
+    if (!aConsumerView.ReadParam(&arrayLen)) {
+      return aConsumerView.Status();
     }
 
     if (aArg && !aArg->AppendElements(arrayLen, fallible)) {
       return PcqStatus::PcqOOMError;
     }
 
-    status = IsSuccess(status)
-                 ? aConsumerView.Read(aArg->Elements(),
-                                      arrayLen * sizeof(ElementType))
-                 : status;
-    return status;
+    return aConsumerView.Read(aArg->Elements(), arrayLen * sizeof(ElementType));
   }
 
   template <typename View>
@@ -1786,20 +1821,18 @@ struct ArrayPcqParamTraits<Array<ElementType, Length>, false> {
   using ElementType = ElementType;
 
   static PcqStatus Write(ProducerView& aProducerView, const ParamType& aArg) {
-    PcqStatus status = PcqStatus::Success;
     for (size_t i = 0; i < Length; ++i) {
-      status = IsSuccess(status) ? aProducerView.WriteParam(aArg[i]) : status;
+      aProducerView.WriteParam(aArg[i]);
     }
-    return status;
+    return aProducerView.Status();
   }
 
   static PcqStatus Read(ConsumerView& aConsumerView, ParamType* aArg) {
-    PcqStatus status = PcqStatus::Success;
     for (size_t i = 0; i < Length; ++i) {
       ElementType* elt = aArg ? (&((*aArg)[i])) : nullptr;
-      status = IsSuccess(status) ? aConsumerView.ReadParam(elt) : status;
+      aConsumerView.ReadParam(elt);
     }
-    return status;
+    return aConsumerView.Status();
   }
 
   template <typename View>
@@ -1844,32 +1877,30 @@ struct PcqParamTraits<Maybe<ElementType>> {
   using ParamType = Maybe<ElementType>;
 
   static PcqStatus Write(ProducerView& aProducerView, const ParamType& aArg) {
-    PcqStatus status = aProducerView.WriteParam(aArg.mIsSome);
-    if (aArg.mIsSome) {
-      status =
-          IsSuccess(status) ? aProducerView.WriteParam(aArg.ref()) : status;
-    }
-    return status;
+    aProducerView.WriteParam(aArg.mIsSome);
+    return (aArg.mIsSome) ? aProducerView.WriteParam(aArg.ref())
+                          : aProducerView.Status();
   }
 
   static PcqStatus Read(ConsumerView& aConsumerView, ParamType* aArg) {
     bool isSome;
-    PcqStatus status = aConsumerView.ReadParam(&isSome);
-    if (!IsSuccess(status)) {
-      return status;
+    if (!aConsumerView.ReadParam(&isSome)) {
+      return aConsumerView.Status();
     }
-    if (isSome) {
+
+    if (!isSome) {
       if (aArg) {
-        aArg->emplace();
-        status =
-            aConsumerView.ReadParam(static_cast<ElementType*>(aArg->ptr()));
-      } else {
-        status = aConsumerView.ReadParam<ElementType>(nullptr);
+        aArg->reset();
       }
-    } else if (aArg) {
-      aArg->reset();
+      return PcqStatus::Success;
     }
-    return status;
+
+    if (!aArg) {
+      return aConsumerView.ReadParam<ElementType>(nullptr);
+    }
+
+    aArg->emplace();
+    return aConsumerView.ReadParam(aArg->ptr());
   }
 
   template <typename View>
@@ -1888,32 +1919,30 @@ struct PcqParamTraits<Maybe<Variant<T, Ts...>>> {
   using ParamType = Maybe<Variant<T, Ts...>>;
 
   static PcqStatus Write(ProducerView& aProducerView, const ParamType& aArg) {
-    PcqStatus status = aProducerView.WriteParam(aArg.mIsSome);
-    if (aArg.mIsSome) {
-      status =
-          IsSuccess(status) ? aProducerView.WriteParam(aArg.ref()) : status;
-    }
-    return status;
+    aProducerView.WriteParam(aArg.mIsSome);
+    return (aArg.mIsSome) ? aProducerView.WriteParam(aArg.ref())
+                          : aProducerView.Status();
   }
 
   static PcqStatus Read(ConsumerView& aConsumerView, ParamType* aArg) {
     bool isSome;
-    PcqStatus status = aConsumerView.ReadParam(&isSome);
-    if (!IsSuccess(status)) {
-      return status;
+    if (!aConsumerView.ReadParam(&isSome)) {
+      return aConsumerView.Status();
     }
-    if (isSome) {
+
+    if (!isSome) {
       if (aArg) {
-        aArg->emplace(VariantType<T>());
-        status = aConsumerView.ReadParam(
-            static_cast<Variant<T, Ts...>*>(aArg->ptr()));
-      } else {
-        status = aConsumerView.ReadParam<Variant<T, Ts...>>(nullptr);
+        aArg->reset();
       }
-    } else if (aArg) {
-      aArg->reset();
+      return PcqStatus::Success;
     }
-    return status;
+
+    if (!aArg) {
+      return aConsumerView.ReadParam<Variant<T, Ts...>>(nullptr);
+    }
+
+    aArg->emplace(VariantType<T>());
+    return aConsumerView.ReadParam(aArg->ptr());
   }
 
   template <typename View>
@@ -1930,15 +1959,13 @@ struct PcqParamTraits<Pair<TypeA, TypeB>> {
   using ParamType = Pair<TypeA, TypeB>;
 
   static PcqStatus Write(ProducerView& aProducerView, const ParamType& aArg) {
-    PcqStatus status = aProducerView.WriteParam(aArg.first());
-    return IsSuccess(status) ? aProducerView.WriteParam(aArg.second()) : status;
+    aProducerView.WriteParam(aArg.first());
+    return aProducerView.WriteParam(aArg.second());
   }
 
   static PcqStatus Read(ConsumerView& aConsumerView, ParamType* aArg) {
-    TypeA* ptrA = aArg ? (&aArg->first()) : nullptr;
-    TypeB* ptrB = aArg ? (&aArg->second()) : nullptr;
-    PcqStatus status = aConsumerView.ReadParam(ptrA);
-    return IsSuccess(status) ? aConsumerView.ReadParam(ptrB) : status;
+    aConsumerView.ReadParam(aArg ? (&aArg->first()) : nullptr);
+    return aConsumerView.ReadParam(aArg ? (&aArg->second()) : nullptr);
   }
 
   template <typename View>
@@ -1956,24 +1983,34 @@ struct PcqParamTraits<UniquePtr<T>> {
 
   static PcqStatus Write(ProducerView& aProducerView, const ParamType& aArg) {
     // TODO: Clean up move with PCQ
-    PcqStatus status = aProducerView.WriteParam(!static_cast<bool>(aArg));
-    status = (aArg && IsSuccess(status)) ? aProducerView.WriteParam(*aArg.get())
-                                         : status;
-    if (aArg && IsSuccess(status)) {
+    aProducerView.WriteParam(!static_cast<bool>(aArg));
+    if (aArg && aProducerView.WriteParam(*aArg.get())) {
       const_cast<ParamType&>(aArg).reset();
     }
-    return status;
+    return aProducerView.Status();
   }
 
   static PcqStatus Read(ConsumerView& aConsumerView, ParamType* aArg) {
     bool isNull;
-    PcqStatus status = aConsumerView.ReadParam(aArg ? &isNull : nullptr);
-    T* obj = (IsSuccess(status) && aArg && (!isNull)) ? new T() : nullptr;
+    if (!aConsumerView.ReadParam(&isNull)) {
+      return aConsumerView.Status();
+    }
+    if (isNull) {
+      if (aArg) {
+        aArg->reset(nullptr);
+      }
+      return PcqStatus::Success;
+    }
+
+    T* obj = nullptr;
     if (aArg) {
+      obj = new T();
+      if (!obj) {
+        return PcqStatus::PcqOOMError;
+      }
       aArg->reset(obj);
     }
-    return (IsSuccess(status) && (!isNull)) ? aConsumerView.ReadParam(obj)
-                                            : status;
+    return aConsumerView.ReadParam(obj);
   }
 
   template <typename View>
@@ -2002,18 +2039,21 @@ struct PcqParamTraits<base::FileDescriptor> {
   static PcqStatus Write(ProducerView& aProducerView, const ParamType& aArg) {
     // PCQs don't use auto-close.
     // Convert any negative (i.e. invalid) fds to -1, as done with ParamTraits
-    // (why?)
+    // (TODO: why?)
     return aProducerView.WriteParam(aArg.fd > 0 ? aArg.fd : -1);
   }
 
   static PcqStatus Read(ConsumerView& aConsumerView, ParamType* aArg) {
     int fd;
-    PcqStatus status = aConsumerView.ReadParam(aArg ? &fd : nullptr);
+    if (!aConsumerView.ReadParam(aArg ? &fd : nullptr)) {
+      return aConsumerView.Status();
+    }
+
     if (aArg) {
-      aArg->fd = IsSuccess(status) ? fd : -1;
+      aArg->fd = fd;
       aArg->auto_close = false;  // PCQs don't use auto-close.
     }
-    return status;
+    return PcqStatus::Success;
   }
 
   template <typename View>
@@ -2041,10 +2081,7 @@ struct PcqParamTraits<Variant<Types...>> {
   using Tag = typename mozilla::detail::VariantTag<Types...>::Type;
 
   static PcqStatus Write(ProducerView& aProducerView, const ParamType& aArg) {
-    PcqStatus status = aProducerView.WriteParam(aArg.tag);
-    if (!IsSuccess(status)) {
-      return status;
-    }
+    aProducerView.WriteParam(aArg.tag);
     return aArg.match(PcqVariantWriter{aProducerView});
   }
 
@@ -2074,12 +2111,11 @@ struct PcqParamTraits<Variant<Types...>> {
 
   static PcqStatus Read(ConsumerView& aConsumerView, ParamType* aArg) {
     Tag tag;
-    PcqStatus status = aConsumerView.ReadParam(&tag);
+    if (!aConsumerView.ReadParam(&tag)) {
+      return aConsumerView.Status();
+    }
     if (aArg) {
       aArg->tag = tag;
-    }
-    if (!IsSuccess(status)) {
-      return status;
     }
     return VariantReader<sizeof...(Types)>::Read(aConsumerView, tag, aArg);
   }

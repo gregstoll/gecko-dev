@@ -174,21 +174,21 @@ class CommandSink : public BasicSink {
                            ? this->mConsumer->TryWaitRemove(aTimeout, command)
                            : this->mConsumer->TryRemove(command);
 
-    switch (status) {
-      case PcqStatus::Success:
-        if (DispatchCommand(command)) {
-          return CommandResult::Success;
-        } else {
-          return CommandResult::Error;
-        }
-      case PcqStatus::PcqNotReady:
-        return CommandResult::QueueEmpty;
-      case PcqStatus::PcqOOMError:
-        ReportOOM();
-        // intentional fall-through
-      default:
-        return CommandResult::Error;
+    if (status == PcqStatus::Success) {
+      if (DispatchCommand(command)) {
+        return CommandResult::Success;
+      }
+      return CommandResult::Error;
     }
+
+    if (status == PcqStatus::PcqNotReady) {
+      return CommandResult::QueueEmpty;
+    }
+
+    if (status == PcqStatus::PcqOOMError) {
+      ReportOOM();
+    }
+    return CommandResult::Error;
   }
 
   CommandResult ProcessOneNow() { return ProcessOne(Some(TimeDuration(0))); }

@@ -29,7 +29,7 @@ template <typename T>
 struct PcqParamTraits;
 class ConsumerView;
 class ProducerView;
-enum class PcqStatus;
+struct PcqStatus;
 }  // namespace ipc
 
 namespace gfx {
