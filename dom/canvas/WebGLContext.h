@@ -490,8 +490,7 @@ class WebGLContext : public SupportsWeakPtr<WebGLContext> {
   Maybe<WebGLActiveInfo> GetActiveUniform(const WebGLProgram& prog,
                                           GLuint index);
 
-  Maybe<nsTArray<WebGLId<WebGLShader>>> GetAttachedShaders(
-      const WebGLProgram& prog);
+  MaybeAttachedShaders GetAttachedShaders(const WebGLProgram& prog);
 
   GLint GetAttribLocation(const WebGLProgram& prog, const nsAString& name);
   MaybeWebGLVariant GetBufferParameter(GLenum target, GLenum pname);

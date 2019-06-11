@@ -1944,6 +1944,30 @@ void ClientWebGLContext::UseProgram(const WebGLId<WebGLProgram>& prog) {
   Run<RPROC(UseProgram)>(prog);
 }
 
+void ClientWebGLContext::GetAttachedShaders(
+    const WebGLId<WebGLProgram>& prog,
+    dom::Nullable<nsTArray<RefPtr<ClientWebGLShader>>>& retval) {
+  MaybeAttachedShaders shaders = Run<RPROC(GetAttachedShaders)>(prog);
+  if (!shaders) {
+    retval.SetNull();
+    return;
+  }
+
+  nsTArray<RefPtr<ClientWebGLShader>>& shaderArray = retval.SetValue();
+  for (size_t i = 0; i < shaders.ref().Length; ++i) {
+    if (!shaders.ref()[i]) {
+      continue;
+    }
+    auto shader = Find(shaders.ref()[i]);
+    if (!shader) {
+      MOZ_ASSERT_UNREACHABLE("Returned a missing shader?");
+      continue;
+    }
+
+    shaderArray.AppendElement(downcast(std::move(shader)));
+  }
+}
+
 void ClientWebGLContext::ValidateProgram(const WebGLId<WebGLProgram>& prog) {
   Run<RPROC(ValidateProgram)>(prog);
 }

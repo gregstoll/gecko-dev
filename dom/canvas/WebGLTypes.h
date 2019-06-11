@@ -451,6 +451,9 @@ using Float32Array2 = Array<float, 2>;
 using Float32Array4 = Array<float, 4>;
 using BoolArray4 = Array<bool, 4>;
 
+// First is vertex shader, second is fragment shader.
+using MaybeAttachedShaders = Maybe<Array<WebGLId<WebGLShader>, 2>>;
+
 using WebGLVariant =
     Variant<int32_t, uint32_t, int64_t, uint64_t, bool, float, double,
             nsCString, nsString, WebGLId<WebGLBuffer>,

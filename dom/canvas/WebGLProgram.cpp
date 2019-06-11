@@ -811,15 +811,16 @@ Maybe<WebGLActiveInfo> WebGLProgram::GetActiveUniform(GLuint index) const {
   return Some(uniforms[index]->mActiveInfo);
 }
 
-Maybe<nsTArray<WebGLId<WebGLShader>>> WebGLProgram::GetAttachedShaders() const {
-  auto ret = Some(nsTArray<WebGLId<WebGLShader>>());
-  nsTArray<WebGLId<WebGLShader>>& out = ret.ref();
+MaybeAttachedShaders WebGLProgram::GetAttachedShaders() const {
+  MaybeAttachedShaders ret;
+  ret.emplace();
+  Array<WebGLId<WebGLShader>, 2>& out = ret.ref();
 
   if (mVertShader) {
-    out.AppendElement(mVertShader);
+    out[0] = mVertShader.get();
   }
   if (mFragShader) {
-    out.AppendElement(mFragShader);
+    out[1] = mFragShader.get();
   }
   return ret;
 }

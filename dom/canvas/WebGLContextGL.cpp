@@ -537,7 +537,7 @@ Maybe<WebGLActiveInfo> WebGLContext::GetActiveUniform(const WebGLProgram& prog,
   return prog.GetActiveUniform(index);
 }
 
-Maybe<nsTArray<WebGLId<WebGLShader>>> WebGLContext::GetAttachedShaders(
+MaybeAttachedShaders WebGLContext::GetAttachedShaders(
     const WebGLProgram& prog) {
   const FuncScope funcScope(*this, "getAttachedShaders");
   if (IsContextLost()) return Nothing();

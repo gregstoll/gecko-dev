@@ -370,7 +370,7 @@ Maybe<WebGLActiveInfo> HostWebGLContext::GetActiveUniform(
   return mContext->GetActiveUniform(*prog, index);
 }
 
-Maybe<nsTArray<WebGLId<WebGLShader>>> HostWebGLContext::GetAttachedShaders(
+MaybeAttachedShaders HostWebGLContext::GetAttachedShaders(
     const WebGLId<WebGLProgram>& progId) {
   RefPtr<WebGLProgram> prog = MustFind(progId);
   return mContext->GetAttachedShaders(*prog);

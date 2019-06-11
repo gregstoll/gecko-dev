@@ -166,7 +166,12 @@ bool ClientWebGLObject<WebGLType>::sLogMe = true;
                                                                         \
    protected:                                                           \
     virtual ~ClientWebGL##_WebGLType(){};                               \
-  };
+  };                                                                    \
+  RefPtr<ClientWebGL##_WebGLType> downcast(                             \
+      RefPtr<ClientWebGLObject<WebGL##_WebGLType>>&& obj) {             \
+    MOZ_ASSERT(obj);                                                    \
+    return obj.forget().template downcast<ClientWebGL##_WebGLType>();   \
+  }
 
 // Usually, the JS binding name is the same as the WebGL type name
 #define DEFINE_WEBGL_CLIENT_TYPE(_WebGLType) \
@@ -1284,9 +1289,7 @@ class ClientWebGLContext : public nsICanvasRenderingContextInternal,
   already_AddRefed<ClientWebGLShader> CreateShader(GLenum type);
   void GetAttachedShaders(
       const WebGLId<WebGLProgram>& prog,
-      dom::Nullable<nsTArray<RefPtr<ClientWebGLShader>>>& retval) {
-    MOZ_ASSERT_UNREACHABLE("TODO:");
-  }
+      dom::Nullable<nsTArray<RefPtr<ClientWebGLShader>>>& retval);
 
   void UseProgram(const WebGLId<WebGLProgram>& prog);
 

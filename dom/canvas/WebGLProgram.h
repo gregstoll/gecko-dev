@@ -157,7 +157,7 @@ class WebGLProgram final : public WebGLRefCountedObject<WebGLProgram>,
   void DetachShader(const WebGLShader* shader);
   Maybe<WebGLActiveInfo> GetActiveAttrib(GLuint index) const;
   Maybe<WebGLActiveInfo> GetActiveUniform(GLuint index) const;
-  Maybe<nsTArray<WebGLId<WebGLShader>>> GetAttachedShaders() const;
+  MaybeAttachedShaders GetAttachedShaders() const;
   GLint GetAttribLocation(const nsAString& name) const;
   GLint GetFragDataLocation(const nsAString& name) const;
   nsString GetProgramInfoLog() const;

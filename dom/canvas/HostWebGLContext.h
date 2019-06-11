@@ -351,8 +351,7 @@ class HostWebGLContext : public WebGLContextEndpoint {
   Maybe<WebGLActiveInfo> GetActiveUniform(const WebGLId<WebGLProgram>& progId,
                                           GLuint index);
 
-  Maybe<nsTArray<WebGLId<WebGLShader>>> GetAttachedShaders(
-      const WebGLId<WebGLProgram>& progId);
+  MaybeAttachedShaders GetAttachedShaders(const WebGLId<WebGLProgram>& progId);
 
   GLint GetAttribLocation(const WebGLId<WebGLProgram>& progId,
                           const nsString& name);
