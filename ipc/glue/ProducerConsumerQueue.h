@@ -100,6 +100,7 @@ struct PcqStatus {
   PcqStatus(EStatus status = Success) : mValue(status) {}
   operator bool() { return mValue == Success; }
   bool operator==(const EStatus& o) { return mValue == o; }
+  bool operator!=(const EStatus& o) { return !(*this == o); }
 };
 
 bool IsSuccess(PcqStatus status) { return status == PcqStatus::Success; }
