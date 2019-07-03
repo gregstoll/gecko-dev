@@ -1465,13 +1465,24 @@ class ClientWebGLContext : public nsICanvasRenderingContextInternal,
 
   // -------------------------------- Drawing -------------------------------
  public:
-  void DrawArrays(GLenum mode, GLint first, GLsizei count);
+  void DrawArrays(GLenum mode, GLint first, GLsizei count) {
+    DrawArraysInstanced(mode, first, count, 1, FuncScopeId::drawArrays);
+  }
 
   void DrawElements(GLenum mode, GLsizei count, GLenum type,
-                    WebGLintptr byteOffset);
+                    WebGLintptr byteOffset) {
+    DrawElementsInstanced(mode, count, type, byteOffset, 1, FuncScopeId::drawElements);
+  }
 
   void DrawRangeElements(GLenum mode, GLuint start, GLuint end, GLsizei count,
-                         GLenum type, WebGLintptr byteOffset);
+                         GLenum type, WebGLintptr byteOffset) {
+    const FuncScope funcScope(this, "drawRangeElements");
+    if (end < start) {
+      EnqueueErrorInvalidValue("end must be >= start.");
+      return;
+    }
+    DrawElementsInstanced(mode, count, type, byteOffset, 1, FuncScopeId::drawRangeElements);
+  }
 
   // ------------------------------ Readback -------------------------------
  public:
@@ -1510,13 +1521,12 @@ class ClientWebGLContext : public nsICanvasRenderingContextInternal,
                        bool aFromExtension = false);
 
   void DrawArraysInstanced(GLenum mode, GLint first, GLsizei count,
-                           GLsizei primcount, bool aFromExtension = false);
+                           GLsizei primcount, FuncScopeId aFuncId = FuncScopeId::drawArrays);
 
   void DrawElementsInstanced(
       GLenum mode, GLsizei count, GLenum type, WebGLintptr offset,
       GLsizei primcount,
-      FuncScopeId aFuncId = FuncScopeId::drawElementsInstanced,
-      bool aFromExtension = false);
+      FuncScopeId aFuncId = FuncScopeId::drawElementsInstanced);
 
   void VertexAttribDivisor(GLuint index, GLuint divisor,
                            bool aFromExtension = false);

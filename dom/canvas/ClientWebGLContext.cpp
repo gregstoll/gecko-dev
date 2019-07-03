@@ -2327,31 +2327,28 @@ void ClientWebGLContext::VertexAttribPointer(GLuint index, GLint size,
 }
 
 // -------------------------------- Drawing -------------------------------
-void ClientWebGLContext::DrawArrays(GLenum mode, GLint first, GLsizei count) {
-  Run<RPROC(DrawArraysInstanced)>(mode, first, count, 1, false);
+
+void ClientWebGLContext::DrawArraysInstanced(GLenum mode, GLint first,
+                                             GLsizei count, GLsizei primcount,
+                                             FuncScopeId aFuncId) {
+  Run<RPROC(DrawArraysInstanced)>(mode, first, count, primcount,
+                                  aFuncId);
   // TODO: We need to invalidate if the target was the screen buffer.
   // As of right now we don't know so I'm being conservative.
   Invalidate();
 }
 
-void ClientWebGLContext::DrawElements(GLenum mode, GLsizei count, GLenum type,
-                                      WebGLintptr byteOffset) {
-  Run<RPROC(DrawElementsInstanced)>(mode, count, type, byteOffset, 1,
-                                    FuncScopeId::drawElements, false);
+void ClientWebGLContext::DrawElementsInstanced(GLenum mode, GLsizei count,
+                                               GLenum type, WebGLintptr offset,
+                                               GLsizei primcount,
+                                               FuncScopeId aFuncId) {
+  Run<RPROC(DrawElementsInstanced)>(mode, count, type, offset, primcount,
+                                    aFuncId);
   // TODO: We need to invalidate if the target was the screen buffer.
   // As of right now we don't know so I'm being conservative.
   Invalidate();
 }
 
-void ClientWebGLContext::DrawRangeElements(GLenum mode, GLuint start,
-                                           GLuint end, GLsizei count,
-                                           GLenum type,
-                                           WebGLintptr byteOffset) {
-  Run<RPROC(DrawRangeElements)>(mode, start, end, count, type, byteOffset);
-  // TODO: We need to invalidate if the target was the screen buffer.
-  // As of right now we don't know so I'm being conservative.
-  Invalidate();
-}
 
 // ------------------------------ Readback -------------------------------
 void ClientWebGLContext::ReadPixels(GLint x, GLint y, GLsizei width,
@@ -2434,28 +2431,6 @@ void ClientWebGLContext::DeleteVertexArray(
 void ClientWebGLContext::BindVertexArray(const WebGLId<WebGLVertexArray>& array,
                                          bool aFromExtension) {
   Run<RPROC(BindVertexArray)>(array, aFromExtension);
-}
-
-void ClientWebGLContext::DrawArraysInstanced(GLenum mode, GLint first,
-                                             GLsizei count, GLsizei primcount,
-                                             bool aFromExtension) {
-  Run<RPROC(DrawArraysInstanced)>(mode, first, count, primcount,
-                                  aFromExtension);
-  // TODO: We need to invalidate if the target was the screen buffer.
-  // As of right now we don't know so I'm being conservative.
-  Invalidate();
-}
-
-void ClientWebGLContext::DrawElementsInstanced(GLenum mode, GLsizei count,
-                                               GLenum type, WebGLintptr offset,
-                                               GLsizei primcount,
-                                               FuncScopeId aFuncId,
-                                               bool aFromExtension) {
-  Run<RPROC(DrawElementsInstanced)>(mode, count, type, offset, primcount,
-                                    aFuncId, aFromExtension);
-  // TODO: We need to invalidate if the target was the screen buffer.
-  // As of right now we don't know so I'm being conservative.
-  Invalidate();
 }
 
 void ClientWebGLContext::VertexAttribDivisor(GLuint index, GLuint divisor,
