@@ -1414,13 +1414,13 @@ void ClientWebGLContext::GetBufferSubData(GLenum target, GLintptr srcByteOffset,
     return;
   }
 
-  Maybe<UniquePtr<RawBuffer<>>> result =
+  const auto result =
       Run<RPROC(GetBufferSubData)>(target, srcByteOffset, byteLen);
   if (!result) {
     return;
   }
-  MOZ_ASSERT(result.ref()->Length() == byteLen);
-  memcpy(bytes, result.ref()->Data(), byteLen);
+  MOZ_ASSERT(result->Length() == byteLen);
+  memcpy(bytes, result->Data(), byteLen);
 }
 
 ////

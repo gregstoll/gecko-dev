@@ -535,7 +535,7 @@ void HostWebGLContext::CopyBufferSubData(GLenum readTarget, GLenum writeTarget,
                                         writeOffset, size);
 }
 
-Maybe<UniquePtr<RawBuffer<>>> HostWebGLContext::GetBufferSubData(
+UniquePtr<RawBuffer<>> HostWebGLContext::GetBufferSubData(
     GLenum target, GLintptr srcByteOffset, size_t byteLen) {
   return GetWebGL2Context()->GetBufferSubData(target, srcByteOffset, byteLen);
 }

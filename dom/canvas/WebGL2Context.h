@@ -43,7 +43,7 @@ class WebGL2Context : public WebGLContext {
                          const BufferT& data);
 
  public:
-  Maybe<UniquePtr<RawBuffer<>>> GetBufferSubData(GLenum target,
+  UniquePtr<RawBuffer<>> GetBufferSubData(GLenum target,
                                                  WebGLintptr srcByteOffset,
                                                  size_t byteLen);
 

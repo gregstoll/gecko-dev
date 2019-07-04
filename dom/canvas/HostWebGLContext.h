@@ -437,7 +437,7 @@ class HostWebGLContext : public WebGLContextEndpoint {
                          GLintptr readOffset, GLintptr writeOffset,
                          GLsizeiptr size);
 
-  Maybe<UniquePtr<RawBuffer<>>> GetBufferSubData(GLenum target,
+  UniquePtr<RawBuffer<>> GetBufferSubData(GLenum target,
                                                  GLintptr srcByteOffset,
                                                  size_t byteLen);
 
