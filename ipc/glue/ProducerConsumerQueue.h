@@ -98,9 +98,9 @@ struct PcqStatus {
   } mValue;
 
   PcqStatus(EStatus status = Success) : mValue(status) {}
-  operator bool() { return mValue == Success; }
-  bool operator==(const EStatus& o) { return mValue == o; }
-  bool operator!=(const EStatus& o) { return !(*this == o); }
+  operator bool() const { return mValue == Success; }
+  bool operator==(const EStatus& o) const { return mValue == o; }
+  bool operator!=(const EStatus& o) const { return !(*this == o); }
 };
 
 bool IsSuccess(PcqStatus status) { return status == PcqStatus::Success; }
