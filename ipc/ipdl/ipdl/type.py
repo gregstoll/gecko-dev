@@ -591,6 +591,7 @@ def hasshmem(type):
 
     class findShmem(TypeVisitor):
         def visitShmemType(self, s): raise found()
+
         def visitImportedCxxType(self, s):
             if s.isShmemHolder():
                 raise found()

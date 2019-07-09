@@ -28,7 +28,7 @@ template <>
 struct IsTriviallySerializable<WebGLShaderPrecisionFormat> : TrueType {};
 
 template <>
-struct IsTriviallySerializable<WebGLContextOptions> : TrueType {};
+struct IsTriviallySerializable<SimpleWebGLContextOptions> : TrueType {};
 
 template <>
 struct IsTriviallySerializable<WebGLPixelStore> : TrueType {};
@@ -40,9 +40,6 @@ template <>
 struct IsTriviallySerializable<WebGLTexPboOffset> : TrueType {};
 
 template <>
-struct IsTriviallySerializable<SetDimensionsData> : TrueType {};
-
-template <>
 struct IsTriviallySerializable<ICRData> : TrueType {};
 
 template <>
@@ -50,6 +47,71 @@ struct IsTriviallySerializable<gfx::IntSize> : TrueType {};
 
 template <>
 struct IsTriviallySerializable<webgl::TexUnpackBlob> : TrueType {};
+
+template <>
+struct IsTriviallySerializable<SyncResponse> : TrueType {};
+
+template <>
+struct PcqParamTraits<WebGLContextOptions> {
+  using ParamType = WebGLContextOptions;
+
+  static PcqStatus Write(ProducerView& aProducerView, const ParamType& aArg) {
+    aProducerView.WriteParam(
+        static_cast<const SimpleWebGLContextOptions&>(aArg));
+    aProducerView.WriteParam(aArg.rendererStringOverride);
+    return aProducerView.WriteParam(aArg.vendorStringOverride);
+  }
+
+  static PcqStatus Read(ConsumerView& aConsumerView, ParamType* aArg) {
+    aConsumerView.ReadParam(aArg ? static_cast<SimpleWebGLContextOptions*>(aArg)
+                                 : nullptr);
+    aConsumerView.ReadParam(aArg ? &aArg->rendererStringOverride : nullptr);
+    return aConsumerView.ReadParam(aArg ? &aArg->vendorStringOverride
+                                        : nullptr);
+  }
+
+  template <typename View>
+  static size_t MinSize(View& aView, const ParamType* aArg) {
+    return aView.MinSizeParam(
+               aArg ? static_cast<const SimpleWebGLContextOptions*>(aArg)
+                    : nullptr) +
+           aView.MinSizeParam(aArg ? &aArg->rendererStringOverride : nullptr) +
+           aView.MinSizeParam(aArg ? &aArg->vendorStringOverride : nullptr);
+  }
+};
+
+template <>
+struct PcqParamTraits<SetDimensionsData> {
+  using ParamType = SetDimensionsData;
+
+  static PcqStatus Write(ProducerView& aProducerView, const ParamType& aArg) {
+    aProducerView.WriteParam(aArg.mOptions);
+    aProducerView.WriteParam(aArg.mOptionsFrozen);
+    aProducerView.WriteParam(aArg.mResetLayer);
+    aProducerView.WriteParam(aArg.mMaybeLostOldContext);
+    aProducerView.WriteParam(aArg.mResult);
+    return aProducerView.WriteParam(aArg.mPixelStore);
+  }
+
+  static PcqStatus Read(ConsumerView& aConsumerView, ParamType* aArg) {
+    aConsumerView.ReadParam(aArg ? &aArg->mOptions : nullptr);
+    aConsumerView.ReadParam(aArg ? &aArg->mOptionsFrozen : nullptr);
+    aConsumerView.ReadParam(aArg ? &aArg->mResetLayer : nullptr);
+    aConsumerView.ReadParam(aArg ? &aArg->mMaybeLostOldContext : nullptr);
+    aConsumerView.ReadParam(aArg ? &aArg->mResult : nullptr);
+    return aConsumerView.ReadParam(aArg ? &aArg->mPixelStore : nullptr);
+  }
+
+  template <typename View>
+  static size_t MinSize(View& aView, const ParamType* aArg) {
+    return aView.MinSizeParam(aArg ? &aArg->mOptions : nullptr) +
+           aView.MinSizeParam(aArg ? &aArg->mOptionsFrozen : nullptr) +
+           aView.MinSizeParam(aArg ? &aArg->mResetLayer : nullptr) +
+           aView.MinSizeParam(aArg ? &aArg->mMaybeLostOldContext : nullptr) +
+           aView.MinSizeParam(aArg ? &aArg->mResult : nullptr) +
+           aView.MinSizeParam(aArg ? &aArg->mPixelStore : nullptr);
+  }
+};
 
 template <>
 struct PcqParamTraits<ExtensionSets> {
@@ -116,7 +178,7 @@ struct PcqParamTraits<RawBuffer<T>> {
     aProducerView.WriteParam(aArg.mLength);
     return (aArg.mLength > 0)
                ? aProducerView.Write(aArg.mData, aArg.mLength * sizeof(T))
-               : aProducerView.Status();
+               : aProducerView.GetStatus();
   }
 
   template <typename ElementType =
@@ -132,8 +194,10 @@ struct PcqParamTraits<RawBuffer<T>> {
       if (aArg) {
         aArg->mLength = 0;
         aArg->mData = nullptr;
+        aArg->mSmem = nullptr;
+        aArg->mOwnsData = false;
       }
-      return PcqStatus::Success;
+      return PcqStatus::kSuccess;
     }
 
     if (!aArg) {
@@ -143,13 +207,13 @@ struct PcqParamTraits<RawBuffer<T>> {
     struct RawBufferReadMatcher {
       PcqStatus operator()(RefPtr<mozilla::ipc::SharedMemoryBasic>& smem) {
         if (!smem) {
-          return PcqStatus::PcqFatalError;
+          return PcqStatus::kFatalError;
         }
         mArg->mSmem = smem;
         mArg->mData = static_cast<ElementType*>(smem->memory());
         mArg->mLength = mLength;
         mArg->mOwnsData = false;
-        return PcqStatus::Success;
+        return PcqStatus::kSuccess;
       }
       PcqStatus operator()() {
         mArg->mSmem = nullptr;
@@ -250,7 +314,7 @@ struct PcqParamTraits<WebGLTexUnpackVariant> {
       }
       PcqStatus operator()(const UniquePtr<webgl::TexUnpackImage>& x) {
         MOZ_ASSERT_UNREACHABLE("TODO:");
-        return PcqStatus::PcqFatalError;
+        return PcqStatus::kFatalError;
       }
       PcqStatus operator()(const WebGLTexPboOffset& x) {
         mProducerView.WriteParam(TexUnpackTypes::Pbo);
@@ -268,7 +332,7 @@ struct PcqParamTraits<WebGLTexUnpackVariant> {
     }
     TexUnpackTypes unpackType;
     if (!aConsumerView.ReadParam(&unpackType)) {
-      return aConsumerView.Status();
+      return aConsumerView.GetStatus();
     }
     switch (unpackType) {
       case TexUnpackTypes::Bytes:
@@ -281,13 +345,13 @@ struct PcqParamTraits<WebGLTexUnpackVariant> {
             &aArg->as<UniquePtr<webgl::TexUnpackSurface>>());
       case TexUnpackTypes::Image:
         MOZ_ASSERT_UNREACHABLE("TODO:");
-        return PcqStatus::PcqFatalError;
+        return PcqStatus::kFatalError;
       case TexUnpackTypes::Pbo:
         *aArg = AsVariant(WebGLTexPboOffset());
         return aConsumerView.ReadParam(&aArg->as<WebGLTexPboOffset>());
     }
     MOZ_ASSERT_UNREACHABLE("Illegal texture unpack type");
-    return PcqStatus::PcqFatalError;
+    return PcqStatus::kFatalError;
   }
 
   template <typename View>

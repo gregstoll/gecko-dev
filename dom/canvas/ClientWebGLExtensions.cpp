@@ -23,6 +23,7 @@ DEFINE_WEBGL_EXTENSION_GOOP(EXT_texture_compression_bptc,
                             WebGLExtensionCompressedTextureBPTC)
 DEFINE_WEBGL_EXTENSION_GOOP(EXT_texture_compression_rgtc,
                             WebGLExtensionCompressedTextureRGTC)
+DEFINE_WEBGL_EXTENSION_GOOP(EXT_float_blend, WebGLExtensionFloatBlend)
 DEFINE_WEBGL_EXTENSION_GOOP(EXT_frag_depth, WebGLExtensionFragDepth)
 DEFINE_WEBGL_EXTENSION_GOOP(EXT_sRGB, WebGLExtensionSRGB)
 DEFINE_WEBGL_EXTENSION_GOOP(EXT_shader_texture_lod,
@@ -34,6 +35,8 @@ DEFINE_WEBGL_EXTENSION_GOOP(EXT_disjoint_timer_query,
 DEFINE_WEBGL_EXTENSION_GOOP(MOZ_debug, WebGLExtensionMOZDebug)
 DEFINE_WEBGL_EXTENSION_GOOP(OES_element_index_uint,
                             WebGLExtensionElementIndexUint)
+DEFINE_WEBGL_EXTENSION_GOOP(OES_fbo_render_mipmap,
+                            WebGLExtensionFBORenderMipmap)
 DEFINE_WEBGL_EXTENSION_GOOP(OES_standard_derivatives,
                             WebGLExtensionStandardDerivatives)
 DEFINE_WEBGL_EXTENSION_GOOP(OES_texture_float, WebGLExtensionTextureFloat)

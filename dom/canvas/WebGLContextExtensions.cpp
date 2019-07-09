@@ -84,7 +84,7 @@ bool WebGLContext::IsExtensionSupported(dom::CallerType callerType,
     allowPrivilegedExts = true;
   }
 
-  if (gfxPrefs::WebGLPrivilegedExtensionsEnabled()) {
+  if (mOptions.privilegedExtensionsEnabled) {
     allowPrivilegedExts = true;
   }
 
@@ -241,25 +241,36 @@ void WebGLContext::EnableExtension(WebGLExtensionID ext,
     return;
 
   switch (ext) {
+    // ANGLE
     WEBGL_GET_EXTENSION_CASE(ANGLE_instanced_arrays)
+
+    // EXT
     WEBGL_GET_EXTENSION_CASE(EXT_blend_minmax)
     WEBGL_GET_EXTENSION_CASE(EXT_color_buffer_float)
     WEBGL_GET_EXTENSION_CASE(EXT_color_buffer_half_float)
+    WEBGL_GET_EXTENSION_CASE(EXT_disjoint_timer_query)
+    WEBGL_GET_EXTENSION_CASE(EXT_float_blend)
+    WEBGL_GET_EXTENSION_CASE(EXT_frag_depth)
+    WEBGL_GET_EXTENSION_CASE(EXT_shader_texture_lod)
+    WEBGL_GET_EXTENSION_CASE(EXT_sRGB)
     WEBGL_GET_EXTENSION_CASE(EXT_texture_compression_bptc)
     WEBGL_GET_EXTENSION_CASE(EXT_texture_compression_rgtc)
-    WEBGL_GET_EXTENSION_CASE(EXT_frag_depth)
-    WEBGL_GET_EXTENSION_CASE(EXT_sRGB)
-    WEBGL_GET_EXTENSION_CASE(EXT_shader_texture_lod)
     WEBGL_GET_EXTENSION_CASE(EXT_texture_filter_anisotropic)
-    WEBGL_GET_EXTENSION_CASE(EXT_disjoint_timer_query)
+
+    // MOZ
     WEBGL_GET_EXTENSION_CASE(MOZ_debug)
+
+    // OES
     WEBGL_GET_EXTENSION_CASE(OES_element_index_uint)
+    WEBGL_GET_EXTENSION_CASE(OES_fbo_render_mipmap)
     WEBGL_GET_EXTENSION_CASE(OES_standard_derivatives)
     WEBGL_GET_EXTENSION_CASE(OES_texture_float)
     WEBGL_GET_EXTENSION_CASE(OES_texture_float_linear)
     WEBGL_GET_EXTENSION_CASE(OES_texture_half_float)
     WEBGL_GET_EXTENSION_CASE(OES_texture_half_float_linear)
     WEBGL_GET_EXTENSION_CASE(OES_vertex_array_object)
+
+    // WEBGL
     WEBGL_GET_EXTENSION_CASE(WEBGL_color_buffer_float)
     WEBGL_GET_EXTENSION_CASE(WEBGL_compressed_texture_astc)
     WEBGL_GET_EXTENSION_CASE(WEBGL_compressed_texture_etc)
@@ -270,6 +281,7 @@ void WebGLContext::EnableExtension(WebGLExtensionID ext,
     WEBGL_GET_EXTENSION_CASE(WEBGL_debug_renderer_info)
     WEBGL_GET_EXTENSION_CASE(WEBGL_debug_shaders)
     WEBGL_GET_EXTENSION_CASE(WEBGL_depth_texture)
+    WEBGL_GET_EXTENSION_CASE(WEBGL_draw_buffers)
     WEBGL_GET_EXTENSION_CASE(WEBGL_lose_context)
     default:
       MOZ_ASSERT_UNREACHABLE("Illegal extension value");
@@ -299,35 +311,11 @@ void ClientWebGLContext::GetExtension(JSContext* cx, const nsAString& wideName,
 
   if (ext == WebGLExtensionID::Max) return;
 
-  // step 2: if the extension hadn't been previously been created then we
-  // have to tell the host we are using it
+  // step 2: If we have permission to use the extension and if the extension
+  // hadn't been previously been created then we have to tell the host to
+  // activate it.
   ClientWebGLExtensionBase* extObj = GetExtension(callerType, ext, true);
   if (!extObj) return;
-
-  // Step 3: Enable any implied extensions.
-  switch (ext) {
-    case WebGLExtensionID::EXT_color_buffer_float:
-      GetExtension(callerType, WebGLExtensionID::EXT_float_blend, true);
-      break;
-
-    case WebGLExtensionID::OES_texture_float:
-      GetExtension(callerType, WebGLExtensionID::EXT_float_blend, true);
-      GetExtension(callerType, WebGLExtensionID::WEBGL_color_buffer_float,
-                   true);
-      break;
-
-    case WebGLExtensionID::OES_texture_half_float:
-      GetExtension(callerType, WebGLExtensionID::EXT_color_buffer_half_float,
-                   true);
-      break;
-
-    case WebGLExtensionID::WEBGL_color_buffer_float:
-      GetExtension(callerType, WebGLExtensionID::EXT_float_blend, true);
-      break;
-
-    default:
-      break;
-  }
 
   retval.set(WebGLObjectAsJSObject(cx, extObj, rv));
 }
@@ -472,6 +460,10 @@ const Maybe<ExtensionSets> WebGLContext::GetSupportedExtensions() {
 
 ClientWebGLExtensionBase* ClientWebGLContext::UseExtension(
     WebGLExtensionID ext) {
+  if (!mEnabledExtension[static_cast<uint8_t>(ext)]) {
+    return nullptr;
+  }
+
   switch (ext) {
     // ANGLE_
     case WebGLExtensionID::ANGLE_instanced_arrays:
@@ -486,6 +478,8 @@ ClientWebGLExtensionBase* ClientWebGLContext::UseExtension(
       return new ClientWebGLExtensionColorBufferHalfFloat(this);
     case WebGLExtensionID::EXT_disjoint_timer_query:
       return new ClientWebGLExtensionDisjointTimerQuery(this);
+    case WebGLExtensionID::EXT_float_blend:
+      return new ClientWebGLExtensionFloatBlend(this);
     case WebGLExtensionID::EXT_frag_depth:
       return new ClientWebGLExtensionFragDepth(this);
     case WebGLExtensionID::EXT_shader_texture_lod:
@@ -506,6 +500,8 @@ ClientWebGLExtensionBase* ClientWebGLContext::UseExtension(
     // OES_
     case WebGLExtensionID::OES_element_index_uint:
       return new ClientWebGLExtensionElementIndexUint(this);
+    case WebGLExtensionID::OES_fbo_render_mipmap:
+      return new ClientWebGLExtensionFBORenderMipmap(this);
     case WebGLExtensionID::OES_standard_derivatives:
       return new ClientWebGLExtensionStandardDerivatives(this);
     case WebGLExtensionID::OES_texture_float:

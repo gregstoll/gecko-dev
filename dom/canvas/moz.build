@@ -162,6 +162,7 @@ UNIFIED_SOURCES += [
     'WebGLFormats.cpp',
     'WebGLFramebuffer.cpp',
     'WebGLMemoryTracker.cpp',
+    'WebGLObjectModel.cpp',
     'WebGLParent.cpp',
     'WebGLProgram.cpp',
     'WebGLQuery.cpp',

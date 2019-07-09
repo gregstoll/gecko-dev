@@ -37,7 +37,7 @@ using HostWebGLErrorSource = CommandSource<WebGLErrorCommand>;
  */
 class ClientWebGLErrorSink : public CommandSink<WebGLErrorCommand> {
  public:
-  ClientWebGLErrorSink(UniquePtr<Consumer>&& aConsumer);
+  explicit ClientWebGLErrorSink(UniquePtr<Consumer>&& aConsumer);
 
   void SetClientWebGLContext(RefPtr<ClientWebGLContext>& aClientContext);
 

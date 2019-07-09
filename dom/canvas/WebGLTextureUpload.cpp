@@ -68,7 +68,7 @@ bool ClientWebGLContext::ValidateExtents(GLsizei width, GLsizei height,
                                          GLsizei depth, GLint border,
                                          uint32_t* const out_width,
                                          uint32_t* const out_height,
-                                         uint32_t* const out_depth) {
+                                         uint32_t* const out_depth) const {
   // Check border
   if (border != 0) {
     EnqueueErrorInvalidValue("`border` must be 0.");
@@ -324,7 +324,7 @@ MaybeWebGLTexUnpackVariant ClientWebGLContext::ClientFromDomElem(
   RefPtr<gfx::DataSourceSurface> dataSurf;
 
   // TODO: DLP: I have abandoned the fast path -- I always use DataSourceSurface
-  layersImage = nullptr;
+  //  layersImage = nullptr;
 
   if (!layersImage && sfer.GetSourceSurface()) {
     const auto surf = sfer.GetSourceSurface();
@@ -393,6 +393,7 @@ MaybeWebGLTexUnpackVariant ClientWebGLContext::ClientFromDomElem(
     //        width,  height,
     //        depth,  sfer.mAlphaType};
     //    return AsSomeVariant(std::move(texImageData));
+    MOZ_ASSERT_UNREACHABLE("TODO: Unimplemented");
     return Nothing();
   }
 
@@ -401,7 +402,7 @@ MaybeWebGLTexUnpackVariant ClientWebGLContext::ClientFromDomElem(
       MakeUnique<webgl::TexUnpackSurface>(GetPixelStore(), target, width,
                                           height, depth, dataSurf,
                                           sfer.mAlphaType);
-  if ((!texUnpackSurf) || (!texUnpackSurf->mData)) {
+  if ((!texUnpackSurf) || (!texUnpackSurf->mData.HasData())) {
     EnqueueErrorOutOfMemory("Failed to map source surface for upload.");
     return Nothing();
   }

@@ -13,6 +13,16 @@ namespace mozilla {
 
 namespace dom {
 
+WebGLChild::~WebGLChild() {
+  // If we still have a ClientWebGLContext then the CompositorBridge actor was
+  // destroyed before the DOM element and ClientWebGLContext.  Tell the
+  // ClientWebGLContext about that so it doesn't continue to use the actor.
+  mozilla::ClientWebGLContext* context = GetContext();
+  if (context) {
+    context->OnCompositorBridgeDestroyed();
+  }
+}
+
 mozilla::ipc::IPCResult WebGLChild::RecvQueueFailed() {
   mozilla::ClientWebGLContext* context = GetContext();
   if (context) {

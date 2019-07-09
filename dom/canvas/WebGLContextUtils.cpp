@@ -74,6 +74,26 @@ void WebGLContext::GenerateWarning(const char* fmt, va_list ap) const {
   mHost->PostWarning(msg);
 }
 
+void WebGLContext::GenerateEnqueuedWarning(const nsCString& msg) const {
+  if (!ShouldGenerateWarnings()) return;
+
+  mAlreadyGeneratedWarnings++;
+
+  // JS::WarnASCII will print to stderr for us.
+  if (ShouldGenerateWarnings()) {
+    mHost->PostWarning(msg);
+    return;
+  }
+
+  nsCString ncMsg = msg;
+  ncMsg.AppendPrintf(
+      "WebGL: No further warnings will be reported for"
+      " this WebGL context."
+      " (already reported %d warnings)",
+      mAlreadyGeneratedWarnings);
+  mHost->PostWarning(ncMsg);
+}
+
 bool WebGLContext::ShouldGenerateWarnings() const {
   if (mMaxWarnings == -1) return true;
 
@@ -125,6 +145,12 @@ void WebGLContext::GenerateError(const GLenum err, const char* const fmt,
   GenerateWarning(fmt, va);
   va_end(va);
 
+  return SynthesizeGLError(err);
+}
+
+void WebGLContext::GenerateEnqueuedError(const GLenum err,
+                                         const nsCString& msg) const {
+  GenerateEnqueuedWarning(msg);
   return SynthesizeGLError(err);
 }
 

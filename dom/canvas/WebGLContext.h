@@ -326,6 +326,7 @@ class WebGLContext : public SupportsWeakPtr<WebGLContext> {
   void SynthesizeGLError(GLenum err) const;
   void GenerateError(GLenum err, const char* fmt, ...) const
       MOZ_FORMAT_PRINTF(3, 4);
+  void GenerateEnqueuedError(GLenum aGLError, const nsCString& msg) const;
 
   void ErrorInvalidEnum(const char* fmt = 0, ...) const MOZ_FORMAT_PRINTF(2, 3);
   void ErrorInvalidOperation(const char* fmt = 0, ...) const
@@ -1010,24 +1011,17 @@ class WebGLContext : public SupportsWeakPtr<WebGLContext> {
   // enable an extension. the extension should not be enabled before.
   void CreateExtension(WebGLExtensionID ext);
 
+  template <WebGLExtensionID id = WebGLExtensionID(0)>
+  inline void CreateImplicitExtensions(WebGLExtensionID ext);
+
  public:
   // Return an extension if it's supported, optionally enabling it if necessary.
   template <
       WebGLExtensionID ext,
       typename ExtensionClass = typename WebGLExtensionClassMap<ext>::Type>
-  ExtensionClass* GetExtension(
+  inline ExtensionClass* GetExtension(
       bool toEnable = false,
-      dom::CallerType callerType = dom::CallerType::NonSystem) {
-    if (!IsExtensionEnabled(ext)) {
-      if ((!toEnable) || (!IsExtensionSupported(callerType, ext))) {
-        return nullptr;
-      }
-
-      CreateExtension(ext);
-    }
-
-    return static_cast<ExtensionClass*>(mExtensions[ext].get());
-  }
+      dom::CallerType callerType = dom::CallerType::NonSystem);
 
   void EnableExtension(WebGLExtensionID ext,
                        dom::CallerType callerType = dom::CallerType::NonSystem);
@@ -1184,9 +1178,8 @@ class WebGLContext : public SupportsWeakPtr<WebGLContext> {
 
   //////
  public:
-  template <typename T>
   bool ValidateObjectAllowDeleted(const char* const argName,
-                                  const WebGLContextBoundObject<T>& object) {
+                                  const WebGLContextBoundObject& object) {
     if (!object.IsCompatibleWithContext(this)) {
       ErrorInvalidOperation(
           "%s: Object from different WebGL context (or older"
@@ -1341,9 +1334,9 @@ class WebGLContext : public SupportsWeakPtr<WebGLContext> {
   bool mFakeVertexAttrib0DataDefined = false;
   uint8_t mFakeVertexAttrib0Data[sizeof(float) * 4];
 
-  Float32Array4&& GetVertexAttribFloat32Array(GLuint index);
-  Int32Array4&& GetVertexAttribInt32Array(GLuint index);
-  Uint32Array4&& GetVertexAttribUint32Array(GLuint index);
+  Float32Array4 GetVertexAttribFloat32Array(GLuint index);
+  Int32Array4 GetVertexAttribInt32Array(GLuint index);
+  Uint32Array4 GetVertexAttribUint32Array(GLuint index);
 
   GLint mStencilRefFront = 0;
   GLint mStencilRefBack = 0;
@@ -1437,6 +1430,7 @@ class WebGLContext : public SupportsWeakPtr<WebGLContext> {
   void GenerateWarning(const char* fmt, ...) const MOZ_FORMAT_PRINTF(2, 3);
   void GenerateWarning(const char* fmt, va_list ap) const
       MOZ_FORMAT_PRINTF(2, 0);
+  void GenerateEnqueuedWarning(const nsCString& msg) const;
 
   void GeneratePerfWarning(const char* fmt, ...) const MOZ_FORMAT_PRINTF(2, 3);
 
@@ -1490,10 +1484,45 @@ class WebGLContext : public SupportsWeakPtr<WebGLContext> {
   friend class WebGLVertexArrayGL;
 };
 
+template <WebGLExtensionID id>
+inline void WebGLContext::CreateImplicitExtensions(WebGLExtensionID ext) {
+  using Entry = WebGLExtensionClassMap<id>;
+  if (id == ext) {
+    for (size_t i = 0; i < Entry::nImplicitlyActivates; ++i) {
+      if (!IsExtensionEnabled(Entry::implicitlyActivates[i])) {
+        CreateExtension(Entry::implicitlyActivates[i]);
+      }
+    }
+    return;
+  }
+  CreateImplicitExtensions<WebGLExtensionID((int)id + 1)>(ext);
+}
+
+template <>
+inline void WebGLContext::CreateImplicitExtensions<WebGLExtensionID::Max>(
+    WebGLExtensionID) {
+  MOZ_RELEASE_ASSERT(false, "Invalid ID");
+}
+
+template <WebGLExtensionID ext, typename ExtensionClass>
+ExtensionClass* WebGLContext::GetExtension(bool toEnable,
+                                           dom::CallerType callerType) {
+  if (!IsExtensionEnabled(ext)) {
+    if ((!toEnable) || (!IsExtensionSupported(callerType, ext))) {
+      return nullptr;
+    }
+
+    CreateExtension(ext);
+    CreateImplicitExtensions<>(ext);
+  }
+
+  return static_cast<ExtensionClass*>(mExtensions[ext].get());
+}
+
 // Returns `value` rounded to the next highest multiple of `multiple`.
 // AKA PadToAlignment, StrideForAlignment.
 template <typename V, typename M>
-V RoundUpToMultipleOf(const V& value, const M& multiple) {
+inline V RoundUpToMultipleOf(const V& value, const M& multiple) {
   return ((value + multiple - 1) / multiple) * multiple;
 }
 

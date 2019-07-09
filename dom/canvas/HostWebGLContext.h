@@ -84,15 +84,16 @@ class HostWebGLContext : public WebGLContextEndpoint {
 
     virtual IdType Insert(RefType&& aObj, const IdType& aId) {
       // asynchronous contructors must never fail
-      MOZ_ASSERT(aId && aObj &&
-                 ((aObj->Id() == aId.Id()) || (aObj->Id() == 0)));
+      MOZ_ASSERT(aId.IsValid() && !aId.IsNull() && aObj &&
+                 ((aObj->Id() == aId.Id()) || (!aObj->IsValid())));
       aObj->mId = aId.Id();
       Unused << mMap.put(aId, std::move(aObj));
       return aId;
     }
 
     PtrType Find(const IdType& aId) const {
-      if (!aId) {
+      MOZ_ASSERT(aId.IsValid());
+      if (!aId.IsValid() || aId.IsNull()) {
         return nullptr;
       }
       auto it = mMap.lookup(aId);
@@ -100,7 +101,7 @@ class HostWebGLContext : public WebGLContextEndpoint {
     }
 
     void Remove(const IdType& aId) {
-      if (!aId) {
+      if (!aId.IsValid() || aId.IsNull()) {
         return;
       }
       auto it = mMap.lookup(aId);
@@ -134,15 +135,10 @@ class HostWebGLContext : public WebGLContextEndpoint {
 
     // Generate or resurrect aObj.
     IdType Insert(RefType&& aObj, const IdType& aId) override {
-      MOZ_ASSERT((!aId) && aObj);
-      uint64_t curId;
-      if (aObj->Id()) {
-        curId = aObj->Id();
-      } else {
-        curId = mNextId;
-        ++mNextId;
-        aObj->mId = curId;
-      }
+      MOZ_RELEASE_ASSERT((!aId.IsValid()) && aObj);
+      uint64_t curId = mNextId;
+      ++mNextId;
+      aObj->mId = curId;
       IdType ret(curId);
       Unused << BaseType::mMap.put(ret, std::move(aObj));
       return ret;
@@ -157,14 +153,25 @@ class HostWebGLContext : public WebGLContextEndpoint {
                                     const WebGLId<WebGL##_WebGLType>& aId =    \
                                         WebGLId<WebGL##_WebGLType>::Invalid()) \
       const;                                                                   \
-  WebGL##_WebGLType* Find(const WebGLId<WebGL##_WebGLType>& aId) const;        \
+  bool Find(const WebGLId<WebGL##_WebGLType>& aId,                             \
+            RefPtr<WebGL##_WebGLType>& aReturnObj, const char* aCmd) const;    \
   void Remove(const WebGLId<WebGL##_WebGLType>& aId) const;
 
-  // Use this when failure to find an object by ID is a fatal error.
   template <typename WebGLType>
-  WebGLType* MustFind(const WebGLId<WebGLType>& aId) const {
-    auto ret = Find(aId);
-    MOZ_RELEASE_ASSERT(ret);
+  WebGLType* FindOrError(const WebGLId<WebGLType>& aId,
+                         const char* aCmdName) const {
+    RefPtr<WebGLType> ret;
+    if (!Find(aId, ret, aCmdName)) {
+      // Use the context instead of calling PostWarning directly because the
+      // context does its own bookkeeping wrt error messages.
+      // Note: FuncScope requires a check of IsContextLost.
+      const WebGLContext::FuncScope scope(*mContext, aCmdName);
+      Unused << mContext->IsContextLost();
+      mContext->ErrorInvalidOperation(
+          "Null object or object from "
+          "a different WebGL context (or older generation of this one) "
+          "was passed as argument.");
+    }
     return ret;
   }
 
@@ -453,7 +460,7 @@ class HostWebGLContext : public WebGLContextEndpoint {
 
   void FramebufferTextureLayer(GLenum target, GLenum attachment,
                                const WebGLId<WebGLTexture>& textureId,
-                               GLint level, GLint layer);
+                               GLint level, GLint layer, bool toDetach);
 
   void InvalidateFramebuffer(GLenum target,
                              const nsTArray<GLenum>& attachments);
@@ -766,9 +773,9 @@ class HostWebGLContext : public WebGLContextEndpoint {
   // Client-side methods.  Calls in the Host are forwarded to the client.
   // -------------------------------------------------------------------------
  public:
-  void PostWarning(const nsCString& aWarningMsg);
+  void PostWarning(const nsCString& aWarningMsg) const;
 
-  void PostContextCreationError(const nsCString& aMsg);
+  void PostContextCreationError(const nsCString& aMsg) const;
 
   void OnLostContext();
 

@@ -19,6 +19,7 @@ class WebGLChild : public PWebGLChild {
  public:
   mozilla::ipc::IPCResult RecvQueueFailed();
   mozilla::ClientWebGLContext* GetContext();
+  ~WebGLChild();
 
  protected:
   friend mozilla::ClientWebGLContext;

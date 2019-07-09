@@ -100,22 +100,18 @@ using namespace mozilla::gfx;
 using namespace mozilla::gl;
 using namespace mozilla::layers;
 
-WebGLContextOptions::WebGLContextOptions() {
-  // Set default alpha state based on preference.
-  if (gfxPrefs::WebGLDefaultNoAlpha()) alpha = false;
+bool SimpleWebGLContextOptions::operator==(
+    const SimpleWebGLContextOptions& r) const {
+  return memcmp(this, &r, sizeof(SimpleWebGLContextOptions)) == 0;
 }
 
 bool WebGLContextOptions::operator==(const WebGLContextOptions& r) const {
-  bool eq = true;
-  eq &= (alpha == r.alpha);
-  eq &= (depth == r.depth);
-  eq &= (stencil == r.stencil);
-  eq &= (premultipliedAlpha == r.premultipliedAlpha);
-  eq &= (antialias == r.antialias);
-  eq &= (preserveDrawingBuffer == r.preserveDrawingBuffer);
-  eq &= (failIfMajorPerformanceCaveat == r.failIfMajorPerformanceCaveat);
-  eq &= (powerPreference == r.powerPreference);
-  return eq;
+  if (static_cast<const SimpleWebGLContextOptions&>(*this) !=
+      static_cast<const SimpleWebGLContextOptions&>(r)) {
+    return false;
+  }
+  return (rendererStringOverride == r.rendererStringOverride) &&
+         (vendorStringOverride == r.vendorStringOverride);
 }
 
 WebGLContext::WebGLContext()
@@ -1075,21 +1071,18 @@ Maybe<ICRData> WebGLContext::InitializeCanvasRenderer(
     flags |= TextureFlags::NON_PREMULTIPLIED;
   }
 
-  // NB: This is weak.  Creating TextureClient objects in the host-side
-  // WebGLContext class... but these are different concepts of host/client.
-  // Host/ClientWebGLContext represent cross-process communication but
-  // TextureHost/Client represent synchronous texture access, which can
-  // be uniprocess and, for us, is.  Also note that TextureClient couldn't
-  // be in the content process like ClientWebGLContext since TextureClient
-  // uses a GL context.
   UniquePtr<gl::SurfaceFactory> factory = gl::GLScreenBuffer::CreateFactory(
       gl, gl->Caps(), nullptr, backend, gl->IsANGLE(), flags);
   mBackend = backend;
 
   if (!factory) {
-    // Absolutely must have a factory here, so create a basic one
-    factory = MakeUnique<gl::SurfaceFactory_Basic>(gl, gl->Caps(), flags);
-    mBackend = LayersBackend::LAYERS_BASIC;
+    return Nothing();
+  }
+
+  bool isRemoteHostProcess = !XRE_IsContentProcess();
+  if ((factory->mType == SharedSurfaceType::Basic) && isRemoteHostProcess) {
+    MOZ_ASSERT_UNREACHABLE("Basic surfaces do not work with remoted WebGL.");
+    return Nothing();
   }
 
   gl->Screen()->Morph(std::move(factory));
@@ -1213,6 +1206,18 @@ bool WebGLContext::Present() {
     return false;
   }
 
+  // TODO: Due to an unfortunate initialization process, under some
+  // circumstances (that I have not pinned down), we sometimes get here while
+  // still holding the placeholder Basic surface created during setup.  This has
+  // only been seen when running mochitests.  The underlying SurfaceFactory has
+  // already have been replaced.  Note that Basic surfaces are only permitted in
+  // non-remoted WebGL, and Present() ends earlier when WebGL is not run
+  // remotely (ie when WebGL is run in the content process).
+  if (screen->Front()->Surf()->mType == SharedSurfaceType::Basic) {
+    NS_WARNING("Attempted to Present surface of Basic type in remoted WebGL.");
+    return true;
+  }
+
   // TODO: I probably need to hold onto screen->Front()->Surf() somehow
   layers::SurfaceDescriptor surfaceDescriptor;
   screen->Front()->Surf()->ToSurfaceDescriptor(&surfaceDescriptor);
@@ -1325,8 +1330,9 @@ class UpdateContextLossStatusTask : public CancelableRunnable {
 };
 
 void WebGLContext::EnqueueUpdateContextLossStatus() {
-  nsCOMPtr<nsIRunnable> task = new UpdateContextLossStatusTask(this);
-  NS_DispatchToCurrentThread(task);
+  MOZ_ASSERT(MessageLoop::current());
+  MessageLoop::current()->PostTask(
+      do_AddRef(new UpdateContextLossStatusTask(this)));
 }
 
 // We use this timer for many things. Here are the things that it is activated
@@ -2012,7 +2018,7 @@ bool WebGLContext::ValidateArrayBufferView(const dom::ArrayBufferView& view,
 bool ClientWebGLContext::ValidateArrayBufferView(
     const dom::ArrayBufferView& view, GLuint elemOffset,
     GLuint elemCountOverride, const GLenum errorEnum, uint8_t** const out_bytes,
-    size_t* const out_byteLen) {
+    size_t* const out_byteLen) const {
   view.ComputeLengthAndData();
   uint8_t* const bytes = view.DataAllowShared();
   const size_t byteLen = view.LengthAllowShared();
@@ -2101,8 +2107,7 @@ webgl::AvailabilityRunnable* WebGLContext::EnsureAvailabilityRunnable() {
   if (!mAvailabilityRunnable) {
     RefPtr<webgl::AvailabilityRunnable> runnable =
         new webgl::AvailabilityRunnable(this);
-
-    NS_DispatchToCurrentThread(runnable.forget());
+    MessageLoop::current()->PostTask(runnable.forget());
   }
   return mAvailabilityRunnable;
 }

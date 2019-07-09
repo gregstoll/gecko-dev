@@ -36,7 +36,7 @@ class WebGLParent : public PWebGLParent, public SupportsWeakPtr<WebGLParent> {
  protected:
   friend PWebGLParent;
 
-  WebGLParent(UniquePtr<HostWebGLContext>&& aHost);
+  explicit WebGLParent(UniquePtr<HostWebGLContext>&& aHost);
 
   bool BeginCommandQueueDrain();
   static bool MaybeRunCommandQueue(const WeakPtr<WebGLParent>& weakWebGLParent);

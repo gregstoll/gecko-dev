@@ -139,38 +139,29 @@ MaybeWebGLVariant WebGLContext::GetParameter(GLenum pname) {
     switch (pname) {
       case UNMASKED_VENDOR_WEBGL:
       case UNMASKED_RENDERER_WEBGL: {
-        const char* overridePref = nullptr;
+        nsString ret;
         GLenum driverEnum = LOCAL_GL_NONE;
 
         switch (pname) {
           case UNMASKED_RENDERER_WEBGL:
-            overridePref = "webgl.renderer-string-override";
+            ret = mOptions.rendererStringOverride;
             driverEnum = LOCAL_GL_RENDERER;
             break;
           case UNMASKED_VENDOR_WEBGL:
-            overridePref = "webgl.vendor-string-override";
+            ret = mOptions.vendorStringOverride;
             driverEnum = LOCAL_GL_VENDOR;
             break;
           default:
             MOZ_CRASH("GFX: bad `pname`");
         }
 
-        bool hasRetVal = false;
-
-        nsString ret;
-        if (overridePref) {
-          nsresult res = Preferences::GetString(overridePref, ret);
-          if (NS_SUCCEEDED(res) && ret.Length() > 0) hasRetVal = true;
-        }
-
-        if (!hasRetVal) {
+        if (ret.Length() == 0) {
           const char* chars =
               reinterpret_cast<const char*>(gl->fGetString(driverEnum));
           ret = NS_ConvertASCIItoUTF16(chars);
-          hasRetVal = true;
         }
 
-        return AsSomeVariant(std::move(ret));
+        return AsSomeVariant(ret);
       }
     }
   }

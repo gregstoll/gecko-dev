@@ -22,7 +22,7 @@ class ClientWebGLExtensionBase : public nsWrapperCache {
   NS_INLINE_DECL_CYCLE_COLLECTING_NATIVE_REFCOUNTING(ClientWebGLExtensionBase)
   NS_DECL_CYCLE_COLLECTION_SCRIPT_HOLDER_NATIVE_CLASS(ClientWebGLExtensionBase)
 
-  ClientWebGLExtensionBase(RefPtr<ClientWebGLContext> aClient)
+  explicit ClientWebGLExtensionBase(RefPtr<ClientWebGLContext> aClient)
       : mContext(aClient) {}
 
   ClientWebGLContext* GetParentObject() const { return mContext; }
@@ -41,7 +41,7 @@ class ClientWebGLExtensionBase : public nsWrapperCache {
  public:                                                                   \
   virtual JSObject* WrapObject(JSContext* cx,                              \
                                JS::Handle<JSObject*> givenProto) override; \
-  Client##_Extension(RefPtr<ClientWebGLContext> aClient);
+  explicit Client##_Extension(RefPtr<ClientWebGLContext> aClient);
 
 // To be used for implementations of ClientWebGLExtensionBase
 #define DEFINE_WEBGL_EXTENSION_GOOP(_WebGLBindingType, _Extension)             \
@@ -62,7 +62,7 @@ class ClientWebGLExtensionBase : public nsWrapperCache {
    public:                                                                   \
     virtual JSObject* WrapObject(JSContext* cx,                              \
                                  JS::Handle<JSObject*> givenProto) override; \
-    Client##_Extension(RefPtr<ClientWebGLContext> aClient);                  \
+    explicit Client##_Extension(RefPtr<ClientWebGLContext> aClient);         \
   };
 
 ////
@@ -75,8 +75,6 @@ class ClientWebGLExtensionCompressedTextureASTC
     mContext->GetASTCExtensionSupportedProfiles(retval);
   }
 };
-
-DECLARE_SIMPLE_WEBGL_EXTENSION(WebGLExtensionFloatBlend)
 
 DECLARE_SIMPLE_WEBGL_EXTENSION(WebGLExtensionCompressedTextureBPTC)
 
@@ -112,6 +110,8 @@ DECLARE_SIMPLE_WEBGL_EXTENSION(WebGLExtensionElementIndexUint)
 DECLARE_SIMPLE_WEBGL_EXTENSION(WebGLExtensionEXTColorBufferFloat)
 
 DECLARE_SIMPLE_WEBGL_EXTENSION(WebGLExtensionFragDepth)
+
+DECLARE_SIMPLE_WEBGL_EXTENSION(WebGLExtensionFloatBlend)
 
 class ClientWebGLExtensionLoseContext : public ClientWebGLExtensionBase {
   DECLARE_WEBGL_EXTENSION_GOOP(WebGLExtensionLoseContext)
@@ -155,15 +155,23 @@ class ClientWebGLExtensionVertexArray : public ClientWebGLExtensionBase {
     return mContext->CreateVertexArray(true);
   }
   void DeleteVertexArrayOES(ClientWebGLVertexArray* array) {
+    if (!array) {
+      return;
+    }
     mContext->DeleteVertexArray(array, true);
   }
   bool IsVertexArrayOES(const ClientWebGLVertexArray* array) {
     return mContext->IsVertexArray(array, true);
   }
   void BindVertexArrayOES(ClientWebGLVertexArray* array) {
+    if (!array) {
+      return;
+    }
     mContext->BindVertexArray(array, true);
   }
 };
+
+class ClientWebGLExtensionMultiview : public ClientWebGLExtensionBase {};
 
 class ClientWebGLExtensionInstancedArrays : public ClientWebGLExtensionBase {
   DECLARE_WEBGL_EXTENSION_GOOP(WebGLExtensionInstancedArrays)
@@ -195,6 +203,9 @@ class ClientWebGLExtensionDisjointTimerQuery : public ClientWebGLExtensionBase {
     mContext->DeleteQuery(query, true);
   }
   bool IsQueryEXT(const ClientWebGLQuery* query) const {
+    if (!query) {
+      return false;
+    }
     return mContext->IsQuery(query, true);
   }
   void BeginQueryEXT(GLenum target, ClientWebGLQuery& query) const {

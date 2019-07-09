@@ -79,31 +79,34 @@ extern LazyLogModule gPCQLog;
 struct PcqStatus {
   enum EStatus {
     // Operation was successful
-    Success,
+    kSuccess,
     // The operation failed because the queue isn't ready for it.
     // Either the queue is too full for an insert or too empty for a remove.
     // The operation may succeed if retried.
-    PcqNotReady,
+    kNotReady,
     // The operation was typed and the type check failed.
-    PcqTypeError,
+    kTypeError,
     // The operation required more room than the queue supports.
     // It should not be retried -- it will always fail.
-    PcqTooSmall,
+    kTooSmall,
     // The operation failed for some reason that is unrecoverable.
     // All values below this value indicate a fata error.
-    PcqFatalError,
+    kFatalError,
     // Fatal error: Internal processing ran out of memory.  This is likely e.g.
     // during de-serialization.
-    PcqOOMError,
+    kOOMError,
   } mValue;
 
-  PcqStatus(EStatus status = Success) : mValue(status) {}
-  operator bool() { return mValue == Success; }
+  PcqStatus() : mValue(PcqStatus::kSuccess) {}
+  MOZ_IMPLICIT PcqStatus(EStatus status) : mValue(status) {}
+  MOZ_IMPLICIT operator bool() { return mValue == PcqStatus::kSuccess; }
   bool operator==(const EStatus& o) { return mValue == o; }
   bool operator!=(const EStatus& o) { return !(*this == o); }
 };
 
-bool IsSuccess(PcqStatus status) { return status == PcqStatus::Success; }
+inline bool IsSuccess(PcqStatus status) {
+  return status == PcqStatus::kSuccess;
+}
 
 template <typename T>
 struct RemoveCVR {
@@ -189,7 +192,7 @@ class ProducerView {
       : mProducer(aProducer),
         mRead(aRead),
         mWrite(aWrite),
-        mStatus(PcqStatus::Success) {}
+        mStatus(PcqStatus::kSuccess) {}
 
   /**
    * Write bytes from aBuffer to the producer if there is enough room.
@@ -212,7 +215,7 @@ class ProducerView {
   template <typename Arg>
   PcqStatus WriteTypedParam(const Arg& aArg) {
     return mozilla::ipc::PcqParamTraits<PcqTypedArg<Arg>>::Write(
-        *this, PcqTypedArg(aArg));
+        *this, PcqTypedArg<Arg>(aArg));
   }
 
   /**
@@ -226,7 +229,7 @@ class ProducerView {
 
   inline size_t MinSizeBytes(size_t aNBytes);
 
-  PcqStatus Status() { return mStatus; }
+  PcqStatus GetStatus() { return mStatus; }
 
  private:
   Producer* mProducer;
@@ -245,7 +248,7 @@ class ConsumerView {
       : mConsumer(aConsumer),
         mRead(aRead),
         mWrite(aWrite),
-        mStatus(PcqStatus::Success) {}
+        mStatus(PcqStatus::kSuccess) {}
 
   // When reading raw memory blocks, we may get an error, a shared memory
   // object that we take ownership of, or a pointer to a block of
@@ -296,7 +299,7 @@ class ConsumerView {
   template <typename Arg>
   PcqStatus ReadTypedParam(Arg* aArg = nullptr) {
     return mozilla::ipc::PcqParamTraits<PcqTypedArg<Arg>>::Read(
-        *this, PcqTypedArg(aArg));
+        *this, PcqTypedArg<Arg>(aArg));
   }
 
   /**
@@ -310,7 +313,7 @@ class ConsumerView {
 
   inline size_t MinSizeBytes(size_t aNBytes);
 
-  PcqStatus Status() { return mStatus; }
+  PcqStatus GetStatus() { return mStatus; }
 
  private:
   Consumer* mConsumer;
@@ -354,19 +357,14 @@ constexpr size_t GetMaxHeaderSize() {
   return maxAlign1 + readAndAlign2 + writeAndAlign3;
 }
 
-size_t UsedBytes(size_t aQueueBufferSize, size_t aRead, size_t aWrite) {
+inline size_t UsedBytes(size_t aQueueBufferSize, size_t aRead, size_t aWrite) {
   return (aRead <= aWrite) ? aWrite - aRead
                            : (aQueueBufferSize - aRead) + aWrite;
 }
 
-size_t FreeBytes(size_t aQueueBufferSize, size_t aRead, size_t aWrite) {
+inline size_t FreeBytes(size_t aQueueBufferSize, size_t aRead, size_t aWrite) {
   // Remember, queueSize is queueBufferSize-1
   return (aQueueBufferSize - 1) - UsedBytes(aQueueBufferSize, aRead, aWrite);
-}
-
-template <typename View, typename Arg, typename... Args>
-size_t MinSizeofArgs(View& aView, const Arg* aArg, const Args*... aArgs) {
-  return aView.MinSizeParam(aArg) + MinSizeofArgs(aView, aArgs...);
 }
 
 template <typename View>
@@ -374,15 +372,20 @@ size_t MinSizeofArgs(View&) {
   return 0;
 }
 
+template <typename View, typename Arg, typename... Args>
+size_t MinSizeofArgs(View& aView, const Arg* aArg, const Args*... aArgs) {
+  return aView.MinSizeParam(aArg) + MinSizeofArgs(aView, aArgs...);
+}
+
 template <typename View, typename Arg1, typename Arg2, typename... Args>
 size_t MinSizeofArgs(View& aView) {
-  return aView.MinSizeParam<Arg1>(nullptr) +
+  return aView.template MinSizeParam<Arg1>(nullptr) +
          MinSizeofArgs<Arg2, Args...>(aView);
 }
 
 template <typename View, typename Arg>
 size_t MinSizeofArgs(View& aView) {
-  return aView.MinSizeParam(nullptr);
+  return aView.template MinSizeParam<Arg>(nullptr);
 }
 
 // Currently, require any parameters expected to need more than 1/16 the total
@@ -390,7 +393,7 @@ size_t MinSizeofArgs(View& aView) {
 // TODO: Base this heuristic on something.  Also, if I made the PCQ size
 // (aTotal) a template parameter then this could be a compile-time check
 // in nearly all cases.
-bool NeedsSharedMemory(size_t aRequested, size_t aTotal) {
+inline bool NeedsSharedMemory(size_t aRequested, size_t aTotal) {
   return (aTotal / 16) < aRequested;
 }
 
@@ -404,7 +407,7 @@ class Marshaller {
                                size_t aArgLength) {
     const uint8_t* buf = reinterpret_cast<const uint8_t*>(aArg);
     if (FreeBytes(aQueueBufferSize, aRead, *aWrite) < aArgLength) {
-      return PcqStatus::PcqNotReady;
+      return PcqStatus::kNotReady;
     }
 
     if (*aWrite + aArgLength <= aQueueBufferSize) {
@@ -415,7 +418,7 @@ class Marshaller {
       memcpy(aQueue, &buf[firstLen], aArgLength - firstLen);
     }
     *aWrite = (*aWrite + aArgLength) % aQueueBufferSize;
-    return PcqStatus::Success;
+    return PcqStatus::kSuccess;
   }
 
   // The PcqBase must belong to a Consumer.
@@ -423,7 +426,7 @@ class Marshaller {
                               size_t* aRead, size_t aWrite, void* aArg,
                               size_t aArgLength) {
     if (UsedBytes(aQueueBufferSize, *aRead, aWrite) < aArgLength) {
-      return PcqStatus::PcqNotReady;
+      return PcqStatus::kNotReady;
     }
 
     if (aArg) {
@@ -438,14 +441,16 @@ class Marshaller {
     }
 
     *aRead = (*aRead + aArgLength) % aQueueBufferSize;
-    return PcqStatus::Success;
+    return PcqStatus::kSuccess;
   }
 };
 
 class PcqRCSemaphore {
  public:
   NS_INLINE_DECL_THREADSAFE_REFCOUNTING(PcqRCSemaphore)
-  PcqRCSemaphore(CrossProcessSemaphore* aSem) : mSem(aSem) { MOZ_ASSERT(mSem); }
+  explicit PcqRCSemaphore(CrossProcessSemaphore* aSem) : mSem(aSem) {
+    MOZ_ASSERT(mSem);
+  }
 
   bool Wait(const Maybe<TimeDuration>& aTime) { return mSem->Wait(aTime); }
   void Signal() { mSem->Signal(); }
@@ -710,7 +715,7 @@ class Producer : public detail::PcqBase {
           "Queue was found in an invalid state.  Queue Size: %zu.  "
           "Read: %zu.  Write: %zu",
           Size(), read, write);
-      return PcqStatus::PcqFatalError;
+      return PcqStatus::kFatalError;
     }
 
     ProducerView view(this, read, &write);
@@ -724,7 +729,7 @@ class Producer : public detail::PcqBase {
           "Queue is too small for objects.  Queue Size: %zu.  "
           "Needed: %zu",
           Size(), bytesNeeded);
-      return PcqStatus::PcqTooSmall;
+      return PcqStatus::kTooSmall;
     }
 
     if (FreeBytes(read, write) < bytesNeeded) {
@@ -732,7 +737,7 @@ class Producer : public detail::PcqBase {
           "Not enough room to insert.  Has: %zu (%zu,%zu).  "
           "Needed: %zu",
           FreeBytes(read, write), read, write, bytesNeeded);
-      return PcqStatus::PcqNotReady;
+      return PcqStatus::kNotReady;
     }
 
     // Try to insert args in sequence.  Only update the queue if the
@@ -757,7 +762,7 @@ class Producer : public detail::PcqBase {
         UsedBytes(read, (initWrite + bytesNeeded) % QueueBufferSize());
     MOZ_ASSERT(enoughBytes);
     if (!enoughBytes) {
-      return PcqStatus::PcqFatalError;
+      return PcqStatus::kFatalError;
     }
 
     // Commit the transaction.
@@ -781,7 +786,8 @@ class Producer : public detail::PcqBase {
    * succeed in the time allotted then the queue is unchanged.
    */
   template <typename... Args>
-  PcqStatus TryWaitInsert(Maybe<TimeDuration> aDuration, Args&&... aArgs) {
+  PcqStatus TryWaitInsert(const Maybe<TimeDuration>& aDuration,
+                          Args&&... aArgs) {
     return TryWaitInsertImpl(false, aDuration, std::forward<Args>(aArgs)...);
   }
 
@@ -801,7 +807,7 @@ class Producer : public detail::PcqBase {
     return IsSuccess(status) ? TryInsertHelper(aView, aArgs...) : status;
   }
 
-  PcqStatus TryInsertHelper(ProducerView&) { return PcqStatus::Success; }
+  PcqStatus TryInsertHelper(ProducerView&) { return PcqStatus::kSuccess; }
 
   template <typename Arg>
   PcqStatus TryInsertItem(ProducerView& aView, const Arg& aArg) {
@@ -809,13 +815,14 @@ class Producer : public detail::PcqBase {
   }
 
   template <typename... Args>
-  PcqStatus TryWaitInsertImpl(bool aRecursed, Maybe<TimeDuration> aDuration,
+  PcqStatus TryWaitInsertImpl(bool aRecursed,
+                              const Maybe<TimeDuration>& aDuration,
                               Args&&... aArgs) {
     // Wait up to aDuration for the not-full semaphore to be signaled.
     // If we run out of time then quit.
     TimeStamp start(TimeStamp::Now());
     if (aRecursed && (!mMaybeNotFullSem->Wait(aDuration))) {
-      return PcqStatus::PcqNotReady;
+      return PcqStatus::kNotReady;
     }
 
     // Attempt to insert all args.  No waiting is done here.
@@ -831,7 +838,7 @@ class Producer : public detail::PcqBase {
       if ((!IsFull()) && (!mMaybeNotFullSem->IsAvailable())) {
         mMaybeNotFullSem->Signal();
       }
-    } else if ((status == PcqStatus::PcqNotReady) &&
+    } else if ((status == PcqStatus::kNotReady) &&
                (aDuration.isNothing() ||
                 ((now = TimeStamp::Now()) - start) < aDuration.value())) {
       // We don't have enough room but still have time, e.g. because
@@ -934,7 +941,7 @@ class Consumer : public detail::PcqBase {
    * unchanged. Pass Nothing to wait until peek succeeds.
    */
   template <typename... Args>
-  PcqStatus TryWaitPeek(Maybe<TimeDuration> aDuration, Args&... aArgs) {
+  PcqStatus TryWaitPeek(const Maybe<TimeDuration>& aDuration, Args&... aArgs) {
     return TryWaitPeekOrRemove<false>(aDuration, aArgs...);
   }
 
@@ -943,7 +950,8 @@ class Consumer : public detail::PcqBase {
    * Pass Nothing to wait until removal succeeds.
    */
   template <typename... Args>
-  PcqStatus TryWaitRemove(Maybe<TimeDuration> aDuration, Args&... aArgs) {
+  PcqStatus TryWaitRemove(const Maybe<TimeDuration>& aDuration,
+                          Args&... aArgs) {
     return TryWaitPeekOrRemove<true>(aDuration, aArgs...);
   }
 
@@ -954,12 +962,12 @@ class Consumer : public detail::PcqBase {
    * Pass Nothing to wait until removal succeeds.
    */
   template <typename... Args>
-  PcqStatus TryWaitRemove(Maybe<TimeDuration> aDuration) {
+  PcqStatus TryWaitRemove(const Maybe<TimeDuration>& aDuration) {
     // Wait up to aDuration for the not-empty semaphore to be signaled.
     // If we run out of time then quit.
     TimeStamp start(TimeStamp::Now());
     if (!mMaybeNotEmptySem->Wait(aDuration)) {
-      return PcqStatus::PcqNotReady;
+      return PcqStatus::kNotReady;
     }
 
     // Attempt to remove all args.  No waiting is done here.
@@ -975,7 +983,7 @@ class Consumer : public detail::PcqBase {
       if ((!IsEmpty()) && (!mMaybeNotEmptySem->IsAvailable())) {
         mMaybeNotEmptySem->Signal();
       }
-    } else if ((status == PcqStatus::PcqNotReady) &&
+    } else if ((status == PcqStatus::kNotReady) &&
                (aDuration.isNothing() ||
                 ((now = TimeStamp::Now()) - start) < aDuration.value())) {
       // We don't have enough data but still have time, e.g. because
@@ -1008,7 +1016,7 @@ class Consumer : public detail::PcqBase {
           "Queue was found in an invalid state.  Queue Size: %zu.  "
           "Read: %zu.  Write: %zu",
           Size(), read, write);
-      return PcqStatus::PcqFatalError;
+      return PcqStatus::kFatalError;
     }
 
     ConsumerView view(this, &read, write);
@@ -1022,7 +1030,7 @@ class Consumer : public detail::PcqBase {
           "Queue is too small for objects.  Queue Size: %zu.  "
           "Bytes needed: %zu.",
           Size(), bytesNeeded);
-      return PcqStatus::PcqTooSmall;
+      return PcqStatus::kTooSmall;
     }
 
     if (UsedBytes(read, write) < bytesNeeded) {
@@ -1030,7 +1038,7 @@ class Consumer : public detail::PcqBase {
           "Not enough data in queue.  Has: %zu (%zu,%zu).  "
           "Bytes needed: %zu",
           UsedBytes(read, write), read, write, bytesNeeded);
-      return PcqStatus::PcqNotReady;
+      return PcqStatus::kNotReady;
     }
 
     // Only update the queue if the operation was successful and we aren't
@@ -1047,7 +1055,7 @@ class Consumer : public detail::PcqBase {
         FreeBytes((initRead + bytesNeeded) % QueueBufferSize(), write);
     MOZ_ASSERT(enoughBytes);
     if (!enoughBytes) {
-      return PcqStatus::PcqFatalError;
+      return PcqStatus::kFatalError;
     }
 
     MOZ_ASSERT(ValidState(read, write));
@@ -1080,7 +1088,7 @@ class Consumer : public detail::PcqBase {
   }
 
   template <bool isRemove, typename... Args>
-  PcqStatus TryWaitPeekOrRemove(Maybe<TimeDuration> aDuration,
+  PcqStatus TryWaitPeekOrRemove(const Maybe<TimeDuration>& aDuration,
                                 Args&&... aArgs) {
     return TryWaitPeekOrRemoveImpl<isRemove>(false, aDuration,
                                              std::forward<Args>(aArgs)...);
@@ -1088,13 +1096,13 @@ class Consumer : public detail::PcqBase {
 
   template <bool isRemove, typename... Args>
   PcqStatus TryWaitPeekOrRemoveImpl(bool aRecursed,
-                                    Maybe<TimeDuration> aDuration,
+                                    const Maybe<TimeDuration>& aDuration,
                                     Args&... aArgs) {
     // Wait up to aDuration for the not-empty semaphore to be signaled.
     // If we run out of time then quit.
     TimeStamp start(TimeStamp::Now());
     if (aRecursed && (!mMaybeNotEmptySem->Wait(aDuration))) {
-      return PcqStatus::PcqNotReady;
+      return PcqStatus::kNotReady;
     }
 
     // Attempt to read all args.  No waiting is done here.
@@ -1110,7 +1118,7 @@ class Consumer : public detail::PcqBase {
       if ((!IsEmpty()) && (!mMaybeNotEmptySem->IsAvailable())) {
         mMaybeNotEmptySem->Signal();
       }
-    } else if ((status == PcqStatus::PcqNotReady) &&
+    } else if ((status == PcqStatus::kNotReady) &&
                (aDuration.isNothing() ||
                 ((now = TimeStamp::Now()) - start) < aDuration.value())) {
       // We don't have enough data but still have time, e.g. because
@@ -1140,7 +1148,7 @@ class Consumer : public detail::PcqBase {
 
   template <>
   PcqStatus TryPeekRemoveHelper<>(ConsumerView&) {
-    return PcqStatus::Success;
+    return PcqStatus::kSuccess;
   }
 
   // If an item is available then it is copied into aArg.  The item is skipped
@@ -1177,11 +1185,11 @@ PcqStatus ProducerView::Write(const void* aBuffer, size_t aBufferSize) {
   if (detail::NeedsSharedMemory(aBufferSize, mProducer->Size())) {
     RefPtr<SharedMemoryBasic> smem = MakeRefPtr<SharedMemoryBasic>();
     if (!smem->Create(aBufferSize) || !smem->Map(aBufferSize)) {
-      return PcqStatus::PcqFatalError;
+      return PcqStatus::kFatalError;
     }
     SharedMemoryBasic::Handle handle;
     if (!smem->ShareToProcess(mProducer->mOtherPid, &handle)) {
-      return PcqStatus::PcqFatalError;
+      return PcqStatus::kFatalError;
     }
     memcpy(smem->memory(), aBuffer, aBufferSize);
     smem->CloseHandle();
@@ -1206,9 +1214,9 @@ PcqStatus ConsumerView::Read(void* aBuffer, size_t aBufferSize) {
         if (mBuffer) {
           memcpy(mBuffer, smem->memory(), mBufferSize);
         }
-        ret = PcqStatus::Success;
+        ret = PcqStatus::kSuccess;
       } else {
-        ret = PcqStatus::PcqFatalError;
+        ret = PcqStatus::kFatalError;
       }
       // TODO: Problem: CloseHandle should only be called on the remove/skip
       // call.  A peek should not CloseHandle!
@@ -1238,15 +1246,11 @@ PcqStatus ConsumerView::Read(void* aBuffer, size_t aBufferSize) {
 
 template <typename Matcher>
 PcqStatus ConsumerView::ReadVariant(size_t aBufferSize, Matcher&& aMatcher) {
-  if (!mStatus) {
-    return mStatus;
-  }
-
   if (detail::NeedsSharedMemory(aBufferSize, mConsumer->Size())) {
     // Always read shared-memory -- don't just skip.
     SharedMemoryBasic::Handle handle;
     if (!ReadParam(&handle)) {
-      return Status();
+      return GetStatus();
     }
 
     // TODO: Find some way to MOZ_RELEASE_ASSERT that buffersize exactly matches
@@ -1259,7 +1263,8 @@ PcqStatus ConsumerView::ReadVariant(size_t aBufferSize, Matcher&& aMatcher) {
         !sharedMem->SetHandle(handle,
                               mozilla::ipc::SharedMemory::RightsReadWrite) ||
         !sharedMem->Map(aBufferSize)) {
-      return PcqStatus::PcqFatalError;
+      sharedMem->CloseHandle();
+      return PcqStatus::kFatalError;
     }
     return aMatcher(sharedMem);
   }
@@ -1445,6 +1450,18 @@ struct IPDLParamTraits<mozilla::detail::PcqBase> {
                    aParam.mMaybeNotFullSem->ShareToProcess(aActor->OtherPid()));
   }
 
+  static bool IsValidSemaphoreHandle(
+      const CrossProcessSemaphoreHandle& aHandle) {
+#ifdef OS_WIN
+    return aHandle != nullptr;
+#elif defined(OS_POSIX)
+    return aHandle.fd != -1;
+#else
+    // TODO: MACOS CrossProcessSemaphore
+    return true;
+#endif
+  }
+
   static bool Read(const IPC::Message* aMsg, PickleIterator* aIter,
                    IProtocol* aActor, paramType* aResult) {
     size_t queueSize;
@@ -1459,7 +1476,8 @@ struct IPDLParamTraits<mozilla::detail::PcqBase> {
       return false;
     }
 
-    MOZ_ASSERT(notEmptyHandle && notFullHandle);
+    MOZ_ASSERT(IsValidSemaphoreHandle(notEmptyHandle) &&
+               IsValidSemaphoreHandle(notFullHandle));
     aResult->Set(shmem, aActor->OtherPid(), queueSize,
                  MakeRefPtr<detail::PcqRCSemaphore>(
                      CrossProcessSemaphore::Create(notEmptyHandle)),
@@ -1500,13 +1518,13 @@ struct PcqParamTraits<PcqTypedArg<Arg>> {
 
   template <PcqTypeInfoID ArgTypeId = PcqTypeInfo<Arg>::ID>
   static PcqStatus Read(ConsumerView& aConsumerView, ParamType* aArg) {
-    MOZ_ASSERT(aArg.mRead);
+    MOZ_ASSERT(aArg->mRead);
     PcqTypeInfoID typeId;
     if (!aConsumerView.ReadParam(&typeId)) {
-      return aConsumerView.Status();
+      return aConsumerView.GetStatus();
     }
-    return (typeId == ArgTypeId) ? aConsumerView.ReadParam(aArg)
-                                 : PcqStatus::PcqTypeError;
+    return (typeId == ArgTypeId) ? aConsumerView.ReadParam(aArg->mRead)
+                                 : PcqStatus::kTypeError;
   }
 
   template <typename View>
@@ -1561,12 +1579,12 @@ struct PcqParamTraits<nsACString> {
 
   static PcqStatus Write(ProducerView& aProducerView, const ParamType& aArg) {
     if ((!aProducerView.WriteParam(aArg.IsVoid())) || aArg.IsVoid()) {
-      return aProducerView.Status();
+      return aProducerView.GetStatus();
     }
 
     uint32_t len = aArg.Length();
     if ((!aProducerView.WriteParam(len)) || (len == 0)) {
-      return aProducerView.Status();
+      return aProducerView.GetStatus();
     }
 
     return aProducerView.Write(aArg.BeginReading(), len);
@@ -1575,39 +1593,39 @@ struct PcqParamTraits<nsACString> {
   static PcqStatus Read(ConsumerView& aConsumerView, ParamType* aArg) {
     bool isVoid = false;
     if (!aConsumerView.ReadParam(&isVoid)) {
-      return aConsumerView.Status();
+      return aConsumerView.GetStatus();
     }
     if (aArg) {
       aArg->SetIsVoid(isVoid);
     }
     if (isVoid) {
-      return PcqStatus::Success;
+      return PcqStatus::kSuccess;
     }
 
     uint32_t len = 0;
     if (!aConsumerView.ReadParam(&len)) {
-      return aConsumerView.Status();
+      return aConsumerView.GetStatus();
     }
 
     if (len == 0) {
       if (aArg) {
         *aArg = "";
       }
-      return PcqStatus::Success;
+      return PcqStatus::kSuccess;
     }
 
     char* buf = aArg ? new char[len + 1] : nullptr;
     if (aArg && (!buf)) {
-      return PcqStatus::PcqOOMError;
+      return PcqStatus::kOOMError;
     }
     if (!aConsumerView.Read(buf, len)) {
-      return aConsumerView.Status();
+      return aConsumerView.GetStatus();
     }
     buf[len] = '\0';
     if (aArg) {
       aArg->Adopt(buf, len);
     }
-    return PcqStatus::Success;
+    return PcqStatus::kSuccess;
   }
 
   template <typename View>
@@ -1628,12 +1646,12 @@ struct PcqParamTraits<nsAString> {
 
   static PcqStatus Write(ProducerView& aProducerView, const ParamType& aArg) {
     if ((!aProducerView.WriteParam(aArg.IsVoid())) || (aArg.IsVoid())) {
-      return aProducerView.Status();
+      return aProducerView.GetStatus();
     }
     // DLP: No idea if this includes null terminator
     uint32_t len = aArg.Length();
     if ((!aProducerView.WriteParam(len)) || (len == 0)) {
-      return aProducerView.Status();
+      return aProducerView.GetStatus();
     }
     constexpr const uint32_t sizeofchar = sizeof(typename ParamType::char_type);
     return aProducerView.Write(aArg.BeginReading(), len * sizeofchar);
@@ -1642,26 +1660,26 @@ struct PcqParamTraits<nsAString> {
   static PcqStatus Read(ConsumerView& aConsumerView, ParamType* aArg) {
     bool isVoid = false;
     if (!aConsumerView.ReadParam(&isVoid)) {
-      return aConsumerView.Status();
+      return aConsumerView.GetStatus();
     }
     if (aArg) {
       aArg->SetIsVoid(isVoid);
     }
     if (isVoid) {
-      return PcqStatus::Success;
+      return PcqStatus::kSuccess;
     }
 
     // DLP: No idea if this includes null terminator
     uint32_t len = 0;
     if (!aConsumerView.ReadParam(&len)) {
-      return aConsumerView.Status();
+      return aConsumerView.GetStatus();
     }
 
     if (len == 0) {
       if (aArg) {
-        *aArg = L"";
+        aArg->AssignLiteral(u"");
       }
-      return PcqStatus::Success;
+      return PcqStatus::kSuccess;
     }
 
     uint32_t sizeofchar = sizeof(typename ParamType::char_type);
@@ -1670,12 +1688,12 @@ struct PcqParamTraits<nsAString> {
       buf = static_cast<typename ParamType::char_type*>(
           malloc((len + 1) * sizeofchar));
       if (!buf) {
-        return PcqStatus::PcqOOMError;
+        return PcqStatus::kOOMError;
       }
     }
 
     if (!aConsumerView.Read(buf, len * sizeofchar)) {
-      return aConsumerView.Status();
+      return aConsumerView.GetStatus();
     }
 
     buf[len] = L'\0';
@@ -1683,7 +1701,7 @@ struct PcqParamTraits<nsAString> {
       aArg->Adopt(buf, len);
     }
 
-    return PcqStatus::Success;
+    return PcqStatus::kSuccess;
   }
 
   template <typename View>
@@ -1717,10 +1735,10 @@ template <typename NSTArrayType,
 struct NSArrayPcqParamTraits;
 
 // For ElementTypes that are !IsTriviallySerializable
-template <typename ElementType>
-struct NSArrayPcqParamTraits<nsTArray<ElementType>, false> {
-  using ParamType = nsTArray<ElementType>;
-  using ElementType = ElementType;
+template <typename T>
+struct NSArrayPcqParamTraits<nsTArray<T>, false> {
+  using ParamType = nsTArray<T>;
+  using ElementType = T;
 
   static PcqStatus Write(ProducerView& aProducerView, const ParamType& aArg) {
     size_t arrayLen = aArg.Length();
@@ -1728,24 +1746,24 @@ struct NSArrayPcqParamTraits<nsTArray<ElementType>, false> {
     for (size_t i = 0; i < aArg.Length(); ++i) {
       aProducerView.WriteParam(aArg[i]);
     }
-    return aProducerView.Status();
+    return aProducerView.GetStatus();
   }
 
   static PcqStatus Read(ConsumerView& aConsumerView, ParamType* aArg) {
     size_t arrayLen;
     if (!aConsumerView.ReadParam(&arrayLen)) {
-      return aConsumerView.Status();
+      return aConsumerView.GetStatus();
     }
 
     if (aArg && !aArg->AppendElements(arrayLen, fallible)) {
-      return PcqStatus::PcqOOMError;
+      return PcqStatus::kOOMError;
     }
 
     for (size_t i = 0; i < arrayLen; ++i) {
       ElementType* elt = aArg ? (&aArg->ElementAt(i)) : nullptr;
       aConsumerView.ReadParam(elt);
     }
-    return aConsumerView.Status();
+    return aConsumerView.GetStatus();
   }
 
   template <typename View>
@@ -1757,34 +1775,45 @@ struct NSArrayPcqParamTraits<nsTArray<ElementType>, false> {
 
     size_t arrayLen = aArg->Length();
     for (size_t i = 0; i < arrayLen; ++i) {
-      ret += aView.MinSizeParam(&aArg[i]);
+      ret += aView.MinSizeParam(&((*aArg)[i]));
     }
     return ret;
   }
 };
 
 // For ElementTypes that are IsTriviallySerializable
-template <typename ElementType>
-struct NSArrayPcqParamTraits<nsTArray<ElementType>, true> {
-  using ParamType = nsTArray<ElementType>;
-  using ElementType = ElementType;
+template <typename T>
+struct NSArrayPcqParamTraits<nsTArray<T>, true> {
+  using ParamType = nsTArray<T>;
+  using ElementType = T;
 
   // TODO: Are there alignment issues?
 
   static PcqStatus Write(ProducerView& aProducerView, const ParamType& aArg) {
     size_t arrayLen = aArg.Length();
     aProducerView.WriteParam(arrayLen);
+    if (arrayLen == 0) {
+      return aProducerView.GetStatus();
+    }
     return aProducerView.Write(&aArg[0], aArg.Length() * sizeof(ElementType));
   }
 
   static PcqStatus Read(ConsumerView& aConsumerView, ParamType* aArg) {
     size_t arrayLen;
     if (!aConsumerView.ReadParam(&arrayLen)) {
-      return aConsumerView.Status();
+      return aConsumerView.GetStatus();
+    }
+
+    if (aArg) {
+      aArg->Clear();
+    }
+
+    if (arrayLen == 0) {
+      return aConsumerView.GetStatus();
     }
 
     if (aArg && !aArg->AppendElements(arrayLen, fallible)) {
-      return PcqStatus::PcqOOMError;
+      return PcqStatus::kOOMError;
     }
 
     return aConsumerView.Read(aArg->Elements(), arrayLen * sizeof(ElementType));
@@ -1816,16 +1845,16 @@ template <typename ArrayType,
 struct ArrayPcqParamTraits;
 
 // For ElementTypes that are !IsTriviallySerializable
-template <typename ElementType, size_t Length>
-struct ArrayPcqParamTraits<Array<ElementType, Length>, false> {
-  using ParamType = Array<ElementType, Length>;
-  using ElementType = ElementType;
+template <typename T, size_t Length>
+struct ArrayPcqParamTraits<Array<T, Length>, false> {
+  using ParamType = Array<T, Length>;
+  using ElementType = T;
 
   static PcqStatus Write(ProducerView& aProducerView, const ParamType& aArg) {
     for (size_t i = 0; i < Length; ++i) {
       aProducerView.WriteParam(aArg[i]);
     }
-    return aProducerView.Status();
+    return aProducerView.GetStatus();
   }
 
   static PcqStatus Read(ConsumerView& aConsumerView, ParamType* aArg) {
@@ -1833,11 +1862,12 @@ struct ArrayPcqParamTraits<Array<ElementType, Length>, false> {
       ElementType* elt = aArg ? (&((*aArg)[i])) : nullptr;
       aConsumerView.ReadParam(elt);
     }
-    return aConsumerView.Status();
+    return aConsumerView.GetStatus();
   }
 
   template <typename View>
   static size_t MinSize(View& aView, const ParamType* aArg) {
+    size_t ret = 0;
     for (size_t i = 0; i < Length; ++i) {
       ret += aView.MinSizeParam(&((*aArg)[i]));
     }
@@ -1846,10 +1876,10 @@ struct ArrayPcqParamTraits<Array<ElementType, Length>, false> {
 };
 
 // For ElementTypes that are IsTriviallySerializable
-template <typename ElementType, size_t Length>
-struct ArrayPcqParamTraits<Array<ElementType, Length>, true> {
-  using ParamType = Array<ElementType, Length>;
-  using ElementType = ElementType;
+template <typename T, size_t Length>
+struct ArrayPcqParamTraits<Array<T, Length>, true> {
+  using ParamType = Array<T, Length>;
+  using ElementType = T;
 
   static PcqStatus Write(ProducerView& aProducerView, const ParamType& aArg) {
     return aProducerView.Write(aArg.begin(), sizeof(ElementType[Length]));
@@ -1880,20 +1910,20 @@ struct PcqParamTraits<Maybe<ElementType>> {
   static PcqStatus Write(ProducerView& aProducerView, const ParamType& aArg) {
     aProducerView.WriteParam(aArg.mIsSome);
     return (aArg.mIsSome) ? aProducerView.WriteParam(aArg.ref())
-                          : aProducerView.Status();
+                          : aProducerView.GetStatus();
   }
 
   static PcqStatus Read(ConsumerView& aConsumerView, ParamType* aArg) {
     bool isSome;
     if (!aConsumerView.ReadParam(&isSome)) {
-      return aConsumerView.Status();
+      return aConsumerView.GetStatus();
     }
 
     if (!isSome) {
       if (aArg) {
         aArg->reset();
       }
-      return PcqStatus::Success;
+      return PcqStatus::kSuccess;
     }
 
     if (!aArg) {
@@ -1922,20 +1952,20 @@ struct PcqParamTraits<Maybe<Variant<T, Ts...>>> {
   static PcqStatus Write(ProducerView& aProducerView, const ParamType& aArg) {
     aProducerView.WriteParam(aArg.mIsSome);
     return (aArg.mIsSome) ? aProducerView.WriteParam(aArg.ref())
-                          : aProducerView.Status();
+                          : aProducerView.GetStatus();
   }
 
   static PcqStatus Read(ConsumerView& aConsumerView, ParamType* aArg) {
     bool isSome;
     if (!aConsumerView.ReadParam(&isSome)) {
-      return aConsumerView.Status();
+      return aConsumerView.GetStatus();
     }
 
     if (!isSome) {
       if (aArg) {
         aArg->reset();
       }
-      return PcqStatus::Success;
+      return PcqStatus::kSuccess;
     }
 
     if (!aArg) {
@@ -1988,26 +2018,26 @@ struct PcqParamTraits<UniquePtr<T>> {
     if (aArg && aProducerView.WriteParam(*aArg.get())) {
       const_cast<ParamType&>(aArg).reset();
     }
-    return aProducerView.Status();
+    return aProducerView.GetStatus();
   }
 
   static PcqStatus Read(ConsumerView& aConsumerView, ParamType* aArg) {
     bool isNull;
     if (!aConsumerView.ReadParam(&isNull)) {
-      return aConsumerView.Status();
+      return aConsumerView.GetStatus();
     }
     if (isNull) {
       if (aArg) {
         aArg->reset(nullptr);
       }
-      return PcqStatus::Success;
+      return PcqStatus::kSuccess;
     }
 
     T* obj = nullptr;
     if (aArg) {
       obj = new T();
       if (!obj) {
-        return PcqStatus::PcqOOMError;
+        return PcqStatus::kOOMError;
       }
       aArg->reset(obj);
     }
@@ -2047,14 +2077,14 @@ struct PcqParamTraits<base::FileDescriptor> {
   static PcqStatus Read(ConsumerView& aConsumerView, ParamType* aArg) {
     int fd;
     if (!aConsumerView.ReadParam(aArg ? &fd : nullptr)) {
-      return aConsumerView.Status();
+      return aConsumerView.GetStatus();
     }
 
     if (aArg) {
       aArg->fd = fd;
       aArg->auto_close = false;  // PCQs don't use auto-close.
     }
-    return PcqStatus::Success;
+    return PcqStatus::kSuccess;
   }
 
   template <typename View>
@@ -2094,7 +2124,12 @@ struct PcqParamTraits<Variant<Types...>> {
       if (aTag == N - 1) {
         using EntryType = typename mozilla::detail::Nth<N - 1, Types...>::Type;
         if (aArg) {
-          return aView.ReadParam(static_cast<EntryType*>(aArg->ptr()));
+          EntryType val;
+          if (!aView.ReadParam(&val)) {
+            return aView.GetStatus();
+          }
+          *aArg = mozilla::AsVariant(std::move(val));
+          return aView.GetStatus();
         }
         return aView.ReadParam<EntryType>();
       }
@@ -2106,17 +2141,14 @@ struct PcqParamTraits<Variant<Types...>> {
   struct VariantReader<0, dummy> {
     static PcqStatus Read(ConsumerView& aView, Tag aTag, ParamType* aArg) {
       MOZ_ASSERT_UNREACHABLE("Tag wasn't for an entry in this Variant");
-      return PcqStatus::PcqFatalError;
+      return PcqStatus::kFatalError;
     }
   };
 
   static PcqStatus Read(ConsumerView& aConsumerView, ParamType* aArg) {
     Tag tag;
     if (!aConsumerView.ReadParam(&tag)) {
-      return aConsumerView.Status();
-    }
-    if (aArg) {
-      aArg->tag = tag;
+      return aConsumerView.GetStatus();
     }
     return VariantReader<sizeof...(Types)>::Read(aConsumerView, tag, aArg);
   }

@@ -17,7 +17,7 @@ namespace mozilla {
 WebGLUniformLocation::WebGLUniformLocation(
     WebGLContext* webgl, const webgl::LinkedProgramInfo* linkInfo,
     webgl::UniformInfo* info, GLuint loc, size_t arrayIndex)
-    : WebGLContextBoundObject<WebGLUniformLocation>(webgl),
+    : WebGLContextBoundObject(webgl),
       mLinkInfo(linkInfo),
       mInfo(info),
       mLoc(loc),

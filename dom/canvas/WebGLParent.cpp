@@ -85,8 +85,8 @@ bool WebGLParent::RunCommandQueue() {
   TimeDuration timeSlice =
       TimeDuration::FromMilliseconds(kMaxWebGLCommandTimeSliceMs);
   CommandResult result = mHost->RunCommandsForDuration(timeSlice);
-  bool success = (result == CommandResult::Success) ||
-                 (result == CommandResult::QueueEmpty);
+  bool success = (result == CommandResult::kSuccess) ||
+                 (result == CommandResult::kQueueEmpty);
   if (!success) {
     // Tell client that this WebGLParent needs to be shut down
     WEBGL_BRIDGE_LOGE("WebGLParent failed while running commands");

@@ -44,7 +44,7 @@ static bool ValidateAttribIndex(WebGLContext& webgl, GLuint index) {
   return valid;
 }
 
-Float32Array4&& WebGLContext::GetVertexAttribFloat32Array(GLuint index) {
+Float32Array4 WebGLContext::GetVertexAttribFloat32Array(GLuint index) {
   Float32Array4 attrib;
   if (index) {
     gl->fGetVertexAttribfv(index, LOCAL_GL_CURRENT_VERTEX_ATTRIB, &attrib[0]);
@@ -52,10 +52,10 @@ Float32Array4&& WebGLContext::GetVertexAttribFloat32Array(GLuint index) {
     memcpy(&attrib[0], mGenericVertexAttrib0Data,
            sizeof(mGenericVertexAttrib0Data));
   }
-  return std::move(attrib);
+  return attrib;
 }
 
-Int32Array4&& WebGLContext::GetVertexAttribInt32Array(GLuint index) {
+Int32Array4 WebGLContext::GetVertexAttribInt32Array(GLuint index) {
   Int32Array4 attrib;
   if (index) {
     gl->fGetVertexAttribIiv(index, LOCAL_GL_CURRENT_VERTEX_ATTRIB, &attrib[0]);
@@ -63,10 +63,10 @@ Int32Array4&& WebGLContext::GetVertexAttribInt32Array(GLuint index) {
     memcpy(&attrib[0], mGenericVertexAttrib0Data,
            sizeof(mGenericVertexAttrib0Data));
   }
-  return std::move(attrib);
+  return attrib;
 }
 
-Uint32Array4&& WebGLContext::GetVertexAttribUint32Array(GLuint index) {
+Uint32Array4 WebGLContext::GetVertexAttribUint32Array(GLuint index) {
   Uint32Array4 attrib;
   if (index) {
     gl->fGetVertexAttribIuiv(index, LOCAL_GL_CURRENT_VERTEX_ATTRIB, &attrib[0]);
@@ -74,7 +74,7 @@ Uint32Array4&& WebGLContext::GetVertexAttribUint32Array(GLuint index) {
     memcpy(&attrib[0], mGenericVertexAttrib0Data,
            sizeof(mGenericVertexAttrib0Data));
   }
-  return std::move(attrib);
+  return attrib;
 }
 
 ////////////////////////////////////////
@@ -223,11 +223,11 @@ MaybeWebGLVariant WebGLContext::GetVertexAttrib(GLuint index, GLenum pname) {
     case LOCAL_GL_CURRENT_VERTEX_ATTRIB: {
       switch (mGenericVertexAttribTypes[index]) {
         case webgl::AttribBaseType::Float:
-          return AsSomeVariant(std::move(GetVertexAttribFloat32Array(index)));
+          return AsSomeVariant(GetVertexAttribFloat32Array(index));
         case webgl::AttribBaseType::Int:
-          return AsSomeVariant(std::move(GetVertexAttribInt32Array(index)));
+          return AsSomeVariant(GetVertexAttribInt32Array(index));
         case webgl::AttribBaseType::UInt:
-          return AsSomeVariant(std::move(GetVertexAttribUint32Array(index)));
+          return AsSomeVariant(GetVertexAttribUint32Array(index));
         case webgl::AttribBaseType::Boolean:
           MOZ_CRASH("impossible");
       }

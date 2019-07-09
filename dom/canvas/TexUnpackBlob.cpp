@@ -412,6 +412,8 @@ TexUnpackBytes::TexUnpackBytes(const WebGLPixelStore& pixelStore,
 
 bool TexUnpackBytes::Validate(WebGLContext* webgl,
                               const webgl::PackingInfo& pi) {
+  if (!HasData()) return true;
+
   return ValidateUnpackBytes(webgl, pi, mPtr.Length(), this);
 }
 
@@ -431,7 +433,7 @@ bool TexUnpackBytes::TexOrSubImage(bool isSubImage, bool needsRespec,
   UniqueBuffer tempBuffer;
 
   do {
-    if (!mPtr) break;
+    if (!HasData()) break;
 
     if (!webgl->mPixelStore.mFlipY && !webgl->mPixelStore.mPremultiplyAlpha) {
       break;
@@ -838,7 +840,7 @@ bool TexUnpackSurface::TexOrSubImage(
     return false;
   }
 
-  MOZ_ASSERT(mData && mStride);
+  MOZ_ASSERT(HasData() && mStride);
   const auto& srcBegin = mData.Data();
   const auto& srcStride = mStride;
 

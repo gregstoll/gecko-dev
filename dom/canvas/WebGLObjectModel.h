@@ -21,21 +21,15 @@ class WebGLContext;
 // This class is a mixin for objects that are tied to a specific
 // context (which is to say, all of them).  They provide initialization
 // as well as comparison with the current context.
-template <typename Derived>
-class WebGLContextBoundObject : public WebGLId<Derived> {
+class WebGLContextBoundObject {
  public:
   WebGLContext* const mContext;
 
-  explicit WebGLContextBoundObject(WebGLContext* webgl)
-      : mContext(webgl), mContextGeneration(webgl->Generation()) {}
+  explicit WebGLContextBoundObject(WebGLContext* webgl);
 
-  bool IsCompatibleWithContext(const WebGLContext* other) const {
-    return (mContext == other && mContextGeneration == other->Generation());
-  }
+  bool IsCompatibleWithContext(const WebGLContext* other) const;
 
  private:
-  friend class HostWebGLContext;
-
   const uint32_t mContextGeneration;
 };
 
@@ -143,8 +137,9 @@ class WebGLDeletableObject {
  */
 
 template <typename Derived>
-class WebGLRefCountedObject : public WebGLContextBoundObject<Derived>,
-                              public WebGLDeletableObject {
+class WebGLRefCountedObject : public WebGLContextBoundObject,
+                              public WebGLDeletableObject,
+                              public WebGLId<Derived> {
   friend class WebGLContext;
   template <typename T>
   friend void ClearLinkedList(LinkedList<T>& list);
@@ -154,7 +149,7 @@ class WebGLRefCountedObject : public WebGLContextBoundObject<Derived>,
 
  public:
   explicit WebGLRefCountedObject(WebGLContext* webgl)
-      : WebGLContextBoundObject<Derived>(webgl), WebGLDeletableObject() {}
+      : WebGLContextBoundObject(webgl), WebGLDeletableObject() {}
 
   ~WebGLRefCountedObject() {
     MOZ_ASSERT(mWebGLRefCnt == 0,

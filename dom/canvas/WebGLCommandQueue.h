@@ -29,7 +29,7 @@ struct FunctionDispatcher;
 template <typename Derived, typename SinkType>
 struct MethodDispatcher;
 
-enum CommandResult { Success, TimeExpired, QueueEmpty, Error };
+enum CommandResult { kSuccess, kQueueEmpty, kError };
 
 enum CommandSyncType { ASYNC, SYNC };
 
@@ -46,12 +46,12 @@ enum CommandSyncType { ASYNC, SYNC };
  * NB: When used with IPDL, Sources and Sinks must be labeled "shmemholder"
  * (same as with Producers and Consumers).
  */
-template <typename Source, typename Sink>
+template <typename SourceT, typename SinkT>
 class CommandQueue {
  public:
-  using SelfType = CommandQueue<Source, Sink>;
-  using Source = Source;
-  using Sink = Sink;
+  using SelfType = CommandQueue<SourceT, SinkT>;
+  using Source = SourceT;
+  using Sink = SinkT;
 
   // Technically, we're just mapping the Producer and Consumer in aPcq
   // by calling the Source and Sink type's constructors on them, respectively,
@@ -86,7 +86,7 @@ class CommandQueue {
 
 class BasicSource {
  public:
-  BasicSource(UniquePtr<Producer>&& aProducer)
+  explicit BasicSource(UniquePtr<Producer>&& aProducer)
       : mProducer(std::move(aProducer)) {
     MOZ_ASSERT(mProducer);
   }
@@ -102,7 +102,8 @@ class BasicSource {
 
 class BasicSink {
  public:
-  BasicSink(UniquePtr<Consumer>&& aConsumer) : mConsumer(std::move(aConsumer)) {
+  explicit BasicSink(UniquePtr<Consumer>&& aConsumer)
+      : mConsumer(std::move(aConsumer)) {
     MOZ_ASSERT(mConsumer);
   }
   virtual ~BasicSink() {}
@@ -125,7 +126,7 @@ class BasicSink {
 template <typename Command>
 class CommandSource : public BasicSource {
  public:
-  CommandSource(UniquePtr<Producer>&& aProducer)
+  explicit CommandSource(UniquePtr<Producer>&& aProducer)
       : BasicSource(std::move(aProducer)) {}
 
   template <typename... Args>
@@ -168,27 +169,27 @@ class CommandSink : public BasicSink {
   /**
    * Attempts to process the next command in the queue, if one is available.
    */
-  CommandResult ProcessOne(Maybe<TimeDuration> aTimeout) {
+  CommandResult ProcessOne(const Maybe<TimeDuration>& aTimeout) {
     Command command;
     PcqStatus status = (aTimeout.isNothing() || aTimeout.value())
                            ? this->mConsumer->TryWaitRemove(aTimeout, command)
                            : this->mConsumer->TryRemove(command);
 
-    if (status == PcqStatus::Success) {
+    if (status == PcqStatus::kSuccess) {
       if (DispatchCommand(command)) {
-        return CommandResult::Success;
+        return CommandResult::kSuccess;
       }
-      return CommandResult::Error;
+      return CommandResult::kError;
     }
 
-    if (status == PcqStatus::PcqNotReady) {
-      return CommandResult::QueueEmpty;
+    if (status == PcqStatus::kNotReady) {
+      return CommandResult::kQueueEmpty;
     }
 
-    if (status == PcqStatus::PcqOOMError) {
+    if (status == PcqStatus::kOOMError) {
       ReportOOM();
     }
-    return CommandResult::Error;
+    return CommandResult::kError;
   }
 
   CommandResult ProcessOneNow() { return ProcessOne(Some(TimeDuration(0))); }
@@ -203,7 +204,7 @@ class CommandSink : public BasicSink {
     CommandResult result;
     do {
       result = ProcessOneNow();
-    } while (result == CommandResult::Success);
+    } while (result == CommandResult::kSuccess);
     return result;
   }
 
@@ -220,7 +221,8 @@ class CommandSink : public BasicSink {
     do {
       result = ProcessOne(Some(aDuration - (now - start)));
       now = TimeStamp::Now();
-    } while ((result == CommandResult::Success) && ((now - start) < aDuration));
+    } while ((result == CommandResult::kSuccess) &&
+             ((now - start) < aDuration));
     return result;
   }
 
@@ -259,7 +261,7 @@ class CommandSink : public BasicSink {
     if (!ReadArgs(args)) {
       return false;
     }
-    CallFunction(aObj, aFunc, args, std::index_sequence_for<Args...>{});
+    CallFunction(aFunc, args, std::index_sequence_for<Args...>{});
     return true;
   }
 
@@ -322,14 +324,14 @@ class CommandSink : public BasicSink {
     // The CommandQueue inserts the command and the args together as an atomic
     // operation.  We already read the command so the args must also be
     // available.
-    MOZ_ASSERT(status != PcqStatus::PcqNotReady);
+    MOZ_ASSERT(status != PcqStatus::kNotReady);
     return status;
   }
 
   template <>
   PcqStatus CallTryRemove(std::tuple<>& aArgs,
                           std::make_integer_sequence<size_t, 0>) {
-    return PcqStatus::Success;
+    return PcqStatus::kSuccess;
   }
 
   template <typename T, typename MethodType, typename... Args,
@@ -344,7 +346,7 @@ class CommandSink : public BasicSink {
   template <typename FunctionType, typename... Args, size_t... Indices,
             typename ReturnType =
                 typename mozilla::FunctionTypeTraits<FunctionType>::ReturnType>
-  ReturnType CallFunction(FunctionType aFun, std::tuple<Args...>& aArgs,
+  ReturnType CallFunction(FunctionType aFunc, std::tuple<Args...>& aArgs,
                           std::index_sequence<Indices...>) {
     return (*aFunc)(std::forward<Args>(std::get<Indices>(aArgs))...);
   }
@@ -357,7 +359,7 @@ class CommandSink : public BasicSink {
   }
 
   template <typename FunctionType, typename... Args, size_t... Indices>
-  void CallVoidFunction(FunctionType aFun, std::tuple<Args...>& aArgs,
+  void CallVoidFunction(FunctionType aFunc, std::tuple<Args...>& aArgs,
                         std::index_sequence<Indices...>) {
     (*aFunc)(std::forward<Args>(std::get<Indices>(aArgs))...);
   }
@@ -365,7 +367,7 @@ class CommandSink : public BasicSink {
   template <typename... Args>
   bool ReadArgs(std::tuple<Args...>& aArgs) {
     PcqStatus status = CallTryRemove(aArgs, std::index_sequence_for<Args...>{});
-    return IsSuccess(status);
+    return status;
   }
 };
 
@@ -396,7 +398,7 @@ class SyncCommandSource : public CommandSource<Command> {
   template <typename... Args>
   PcqStatus RunVoidSyncCommand(Command aCommand, Args&&... aArgs) {
     PcqStatus status = RunAsyncCommand(aCommand, std::forward<Args>(aArgs)...);
-    return IsSuccess(status) ? this->ReadSyncResponse() : status;
+    return status ? this->ReadSyncResponse() : status;
   }
 
   template <typename ResultType, typename... Args>
@@ -404,7 +406,7 @@ class SyncCommandSource : public CommandSource<Command> {
                            Args&&... aArgs) {
     PcqStatus status =
         RunVoidSyncCommand(aCommand, std::forward<Args>(aArgs)...);
-    return IsSuccess(status) ? this->ReadResult(aReturn) : status;
+    return status ? this->ReadResult(aReturn) : status;
   }
 
   // for IPDL:
@@ -416,10 +418,10 @@ class SyncCommandSource : public CommandSource<Command> {
     SyncResponse response;
     PcqStatus status =
         mConsumer->TryWaitRemove(Nothing() /* wait forever */, response);
-    MOZ_ASSERT(status != PcqStatus::PcqNotReady);
+    MOZ_ASSERT(status != PcqStatus::kNotReady);
 
-    if (IsSuccess(status) && response != RESPONSE_ACK) {
-      return PcqStatus::PcqFatalError;
+    if (status && response != RESPONSE_ACK) {
+      return PcqStatus::kFatalError;
     }
     return status;
   }
@@ -429,7 +431,7 @@ class SyncCommandSource : public CommandSource<Command> {
     PcqStatus status = mConsumer->TryRemove(aResult);
     // The Sink posts the response code and result as an atomic transaction.  We
     // already read the response code so the result must be available.
-    MOZ_ASSERT(status != PcqStatus::PcqNotReady);
+    MOZ_ASSERT(status != PcqStatus::kNotReady);
     return status;
   }
 
@@ -766,27 +768,28 @@ struct MethodDispatcher {
 // id.  The handler uses a CommandSink to read parameters, call the
 // given function using the given synchronization protocol, and provide
 // compile-time lookup of the ID by function.
-#define DEFINE_FUNCTION_DISPATCHER(_DISPATCHER, _ID, _FUNC, _SYNC)           \
-  template <>                                                                \
-  bool _DISPATCHER::DispatchCommand<_ID>(size_t aId, SinkType & aSink) {     \
-    return CommandDispatchDriver<_DISPATCHER>::DispatchCommandHelper(aId,    \
-                                                                     aSink); \
-  }                                                                          \
-  template <>                                                                \
-  bool _DISPATCHER::Dispatch<_ID>(SinkType & aSink) {                        \
-    return DispatchFunction<_SYNC>::Run(aSink, &_FUNC);                      \
-  }                                                                          \
-  template <>                                                                \
-  struct _DISPATCHER::FuncInfo<_ID> {                                        \
-    using FuncType = decltype(&_FUNC);                                       \
-  };                                                                         \
-  template <>                                                                \
-  constexpr CommandSyncType _DISPATCHER::SyncType<_ID>() {                   \
-    return _SYNC;                                                            \
-  }                                                                          \
-  template <>                                                                \
-  constexpr size_t _DISPATCHER::Id<decltype(&_FUNC), &_FUNC>() {             \
-    return _ID;                                                              \
+#define DEFINE_FUNCTION_DISPATCHER(_DISPATCHER, _ID, _FUNC, _SYNC)             \
+  template <>                                                                  \
+  bool MOZ_ALWAYS_INLINE _DISPATCHER::DispatchCommand<_ID>(size_t aId,         \
+                                                           SinkType & aSink) { \
+    return CommandDispatchDriver<_DISPATCHER>::DispatchCommandHelper(aId,      \
+                                                                     aSink);   \
+  }                                                                            \
+  template <>                                                                  \
+  bool MOZ_ALWAYS_INLINE _DISPATCHER::Dispatch<_ID>(SinkType & aSink) {        \
+    return DispatchFunction<_SYNC>::Run(aSink, &_FUNC);                        \
+  }                                                                            \
+  template <>                                                                  \
+  struct _DISPATCHER::FuncInfo<_ID> {                                          \
+    using FuncType = decltype(&_FUNC);                                         \
+  };                                                                           \
+  template <>                                                                  \
+  constexpr CommandSyncType _DISPATCHER::SyncType<_ID>() {                     \
+    return _SYNC;                                                              \
+  }                                                                            \
+  template <>                                                                  \
+  constexpr size_t _DISPATCHER::Id<decltype(&_FUNC), &_FUNC>() {               \
+    return _ID;                                                                \
   }
 
 // Defines a handler in the given dispatcher for the command with the given
@@ -795,13 +798,14 @@ struct MethodDispatcher {
 // compile-time lookup of the ID by class method.
 #define DEFINE_METHOD_DISPATCHER(_DISPATCHER, _ID, _METHOD, _SYNC)         \
   template <>                                                              \
-  bool _DISPATCHER::DispatchCommand<_ID>(size_t aId, SinkType & aSink,     \
-                                         ObjectType & aObj) {              \
+  bool MOZ_ALWAYS_INLINE _DISPATCHER::DispatchCommand<_ID>(                \
+      size_t aId, SinkType & aSink, ObjectType & aObj) {                   \
     return CommandDispatchDriver<_DISPATCHER>::DispatchCommandHelper<_ID>( \
         aId, aSink, aObj);                                                 \
   }                                                                        \
   template <>                                                              \
-  bool _DISPATCHER::Dispatch<_ID>(SinkType & aSink, ObjectType & aObj) {   \
+  bool MOZ_ALWAYS_INLINE _DISPATCHER::Dispatch<_ID>(SinkType & aSink,      \
+                                                    ObjectType & aObj) {   \
     return DispatchMethod<_SYNC>::Run(aSink, &_METHOD, aObj);              \
   }                                                                        \
   template <>                                                              \

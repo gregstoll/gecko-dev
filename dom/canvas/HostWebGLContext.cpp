@@ -36,9 +36,19 @@ LazyLogModule gWebGLBridgeLog("webglbridge");
       const {                                                                  \
     return m##_WebGLType##Map.Insert(std::move(aObj), aId);                    \
   }                                                                            \
-  WebGL##_WebGLType* HostWebGLContext::Find(                                   \
-      const WebGLId<WebGL##_WebGLType>& aId) const {                           \
-    return m##_WebGLType##Map.Find(aId);                                       \
+  bool HostWebGLContext::Find(const WebGLId<WebGL##_WebGLType>& aId,           \
+                              RefPtr<WebGL##_WebGLType>& aReturnObj,           \
+                              const char* aCmdName) const {                    \
+    if (!aId.IsValid()) {                                                      \
+      const WebGLContext::FuncScope scope(*mContext, aCmdName);                \
+      Unused << mContext->IsContextLost();                                     \
+      mContext->ErrorInvalidOperation(                                         \
+          "Object from a different WebGL context (or older generation of "     \
+          "this one) was passed as argument.");                                \
+      return false;                                                            \
+    }                                                                          \
+    aReturnObj = m##_WebGLType##Map.Find(aId);                                 \
+    return true;                                                               \
   }                                                                            \
   void HostWebGLContext::Remove(const WebGLId<WebGL##_WebGLType>& aId) const { \
     return m##_WebGLType##Map.Remove(aId);                                     \
@@ -56,6 +66,16 @@ DEFINE_OBJECT_ID_MAP_FUNCS(VertexArray);
 DEFINE_OBJECT_ID_MAP_FUNCS(Buffer);
 DEFINE_OBJECT_ID_MAP_FUNCS(Texture);
 DEFINE_OBJECT_ID_MAP_FUNCS(UniformLocation);
+
+// Use this when failure to find an object by ID indicates that an illegal
+// object was given (i.e. the user passed null or an object from another
+// WebGL context or from another generation of this context).  This method
+// will generate an error and return null in that case.
+#define MustFind(aId) FindOrError(aId, __func__)
+
+// Like MustFind except that this will not generate an error if the
+// original parameter was NULL.
+#define MaybeFind(aId, aReturnObj) Find(aId, aReturnObj, __func__)
 
 /* static */ WebGLContext* HostWebGLContext::MakeWebGLContext(
     WebGLVersion aVersion) {
@@ -134,6 +154,9 @@ void HostWebGLContext::CreateShader(GLenum aType,
 WebGLId<WebGLUniformLocation> HostWebGLContext::GetUniformLocation(
     const WebGLId<WebGLProgram>& progId, const nsString& name) {
   RefPtr<WebGLProgram> prog = MustFind(progId);
+  if (!prog) {
+    return WebGLId<WebGLUniformLocation>::Invalid();
+  }
   return Insert(
       RefPtr<WebGLUniformLocation>(mContext->GetUniformLocation(*prog, name)));
 }
@@ -237,6 +260,9 @@ void HostWebGLContext::AttachShader(const WebGLId<WebGLProgram>& progId,
                                     const WebGLId<WebGLShader>& shaderId) {
   RefPtr<WebGLProgram> prog = MustFind(progId);
   RefPtr<WebGLShader> shader = MustFind(shaderId);
+  if ((!prog) || (!shader)) {
+    return;
+  }
   mContext->AttachShader(*prog, *shader);
 }
 
@@ -244,17 +270,28 @@ void HostWebGLContext::BindAttribLocation(const WebGLId<WebGLProgram>& progId,
                                           GLuint location,
                                           const nsString& name) {
   RefPtr<WebGLProgram> prog = MustFind(progId);
+  if (!prog) {
+    return;
+  }
   mContext->BindAttribLocation(*prog, location, name);
 }
 
 void HostWebGLContext::BindFramebuffer(GLenum target,
-                                       const WebGLId<WebGLFramebuffer>& fb) {
-  mContext->BindFramebuffer(target, Find(fb));
+                                       const WebGLId<WebGLFramebuffer>& fbId) {
+  RefPtr<WebGLFramebuffer> fb;
+  if (!MaybeFind(fbId, fb)) {
+    return;
+  }
+  mContext->BindFramebuffer(target, fb);
 }
 
-void HostWebGLContext::BindRenderbuffer(GLenum target,
-                                        const WebGLId<WebGLRenderbuffer>& fb) {
-  mContext->BindRenderbuffer(target, Find(fb));
+void HostWebGLContext::BindRenderbuffer(
+    GLenum target, const WebGLId<WebGLRenderbuffer>& rbId) {
+  RefPtr<WebGLRenderbuffer> rb;
+  if (!MaybeFind(rbId, rb)) {
+    return;
+  }
+  mContext->BindRenderbuffer(target, rb);
 }
 
 void HostWebGLContext::BlendColor(GLclampf r, GLclampf g, GLclampf b,
@@ -301,26 +338,46 @@ void HostWebGLContext::ColorMask(WebGLboolean r, WebGLboolean g, WebGLboolean b,
 
 void HostWebGLContext::CompileShader(const WebGLId<WebGLShader>& shaderId) {
   RefPtr<WebGLShader> shader = MustFind(shaderId);
+  if (!shader) {
+    return;
+  }
   mContext->CompileShader(*shader);
 }
 
 void HostWebGLContext::CullFace(GLenum face) { mContext->CullFace(face); }
 
-void HostWebGLContext::DeleteFramebuffer(const WebGLId<WebGLFramebuffer>& fb) {
-  mContext->DeleteFramebuffer(Find(fb));
+void HostWebGLContext::DeleteFramebuffer(
+    const WebGLId<WebGLFramebuffer>& fbId) {
+  RefPtr<WebGLFramebuffer> fb;
+  if (!MaybeFind(fbId, fb)) {
+    return;
+  }
+  mContext->DeleteFramebuffer(fb);
 }
 
-void HostWebGLContext::DeleteProgram(const WebGLId<WebGLProgram>& prog) {
-  mContext->DeleteProgram(Find(prog));
+void HostWebGLContext::DeleteProgram(const WebGLId<WebGLProgram>& progId) {
+  RefPtr<WebGLProgram> prog;
+  if (!MaybeFind(progId, prog)) {
+    return;
+  }
+  mContext->DeleteProgram(prog);
 }
 
 void HostWebGLContext::DeleteRenderbuffer(
-    const WebGLId<WebGLRenderbuffer>& rb) {
-  mContext->DeleteRenderbuffer(Find(rb));
+    const WebGLId<WebGLRenderbuffer>& rbId) {
+  RefPtr<WebGLRenderbuffer> rb;
+  if (!MaybeFind(rbId, rb)) {
+    return;
+  }
+  mContext->DeleteRenderbuffer(rb);
 }
 
-void HostWebGLContext::DeleteShader(const WebGLId<WebGLShader>& shader) {
-  mContext->DeleteShader(Find(shader));
+void HostWebGLContext::DeleteShader(const WebGLId<WebGLShader>& shaderId) {
+  RefPtr<WebGLShader> shader;
+  if (!MaybeFind(shaderId, shader)) {
+    return;
+  }
+  mContext->DeleteShader(shader);
 }
 
 void HostWebGLContext::DepthFunc(GLenum func) { mContext->DepthFunc(func); }
@@ -335,6 +392,9 @@ void HostWebGLContext::DetachShader(const WebGLId<WebGLProgram>& progId,
                                     const WebGLId<WebGLShader>& shaderId) {
   RefPtr<WebGLProgram> prog = MustFind(progId);
   RefPtr<WebGLShader> shader = MustFind(shaderId);
+  if ((!prog) || (!shader)) {
+    return;
+  }
   mContext->DetachShader(*prog, *shader);
 }
 
@@ -344,15 +404,23 @@ void HostWebGLContext::Finish() { mContext->Finish(); }
 
 void HostWebGLContext::FramebufferRenderbuffer(
     GLenum target, GLenum attachment, GLenum rbTarget,
-    const WebGLId<WebGLRenderbuffer>& rb) {
-  mContext->FramebufferRenderbuffer(target, attachment, rbTarget, Find(rb));
+    const WebGLId<WebGLRenderbuffer>& rbId) {
+  RefPtr<WebGLRenderbuffer> rb;
+  if (!MaybeFind(rbId, rb)) {
+    return;
+  }
+  mContext->FramebufferRenderbuffer(target, attachment, rbTarget, rb);
 }
 
 void HostWebGLContext::FramebufferTexture2D(GLenum target, GLenum attachment,
                                             GLenum texImageTarget,
-                                            const WebGLId<WebGLTexture>& tex,
+                                            const WebGLId<WebGLTexture>& texId,
                                             GLint level) {
-  mContext->FramebufferTexture2D(target, attachment, texImageTarget, Find(tex),
+  RefPtr<WebGLTexture> tex;
+  if (!MaybeFind(texId, tex)) {
+    return;
+  }
+  mContext->FramebufferTexture2D(target, attachment, texImageTarget, tex,
                                  level);
 }
 
@@ -361,24 +429,36 @@ void HostWebGLContext::FrontFace(GLenum mode) { mContext->FrontFace(mode); }
 Maybe<WebGLActiveInfo> HostWebGLContext::GetActiveAttrib(
     const WebGLId<WebGLProgram>& progId, GLuint index) {
   RefPtr<WebGLProgram> prog = MustFind(progId);
+  if (!prog) {
+    return Nothing();
+  }
   return mContext->GetActiveAttrib(*prog, index);
 }
 
 Maybe<WebGLActiveInfo> HostWebGLContext::GetActiveUniform(
     const WebGLId<WebGLProgram>& progId, GLuint index) {
   RefPtr<WebGLProgram> prog = MustFind(progId);
+  if (!prog) {
+    return Nothing();
+  }
   return mContext->GetActiveUniform(*prog, index);
 }
 
 MaybeAttachedShaders HostWebGLContext::GetAttachedShaders(
     const WebGLId<WebGLProgram>& progId) {
   RefPtr<WebGLProgram> prog = MustFind(progId);
+  if (!prog) {
+    return Nothing();
+  }
   return mContext->GetAttachedShaders(*prog);
 }
 
 GLint HostWebGLContext::GetAttribLocation(const WebGLId<WebGLProgram>& progId,
                                           const nsString& name) {
   RefPtr<WebGLProgram> prog = MustFind(progId);
+  if (!prog) {
+    return -1;
+  }
   return mContext->GetAttribLocation(*prog, name);
 }
 
@@ -397,12 +477,18 @@ MaybeWebGLVariant HostWebGLContext::GetFramebufferAttachmentParameter(
 MaybeWebGLVariant HostWebGLContext::GetProgramParameter(
     const WebGLId<WebGLProgram>& progId, GLenum pname) {
   RefPtr<WebGLProgram> prog = MustFind(progId);
+  if (!prog) {
+    return Nothing();
+  }
   return mContext->GetProgramParameter(*prog, pname);
 }
 
 nsString HostWebGLContext::GetProgramInfoLog(
     const WebGLId<WebGLProgram>& progId) {
   RefPtr<WebGLProgram> prog = MustFind(progId);
+  if (!prog) {
+    return nsString();
+  }
   return mContext->GetProgramInfoLog(*prog);
 }
 
@@ -414,6 +500,9 @@ MaybeWebGLVariant HostWebGLContext::GetRenderbufferParameter(GLenum target,
 MaybeWebGLVariant HostWebGLContext::GetShaderParameter(
     const WebGLId<WebGLShader>& shaderId, GLenum pname) {
   RefPtr<WebGLShader> shader = MustFind(shaderId);
+  if (!shader) {
+    return Nothing();
+  }
   return mContext->GetShaderParameter(*shader, pname);
 }
 
@@ -426,12 +515,18 @@ MaybeWebGLVariant HostWebGLContext::GetShaderPrecisionFormat(
 nsString HostWebGLContext::GetShaderInfoLog(
     const WebGLId<WebGLShader>& shaderId) {
   RefPtr<WebGLShader> shader = MustFind(shaderId);
+  if (!shader) {
+    return nsString();
+  }
   return mContext->GetShaderInfoLog(*shader);
 }
 
 nsString HostWebGLContext::GetShaderSource(
     const WebGLId<WebGLShader>& shaderId) {
   RefPtr<WebGLShader> shader = MustFind(shaderId);
+  if (!shader) {
+    return nsString();
+  }
   return mContext->GetShaderSource(*shader);
 }
 
@@ -440,6 +535,9 @@ MaybeWebGLVariant HostWebGLContext::GetUniform(
     const WebGLId<WebGLUniformLocation>& locId) {
   RefPtr<WebGLProgram> prog = MustFind(progId);
   RefPtr<WebGLUniformLocation> loc = MustFind(locId);
+  if ((!prog) || (!loc)) {
+    return Nothing();
+  }
   return mContext->GetUniform(*prog, *loc);
 }
 
@@ -451,6 +549,9 @@ void HostWebGLContext::LineWidth(GLfloat width) { mContext->LineWidth(width); }
 
 void HostWebGLContext::LinkProgram(const WebGLId<WebGLProgram>& progId) {
   RefPtr<WebGLProgram> prog = MustFind(progId);
+  if (!prog) {
+    return;
+  }
   mContext->LinkProgram(*prog);
 }
 
@@ -474,6 +575,9 @@ void HostWebGLContext::Scissor(GLint x, GLint y, GLsizei width,
 void HostWebGLContext::ShaderSource(const WebGLId<WebGLShader>& shaderId,
                                     const nsString& source) {
   RefPtr<WebGLShader> shader = MustFind(shaderId);
+  if (!shader) {
+    return;
+  }
   mContext->ShaderSource(*shader, source);
 }
 
@@ -508,23 +612,39 @@ void HostWebGLContext::Viewport(GLint x, GLint y, GLsizei width,
 
 // ------------------------- Buffer Objects -------------------------
 void HostWebGLContext::BindBuffer(GLenum target,
-                                  const WebGLId<WebGLBuffer>& buffer) {
-  mContext->BindBuffer(target, Find(buffer));
+                                  const WebGLId<WebGLBuffer>& bufferId) {
+  RefPtr<WebGLBuffer> buffer;
+  if (!MaybeFind(bufferId, buffer)) {
+    return;
+  }
+  mContext->BindBuffer(target, buffer);
 }
 
 void HostWebGLContext::BindBufferBase(GLenum target, GLuint index,
-                                      const WebGLId<WebGLBuffer>& buffer) {
-  mContext->BindBufferBase(target, index, Find(buffer));
+                                      const WebGLId<WebGLBuffer>& bufferId) {
+  RefPtr<WebGLBuffer> buffer;
+  if (!MaybeFind(bufferId, buffer)) {
+    return;
+  }
+  mContext->BindBufferBase(target, index, buffer);
 }
 
 void HostWebGLContext::BindBufferRange(GLenum target, GLuint index,
-                                       const WebGLId<WebGLBuffer>& buffer,
+                                       const WebGLId<WebGLBuffer>& bufferId,
                                        WebGLintptr offset, WebGLsizeiptr size) {
-  mContext->BindBufferRange(target, index, Find(buffer), offset, size);
+  RefPtr<WebGLBuffer> buffer = MustFind(bufferId);
+  if (!buffer) {
+    return;
+  }
+  mContext->BindBufferRange(target, index, buffer, offset, size);
 }
 
-void HostWebGLContext::DeleteBuffer(const WebGLId<WebGLBuffer>& buf) {
-  mContext->DeleteBuffer(Find(buf));
+void HostWebGLContext::DeleteBuffer(const WebGLId<WebGLBuffer>& bufId) {
+  RefPtr<WebGLBuffer> buf;
+  if (!MaybeFind(bufId, buf)) {
+    return;
+  }
+  mContext->DeleteBuffer(buf);
 }
 
 void HostWebGLContext::CopyBufferSubData(GLenum readTarget, GLenum writeTarget,
@@ -562,9 +682,17 @@ void HostWebGLContext::BlitFramebuffer(GLint srcX0, GLint srcY0, GLint srcX1,
 
 void HostWebGLContext::FramebufferTextureLayer(
     GLenum target, GLenum attachment, const WebGLId<WebGLTexture>& textureId,
-    GLint level, GLint layer) {
-  GetWebGL2Context()->FramebufferTextureLayer(target, attachment,
-                                              Find(textureId), level, layer);
+    GLint level, GLint layer, bool toDetach) {
+  // Pass a null texture to detach.
+  WebGLTexture* tex = nullptr;
+  if (!toDetach) {
+    tex = MustFind(textureId);
+    if (!tex) {
+      return;
+    }
+  }
+  GetWebGL2Context()->FramebufferTextureLayer(target, attachment, tex, level,
+                                              layer);
 }
 
 void HostWebGLContext::InvalidateFramebuffer(
@@ -605,12 +733,20 @@ void HostWebGLContext::ActiveTexture(GLenum texUnit) {
 }
 
 void HostWebGLContext::BindTexture(GLenum texTarget,
-                                   const WebGLId<WebGLTexture>& tex) {
-  return mContext->BindTexture(texTarget, Find(tex));
+                                   const WebGLId<WebGLTexture>& texId) {
+  RefPtr<WebGLTexture> tex;
+  if (!MaybeFind(texId, tex)) {
+    return;
+  }
+  return mContext->BindTexture(texTarget, tex);
 }
 
-void HostWebGLContext::DeleteTexture(const WebGLId<WebGLTexture>& tex) {
-  mContext->DeleteTexture(Find(tex));
+void HostWebGLContext::DeleteTexture(const WebGLId<WebGLTexture>& texId) {
+  RefPtr<WebGLTexture> tex;
+  if (!MaybeFind(texId, tex)) {
+    return;
+  }
+  mContext->DeleteTexture(tex);
 }
 
 void HostWebGLContext::GenerateMipmap(GLenum texTarget) {
@@ -743,70 +879,105 @@ void HostWebGLContext::TexParameter_base(GLenum texTarget, GLenum pname,
 }
 
 // ------------------- Programs and shaders --------------------------------
-void HostWebGLContext::UseProgram(const WebGLId<WebGLProgram>& prog) {
-  mContext->UseProgram(Find(prog));
+void HostWebGLContext::UseProgram(const WebGLId<WebGLProgram>& progId) {
+  RefPtr<WebGLProgram> prog;
+  if (!MaybeFind(progId, prog)) {
+    return;
+  }
+  mContext->UseProgram(prog);
 }
 
 void HostWebGLContext::ValidateProgram(const WebGLId<WebGLProgram>& progId) {
   RefPtr<WebGLProgram> prog = MustFind(progId);
+  if (!prog) {
+    return;
+  }
   mContext->ValidateProgram(*prog);
 }
 
 GLint HostWebGLContext::GetFragDataLocation(const WebGLId<WebGLProgram>& progId,
                                             const nsString& name) {
   RefPtr<WebGLProgram> prog = MustFind(progId);
+  if (!prog) {
+    return -1;
+  }
   return GetWebGL2Context()->GetFragDataLocation(*prog, name);
 }
 
 // ------------------------ Uniforms and attributes ------------------------
 void HostWebGLContext::UniformNfv(const nsCString& funcName, uint8_t N,
-                                  const WebGLId<WebGLUniformLocation>& loc,
+                                  const WebGLId<WebGLUniformLocation>& aLoc,
                                   const RawBuffer<const float>& arr,
                                   GLuint elemOffset, GLuint elemCountOverride) {
-  mContext->UniformNfv(funcName.BeginReading(), N, Find(loc), arr, elemOffset,
+  auto loc = MustFind(aLoc);
+  if (!loc) {
+    return;
+  }
+
+  mContext->UniformNfv(funcName.BeginReading(), N, loc, arr, elemOffset,
                        elemCountOverride);
 }
 
 void HostWebGLContext::UniformNiv(const nsCString& funcName, uint8_t N,
-                                  const WebGLId<WebGLUniformLocation>& loc,
+                                  const WebGLId<WebGLUniformLocation>& aLoc,
                                   const RawBuffer<const int32_t>& arr,
                                   GLuint elemOffset, GLuint elemCountOverride) {
-  mContext->UniformNiv(funcName.BeginReading(), N, Find(loc), arr, elemOffset,
+  auto loc = MustFind(aLoc);
+  if (!loc) {
+    return;
+  }
+
+  mContext->UniformNiv(funcName.BeginReading(), N, loc, arr, elemOffset,
                        elemCountOverride);
 }
 
 void HostWebGLContext::UniformNuiv(const nsCString& funcName, uint8_t N,
-                                   const WebGLId<WebGLUniformLocation>& loc,
+                                   const WebGLId<WebGLUniformLocation>& aLoc,
                                    const RawBuffer<const uint32_t>& arr,
                                    GLuint elemOffset,
                                    GLuint elemCountOverride) {
-  mContext->UniformNuiv(funcName.BeginReading(), N, Find(loc), arr, elemOffset,
+  auto loc = MustFind(aLoc);
+  if (!loc) {
+    return;
+  }
+
+  mContext->UniformNuiv(funcName.BeginReading(), N, loc, arr, elemOffset,
                         elemCountOverride);
 }
 
 void HostWebGLContext::UniformMatrixAxBfv(
     const nsCString& funcName, uint8_t A, uint8_t B,
-    const WebGLId<WebGLUniformLocation>& loc, bool transpose,
+    const WebGLId<WebGLUniformLocation>& aLoc, bool transpose,
     const RawBuffer<const float>& arr, GLuint elemOffset,
     GLuint elemCountOverride) {
-  mContext->UniformMatrixAxBfv(funcName.BeginReading(), A, B, Find(loc),
-                               transpose, arr, elemOffset, elemCountOverride);
+  auto loc = MustFind(aLoc);
+  if (!loc) {
+    return;
+  }
+
+  mContext->UniformMatrixAxBfv(funcName.BeginReading(), A, B, loc, transpose,
+                               arr, elemOffset, elemCountOverride);
 }
 
 void HostWebGLContext::UniformFVec(const WebGLId<WebGLUniformLocation>& aLoc,
                                    const nsTArray<float>& vec) {
+  auto loc = MustFind(aLoc);
+  if (!loc) {
+    return;
+  }
+
   switch (vec.Length()) {
     case 1:
-      mContext->Uniform1f(Find(aLoc), vec[0]);
+      mContext->Uniform1f(loc, vec[0]);
       break;
     case 2:
-      mContext->Uniform2f(Find(aLoc), vec[0], vec[1]);
+      mContext->Uniform2f(loc, vec[0], vec[1]);
       break;
     case 3:
-      mContext->Uniform3f(Find(aLoc), vec[0], vec[1], vec[2]);
+      mContext->Uniform3f(loc, vec[0], vec[1], vec[2]);
       break;
     case 4:
-      mContext->Uniform4f(Find(aLoc), vec[0], vec[1], vec[2], vec[3]);
+      mContext->Uniform4f(loc, vec[0], vec[1], vec[2], vec[3]);
       break;
     default:
       MOZ_ASSERT_UNREACHABLE("Illegal number of parameters to UniformFVec");
@@ -815,18 +986,23 @@ void HostWebGLContext::UniformFVec(const WebGLId<WebGLUniformLocation>& aLoc,
 
 void HostWebGLContext::UniformIVec(const WebGLId<WebGLUniformLocation>& aLoc,
                                    const nsTArray<int32_t>& vec) {
+  auto loc = MustFind(aLoc);
+  if (!loc) {
+    return;
+  }
+
   switch (vec.Length()) {
     case 1:
-      mContext->Uniform1i(Find(aLoc), vec[0]);
+      mContext->Uniform1i(loc, vec[0]);
       break;
     case 2:
-      mContext->Uniform2i(Find(aLoc), vec[0], vec[1]);
+      mContext->Uniform2i(loc, vec[0], vec[1]);
       break;
     case 3:
-      mContext->Uniform3i(Find(aLoc), vec[0], vec[1], vec[2]);
+      mContext->Uniform3i(loc, vec[0], vec[1], vec[2]);
       break;
     case 4:
-      mContext->Uniform4i(Find(aLoc), vec[0], vec[1], vec[2], vec[3]);
+      mContext->Uniform4i(loc, vec[0], vec[1], vec[2], vec[3]);
       break;
     default:
       MOZ_ASSERT_UNREACHABLE("Illegal number of parameters to UniformIVec");
@@ -835,18 +1011,23 @@ void HostWebGLContext::UniformIVec(const WebGLId<WebGLUniformLocation>& aLoc,
 
 void HostWebGLContext::UniformUIVec(const WebGLId<WebGLUniformLocation>& aLoc,
                                     const nsTArray<uint32_t>& vec) {
+  auto loc = MustFind(aLoc);
+  if (!loc) {
+    return;
+  }
+
   switch (vec.Length()) {
     case 1:
-      mContext->Uniform1ui(Find(aLoc), vec[0]);
+      mContext->Uniform1ui(loc, vec[0]);
       break;
     case 2:
-      mContext->Uniform2ui(Find(aLoc), vec[0], vec[1]);
+      mContext->Uniform2ui(loc, vec[0], vec[1]);
       break;
     case 3:
-      mContext->Uniform3ui(Find(aLoc), vec[0], vec[1], vec[2]);
+      mContext->Uniform3ui(loc, vec[0], vec[1], vec[2]);
       break;
     case 4:
-      mContext->Uniform4ui(Find(aLoc), vec[0], vec[1], vec[2], vec[3]);
+      mContext->Uniform4ui(loc, vec[0], vec[1], vec[2], vec[3]);
       break;
     default:
       MOZ_ASSERT_UNREACHABLE("Illegal number of parameters to UniformUIVec");
@@ -887,6 +1068,9 @@ MaybeWebGLVariant HostWebGLContext::GetUniformIndices(
     const WebGLId<WebGLProgram>& progId,
     const nsTArray<nsString>& uniformNames) {
   RefPtr<WebGLProgram> prog = MustFind(progId);
+  if (!prog) {
+    return Nothing();
+  }
   return GetWebGL2Context()->GetUniformIndices(*prog, uniformNames);
 }
 
@@ -894,12 +1078,18 @@ MaybeWebGLVariant HostWebGLContext::GetActiveUniforms(
     const WebGLId<WebGLProgram>& progId, const nsTArray<GLuint>& uniformIndices,
     GLenum pname) {
   RefPtr<WebGLProgram> prog = MustFind(progId);
+  if (!prog) {
+    return Nothing();
+  }
   return GetWebGL2Context()->GetActiveUniforms(*prog, uniformIndices, pname);
 }
 
 GLuint HostWebGLContext::GetUniformBlockIndex(
     const WebGLId<WebGLProgram>& progId, const nsString& uniformBlockName) {
   RefPtr<WebGLProgram> prog = MustFind(progId);
+  if (!prog) {
+    return 0;
+  }
   return GetWebGL2Context()->GetUniformBlockIndex(*prog, uniformBlockName);
 }
 
@@ -907,6 +1097,9 @@ MaybeWebGLVariant HostWebGLContext::GetActiveUniformBlockParameter(
     const WebGLId<WebGLProgram>& progId, GLuint uniformBlockIndex,
     GLenum pname) {
   RefPtr<WebGLProgram> prog = MustFind(progId);
+  if (!prog) {
+    return Nothing();
+  }
   return GetWebGL2Context()->GetActiveUniformBlockParameter(
       *prog, uniformBlockIndex, pname);
 }
@@ -914,6 +1107,9 @@ MaybeWebGLVariant HostWebGLContext::GetActiveUniformBlockParameter(
 nsString HostWebGLContext::GetActiveUniformBlockName(
     const WebGLId<WebGLProgram>& progId, GLuint uniformBlockIndex) {
   RefPtr<WebGLProgram> prog = MustFind(progId);
+  if (!prog) {
+    return nsString();
+  }
   return GetWebGL2Context()->GetActiveUniformBlockName(*prog,
                                                        uniformBlockIndex);
 }
@@ -922,6 +1118,9 @@ void HostWebGLContext::UniformBlockBinding(const WebGLId<WebGLProgram>& progId,
                                            GLuint uniformBlockIndex,
                                            GLuint uniformBlockBinding) {
   RefPtr<WebGLProgram> prog = MustFind(progId);
+  if (!prog) {
+    return;
+  }
   return GetWebGL2Context()->UniformBlockBinding(*prog, uniformBlockIndex,
                                                  uniformBlockBinding);
 }
@@ -993,61 +1192,102 @@ Maybe<UniquePtr<RawBuffer<>>> HostWebGLContext::ReadPixels2(
 
 // ----------------------------- Sampler -----------------------------------
 void HostWebGLContext::DeleteSampler(const WebGLId<WebGLSampler>& aId) {
-  GetWebGL2Context()->DeleteSampler(Find(aId));
+  auto sampler = MustFind(aId);
+  if (!sampler) {
+    return;
+  }
+  GetWebGL2Context()->DeleteSampler(sampler);
 }
 
 void HostWebGLContext::BindSampler(GLuint unit,
-                                   const WebGLId<WebGLSampler>& sampler) {
-  GetWebGL2Context()->BindSampler(unit, Find(sampler));
+                                   const WebGLId<WebGLSampler>& samplerId) {
+  RefPtr<WebGLSampler> sampler;
+  if (!MaybeFind(samplerId, sampler)) {
+    return;
+  }
+  GetWebGL2Context()->BindSampler(unit, sampler);
 }
 
 void HostWebGLContext::SamplerParameteri(const WebGLId<WebGLSampler>& samplerId,
                                          GLenum pname, GLint param) {
   RefPtr<WebGLSampler> sampler = MustFind(samplerId);
+  if (!sampler) {
+    return;
+  }
   GetWebGL2Context()->SamplerParameteri(*sampler, pname, param);
 }
 
 void HostWebGLContext::SamplerParameterf(const WebGLId<WebGLSampler>& samplerId,
                                          GLenum pname, GLfloat param) {
   RefPtr<WebGLSampler> sampler = MustFind(samplerId);
+  if (!sampler) {
+    return;
+  }
   GetWebGL2Context()->SamplerParameterf(*sampler, pname, param);
 }
 
 MaybeWebGLVariant HostWebGLContext::GetSamplerParameter(
     const WebGLId<WebGLSampler>& samplerId, GLenum pname) {
   RefPtr<WebGLSampler> sampler = MustFind(samplerId);
+  if (!sampler) {
+    return Nothing();
+  }
   return GetWebGL2Context()->GetSamplerParameter(*sampler, pname);
 }
 
 // ------------------------------- GL Sync ---------------------------------
-void HostWebGLContext::DeleteSync(const WebGLId<WebGLSync>& sync) {
-  GetWebGL2Context()->DeleteSync(Find(sync));
+void HostWebGLContext::DeleteSync(const WebGLId<WebGLSync>& syncId) {
+  RefPtr<WebGLSync> sync = MustFind(syncId);
+  if (!sync) {
+    return;
+  }
+  GetWebGL2Context()->DeleteSync(sync);
 }
 
-GLenum HostWebGLContext::ClientWaitSync(const WebGLId<WebGLSync>& sync,
+GLenum HostWebGLContext::ClientWaitSync(const WebGLId<WebGLSync>& syncId,
                                         GLbitfield flags, GLuint64 timeout) {
-  return GetWebGL2Context()->ClientWaitSync(*MustFind(sync), flags, timeout);
+  RefPtr<WebGLSync> sync = MustFind(syncId);
+  if (!sync) {
+    return LOCAL_GL_WAIT_FAILED;
+  }
+  return GetWebGL2Context()->ClientWaitSync(*sync, flags, timeout);
 }
 
-void HostWebGLContext::WaitSync(const WebGLId<WebGLSync>& sync,
+void HostWebGLContext::WaitSync(const WebGLId<WebGLSync>& syncId,
                                 GLbitfield flags, GLint64 timeout) {
-  GetWebGL2Context()->WaitSync(*MustFind(sync), flags, timeout);
+  RefPtr<WebGLSync> sync = MustFind(syncId);
+  if (!sync) {
+    return;
+  }
+  GetWebGL2Context()->WaitSync(*sync, flags, timeout);
 }
 
 MaybeWebGLVariant HostWebGLContext::GetSyncParameter(
-    const WebGLId<WebGLSync>& sync, GLenum pname) {
-  return GetWebGL2Context()->GetSyncParameter(*MustFind(sync), pname);
+    const WebGLId<WebGLSync>& syncId, GLenum pname) {
+  RefPtr<WebGLSync> sync = MustFind(syncId);
+  if (!sync) {
+    return Nothing();
+  }
+  return GetWebGL2Context()->GetSyncParameter(*sync, pname);
 }
 
 // -------------------------- Transform Feedback ---------------------------
 void HostWebGLContext::DeleteTransformFeedback(
-    const WebGLId<WebGLTransformFeedback>& tf) {
-  GetWebGL2Context()->DeleteTransformFeedback(Find(tf));
+    const WebGLId<WebGLTransformFeedback>& tfId) {
+  RefPtr<WebGLTransformFeedback> tf = MustFind(tfId);
+  if (!tf) {
+    return;
+  }
+  GetWebGL2Context()->DeleteTransformFeedback(tf);
 }
 
 void HostWebGLContext::BindTransformFeedback(
-    GLenum target, const WebGLId<WebGLTransformFeedback>& tf) {
-  GetWebGL2Context()->BindTransformFeedback(target, Find(tf));
+    GLenum target, const WebGLId<WebGLTransformFeedback>& tfId) {
+  RefPtr<WebGLTransformFeedback> tf = MustFind(tfId);
+  if (!tf) {
+    return;
+  }
+  GetWebGL2Context()->BindTransformFeedback(target, tf);
 }
 
 void HostWebGLContext::BeginTransformFeedback(GLenum primitiveMode) {
@@ -1067,26 +1307,32 @@ void HostWebGLContext::ResumeTransformFeedback() {
 }
 
 void HostWebGLContext::TransformFeedbackVaryings(
-    const WebGLId<WebGLProgram>& prog, const nsTArray<nsString>& varyings,
+    const WebGLId<WebGLProgram>& progId, const nsTArray<nsString>& varyings,
     GLenum bufferMode) {
-  GetWebGL2Context()->TransformFeedbackVaryings(*MustFind(prog), varyings,
-                                                bufferMode);
+  RefPtr<WebGLProgram> prog = MustFind(progId);
+  if (!prog) {
+    return;
+  }
+  GetWebGL2Context()->TransformFeedbackVaryings(*prog, varyings, bufferMode);
 }
 
 Maybe<WebGLActiveInfo> HostWebGLContext::GetTransformFeedbackVarying(
-    const WebGLId<WebGLProgram>& prog, GLuint index) {
-  return GetWebGL2Context()->GetTransformFeedbackVarying(*MustFind(prog),
-                                                         index);
+    const WebGLId<WebGLProgram>& progId, GLuint index) {
+  RefPtr<WebGLProgram> prog = MustFind(progId);
+  if (!prog) {
+    return Nothing();
+  }
+  return GetWebGL2Context()->GetTransformFeedbackVarying(*prog, index);
 }
 
 // ------------------------------ WebGL Debug
 // ------------------------------------
 void HostWebGLContext::EnqueueError(GLenum aGLError, const nsCString& aMsg) {
-  mContext->GenerateError(aGLError, aMsg.BeginReading());
+  mContext->GenerateEnqueuedError(aGLError, aMsg);
 }
 
 void HostWebGLContext::EnqueueWarning(const nsCString& aMsg) {
-  mContext->GenerateWarning(aMsg.BeginReading());
+  mContext->GenerateEnqueuedWarning(aMsg);
 }
 
 void HostWebGLContext::ReportOOMAndLoseContext() {
@@ -1132,10 +1378,14 @@ Maybe<nsTArray<nsString>> HostWebGLContext::GetASTCExtensionSupportedProfiles()
 }
 
 nsString HostWebGLContext::GetTranslatedShaderSource(
-    const WebGLId<WebGLShader>& shader) const {
+    const WebGLId<WebGLShader>& shaderId) const {
   auto* ext = mContext->GetExtension<WebGLExtensionID::WEBGL_debug_shaders>();
   MOZ_RELEASE_ASSERT(ext);
-  return ext->GetTranslatedShaderSource(*MustFind(shader));
+  RefPtr<WebGLShader> shader = MustFind(shaderId);
+  if (!shader) {
+    return nsString();
+  }
+  return ext->GetTranslatedShaderSource(*shader);
 }
 
 void HostWebGLContext::LoseContext(bool isSimulated) {
@@ -1151,27 +1401,37 @@ MaybeWebGLVariant HostWebGLContext::MOZDebugGetParameter(GLenum pname) const {
 }
 
 // VertexArrayObjectEXT
-void HostWebGLContext::BindVertexArray(const WebGLId<WebGLVertexArray>& array,
+void HostWebGLContext::BindVertexArray(const WebGLId<WebGLVertexArray>& arrayId,
                                        bool aFromExtension) {
-  if (aFromExtension) {
-    auto* ext =
-        mContext->GetExtension<WebGLExtensionID::OES_vertex_array_object>();
-    MOZ_RELEASE_ASSERT(ext);
-    return ext->BindVertexArrayOES(Find(array));
+  RefPtr<WebGLVertexArray> array = MustFind(arrayId);
+  if (!array) {
+    return;
   }
 
-  GetWebGL2Context()->BindVertexArray(Find(array));
-}
-
-void HostWebGLContext::DeleteVertexArray(const WebGLId<WebGLVertexArray>& array,
-                                         bool aFromExtension) {
   if (aFromExtension) {
     auto* ext =
         mContext->GetExtension<WebGLExtensionID::OES_vertex_array_object>();
     MOZ_RELEASE_ASSERT(ext);
-    ext->DeleteVertexArrayOES(Find(array));
+    return ext->BindVertexArrayOES(array);
+  }
+
+  GetWebGL2Context()->BindVertexArray(array);
+}
+
+void HostWebGLContext::DeleteVertexArray(
+    const WebGLId<WebGLVertexArray>& arrayId, bool aFromExtension) {
+  RefPtr<WebGLVertexArray> array = MustFind(arrayId);
+  if (!array) {
+    return;
+  }
+
+  if (aFromExtension) {
+    auto* ext =
+        mContext->GetExtension<WebGLExtensionID::OES_vertex_array_object>();
+    MOZ_RELEASE_ASSERT(ext);
+    ext->DeleteVertexArrayOES(array);
   } else {
-    mContext->DeleteVertexArray(Find(array));
+    mContext->DeleteVertexArray(array);
   }
 }
 
@@ -1214,30 +1474,38 @@ void HostWebGLContext::DrawRangeElements(GLenum mode, GLuint start, GLuint end,
 }
 
 // GLQueryEXT
-void HostWebGLContext::DeleteQuery(const WebGLId<WebGLQuery>& query,
+void HostWebGLContext::DeleteQuery(const WebGLId<WebGLQuery>& queryId,
                                    bool aFromExtension) const {
+  auto query = MustFind(queryId);
+  if (!query) {
+    return;
+  }
+
   if (aFromExtension) {
     auto* ext =
         mContext->GetExtension<WebGLExtensionID::EXT_disjoint_timer_query>();
     MOZ_RELEASE_ASSERT(ext);
-    ext->DeleteQueryEXT(Find(query));
+    ext->DeleteQueryEXT(query);
   } else {
-    const_cast<WebGL2Context*>(GetWebGL2Context())->DeleteQuery(Find(query));
+    const_cast<WebGL2Context*>(GetWebGL2Context())->DeleteQuery(query);
   }
 }
 
 void HostWebGLContext::BeginQuery(GLenum target,
-                                  const WebGLId<WebGLQuery>& query,
+                                  const WebGLId<WebGLQuery>& queryId,
                                   bool aFromExtension) const {
+  RefPtr<WebGLQuery> query = MustFind(queryId);
+  if (!query) {
+    return;
+  }
   if (aFromExtension) {
     auto* ext =
         mContext->GetExtension<WebGLExtensionID::EXT_disjoint_timer_query>();
     MOZ_RELEASE_ASSERT(ext);
-    return ext->BeginQueryEXT(target, *MustFind(query));
+    return ext->BeginQueryEXT(target, *query);
   }
 
-  const_cast<WebGL2Context*>(GetWebGL2Context())
-      ->BeginQuery(target, *MustFind(query));
+  const_cast<WebGL2Context*>(GetWebGL2Context())->BeginQuery(target, *query);
 }
 
 void HostWebGLContext::EndQuery(GLenum target, bool aFromExtension) const {
@@ -1251,12 +1519,16 @@ void HostWebGLContext::EndQuery(GLenum target, bool aFromExtension) const {
   const_cast<WebGL2Context*>(GetWebGL2Context())->EndQuery(target);
 }
 
-void HostWebGLContext::QueryCounter(const WebGLId<WebGLQuery>& query,
+void HostWebGLContext::QueryCounter(const WebGLId<WebGLQuery>& queryId,
                                     GLenum target) const {
   auto* ext =
       mContext->GetExtension<WebGLExtensionID::EXT_disjoint_timer_query>();
   MOZ_RELEASE_ASSERT(ext);
-  return ext->QueryCounterEXT(*MustFind(query), target);
+  RefPtr<WebGLQuery> query = MustFind(queryId);
+  if (!query) {
+    return;
+  }
+  return ext->QueryCounterEXT(*query, target);
 }
 
 MaybeWebGLVariant HostWebGLContext::GetQuery(GLenum target, GLenum pname,
@@ -1273,19 +1545,25 @@ MaybeWebGLVariant HostWebGLContext::GetQuery(GLenum target, GLenum pname,
 }
 
 MaybeWebGLVariant HostWebGLContext::GetQueryParameter(
-    const WebGLId<WebGLQuery>& query, GLenum pname, bool aFromExtension) const {
+    const WebGLId<WebGLQuery>& queryId, GLenum pname,
+    bool aFromExtension) const {
+  RefPtr<WebGLQuery> query = MustFind(queryId);
+  if (!query) {
+    return Nothing();
+  }
+
   if (aFromExtension) {
     auto* ext =
         mContext->GetExtension<WebGLExtensionID::EXT_disjoint_timer_query>();
     MOZ_RELEASE_ASSERT(ext);
-    return ext->GetQueryObjectEXT(*MustFind(query), pname);
+    return ext->GetQueryObjectEXT(*query, pname);
   }
 
   return const_cast<WebGL2Context*>(GetWebGL2Context())
-      ->GetQueryParameter(*MustFind(query), pname);
+      ->GetQueryParameter(*query, pname);
 }
 
-void HostWebGLContext::PostWarning(const nsCString& aWarningMsg) {
+void HostWebGLContext::PostWarning(const nsCString& aWarningMsg) const {
   if (mClientContext) {
     mClientContext->PostWarning(aWarningMsg);
     return;
@@ -1293,7 +1571,7 @@ void HostWebGLContext::PostWarning(const nsCString& aWarningMsg) {
   mErrorSource->RunCommand(WebGLErrorCommand::Warning, aWarningMsg);
 }
 
-void HostWebGLContext::PostContextCreationError(const nsCString& aMsg) {
+void HostWebGLContext::PostContextCreationError(const nsCString& aMsg) const {
   if (mClientContext) {
     mClientContext->PostContextCreationError(aMsg);
     return;

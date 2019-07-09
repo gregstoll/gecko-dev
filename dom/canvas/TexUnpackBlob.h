@@ -111,7 +111,7 @@ class TexUnpackBytes final : public TexUnpackBlob {
 
   TexUnpackBytes* AsTexUnpackBytes() override { return this; }
 
-  virtual bool HasData() const override { return mPtr && mPtr.Data(); }
+  virtual bool HasData() const override { return mPtr.HasData(); }
 
   virtual bool Validate(WebGLContext* webgl,
                         const webgl::PackingInfo& pi) override;

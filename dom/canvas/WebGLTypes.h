@@ -300,33 +300,43 @@ const char* ToString(AttribBaseType);
  * null objects.  This class is subclassed by ClientWebGL... classes in the
  * client and is used directly as a key in an object ID map in the host.
  */
-template <typename HostType>
+template <typename WebGLType>
 class WebGLId {
  public:
-  using IdType = uint64_t;
+  using IdType = int64_t;
 
-  WebGLId() : mId(0){};
-  WebGLId(IdType aId) : mId(aId){};
-  WebGLId(const WebGLId<HostType>* aPtr) { mId = aPtr ? aPtr->mId : 0; }
-  WebGLId(const HostType* aPtr) { mId = aPtr ? aPtr->Id() : 0; }
+  MOZ_IMPLICIT WebGLId(IdType aId = -1) : mId(aId){};
 
   IdType Id() const { return mId; }
 
-  operator bool() const { return mId != 0; }
+  bool operator<(const WebGLId<WebGLType>& o) const { return mId < o.mId; }
+  bool operator==(const WebGLId<WebGLType>& o) const { return mId == o.mId; }
+  bool operator!=(const WebGLId<WebGLType>& o) const { return !(*this == o); }
 
-  bool operator<(const WebGLId<HostType>& o) const { return mId < o.mId; }
-  bool operator!=(const WebGLId<HostType>& o) const { return mId != o.mId; }
+  static WebGLId<WebGLType> sNull;
+  static const WebGLId<WebGLType>& Null() { return sNull; }
 
-  static const WebGLId<HostType> Invalid() { return WebGLId<HostType>(); }
+  static WebGLId<WebGLType> sInvalid;
+  static const WebGLId<WebGLType>& Invalid() { return sInvalid; }
+
+  bool IsNull() const { return mId == 0; }
+  bool IsValid() const { return mId != -1; }
 
  protected:
-  friend struct DefaultHasher<WebGLId<HostType>>;
+  friend struct DefaultHasher<WebGLId<WebGLType>>;
+  friend class HostWebGLContext;
   IdType mId;
 };
 
-template <typename HostType>
-struct DefaultHasher<WebGLId<HostType>> {
-  using Key = WebGLId<HostType>;
+template <typename WebGLType>
+WebGLId<WebGLType> WebGLId<WebGLType>::sInvalid(-1LL);
+
+template <typename WebGLType>
+WebGLId<WebGLType> WebGLId<WebGLType>::sNull(0LL);
+
+template <typename WebGLType>
+struct DefaultHasher<WebGLId<WebGLType>> {
+  using Key = WebGLId<WebGLType>;
   using Lookup = Key;
 
   static HashNumber hash(const Lookup& aLookup) {
@@ -409,7 +419,11 @@ struct ExtensionSets {
   nsTArray<WebGLExtensionID> mSystem;
 };
 
-struct WebGLContextOptions {
+// Options are split in to "simple" and not for the sole reason that the
+// simple options are IsTriviallySerializable.
+struct SimpleWebGLContextOptions {
+  dom::WebGLPowerPreference powerPreference =
+      dom::WebGLPowerPreference::Default;
   bool alpha = true;
   bool depth = true;
   bool stencil = false;
@@ -417,13 +431,22 @@ struct WebGLContextOptions {
   bool antialias = true;
   bool preserveDrawingBuffer = false;
   bool failIfMajorPerformanceCaveat = false;
-  dom::WebGLPowerPreference powerPreference =
-      dom::WebGLPowerPreference::Default;
   bool shouldResistFingerprinting = true;
   bool enableDebugRendererInfo = false;
+  bool privilegedExtensionsEnabled = false;
 
-  WebGLContextOptions();
+  bool operator==(const SimpleWebGLContextOptions&) const;
+  bool operator!=(const SimpleWebGLContextOptions& r) const {
+    return !(*this == r);
+  }
+};
+
+struct WebGLContextOptions : public SimpleWebGLContextOptions {
+  nsString rendererStringOverride;
+  nsString vendorStringOverride;
+
   bool operator==(const WebGLContextOptions&) const;
+  bool operator!=(const WebGLContextOptions& r) const { return !(*this == r); }
 };
 
 // return value for the SetDimensions message
@@ -473,7 +496,7 @@ class AsSomeVariantT {
   Maybe<T> mMaybeObj;
 
  public:
-  AsSomeVariantT(Maybe<T>&& aObj) : mMaybeObj(std::move(aObj)) {}
+  explicit AsSomeVariantT(Maybe<T>&& aObj) : mMaybeObj(std::move(aObj)) {}
 
   template <typename... As>
   operator Maybe<Variant<As...>>() {
@@ -548,9 +571,7 @@ class RawBuffer {
    * If aTakeData is true, RawBuffer will delete[] the memory when destroyed.
    */
   RawBuffer(size_t len, T* data, bool aTakeData = false)
-      : mData(data), mLength(len), mOwnsData(aTakeData) {
-    MOZ_ASSERT(mData && mLength);
-  }
+      : mData(data), mLength(len), mOwnsData(aTakeData) {}
 
   RawBuffer(size_t len, RefPtr<mozilla::ipc::SharedMemoryBasic>& aSmem)
       : mSmem(aSmem), mData(aSmem->memory()), mLength(len), mOwnsData(false) {
@@ -582,7 +603,7 @@ class RawBuffer {
     return mData[idx];
   }
 
-  operator bool() const { return mData && mLength; }
+  bool HasData() const { return mData && (mLength > 0); }
 
   RawBuffer() {}
   RawBuffer(const RawBuffer&) = delete;

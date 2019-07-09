@@ -304,7 +304,8 @@ def p_MaybeShmemHolder(p):
 
 
 def p_UsingStmt(p):
-    """UsingStmt : USING MaybeRefcounted MaybeMoveOnly MaybeShmemHolder UsingKind CxxType FROM STRING"""
+    """UsingStmt : USING MaybeRefcounted MaybeMoveOnly MaybeShmemHolder \
+                   UsingKind CxxType FROM STRING"""
     p[0] = UsingStmt(locFromTok(p, 1),
                      refcounted=p[2],
                      moveonly=p[3],

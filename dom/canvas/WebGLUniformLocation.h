@@ -24,8 +24,8 @@ struct LinkedProgramInfo;
 struct UniformInfo;
 }  // namespace webgl
 
-class WebGLUniformLocation final
-    : public WebGLContextBoundObject<WebGLUniformLocation> {
+class WebGLUniformLocation final : public WebGLContextBoundObject,
+                                   public WebGLId<WebGLUniformLocation> {
  public:
   NS_INLINE_DECL_REFCOUNTING(WebGLUniformLocation)
 

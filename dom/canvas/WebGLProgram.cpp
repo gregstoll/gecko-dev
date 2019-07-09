@@ -817,10 +817,10 @@ MaybeAttachedShaders WebGLProgram::GetAttachedShaders() const {
   Array<WebGLId<WebGLShader>, 2>& out = ret.ref();
 
   if (mVertShader) {
-    out[0] = mVertShader.get();
+    out[0] = *mVertShader.get();
   }
   if (mFragShader) {
-    out[1] = mFragShader.get();
+    out[1] = *mFragShader.get();
   }
   return ret;
 }

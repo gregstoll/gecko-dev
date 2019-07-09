@@ -29,10 +29,8 @@ class OOPCanvasRenderer final {
   NS_INLINE_DECL_THREADSAFE_REFCOUNTING(OOPCanvasRenderer)
 
  public:
-  OOPCanvasRenderer(nsICanvasRenderingContextInternal* aContext)
+  explicit OOPCanvasRenderer(nsICanvasRenderingContextInternal* aContext)
       : mContext(aContext) {}
-
-  dom::HTMLCanvasElement* mHTMLCanvasElement = nullptr;
 
   // The ClientWebGLContext that this is for
   nsICanvasRenderingContextInternal* mContext = nullptr;

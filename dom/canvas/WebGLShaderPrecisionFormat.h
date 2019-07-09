@@ -21,6 +21,9 @@ class WebGLShaderPrecisionFormat final {
   WebGLShaderPrecisionFormat(GLint rangeMin, GLint rangeMax, GLint precision)
       : mRangeMin(rangeMin), mRangeMax(rangeMax), mPrecision(precision) {}
 
+  // For IPC
+  WebGLShaderPrecisionFormat() : mRangeMin(0), mRangeMax(0), mPrecision(0) {}
+
   GLint RangeMin() const { return mRangeMin; }
   GLint RangeMax() const { return mRangeMax; }
   GLint Precision() const { return mPrecision; }
@@ -42,7 +45,8 @@ class ClientWebGLShaderPrecisionFormat final {
                                    GLint precision)
       : mSPF(rangeMin, rangeMax, precision) {}
 
-  ClientWebGLShaderPrecisionFormat(const WebGLShaderPrecisionFormat& aOther)
+  explicit ClientWebGLShaderPrecisionFormat(
+      const WebGLShaderPrecisionFormat& aOther)
       : mSPF(aOther.RangeMin(), aOther.RangeMax(), aOther.Precision()) {}
 
   // WebIDL WebGLShaderPrecisionFormat API
