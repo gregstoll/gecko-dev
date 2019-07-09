@@ -43,9 +43,9 @@ class WebGL2Context : public WebGLContext {
                          const BufferT& data);
 
  public:
-  Maybe<UniquePtr<RawBuffer<>>> GetBufferSubData(GLenum target,
-                                                 WebGLintptr srcByteOffset,
-                                                 size_t byteLen);
+  UniquePtr<RawBuffer<>> GetBufferSubData(GLenum target,
+                                          WebGLintptr srcByteOffset,
+                                          size_t byteLen);
 
   // -------------------------------------------------------------------------
   // Framebuffer objects - WebGL2ContextFramebuffers.cpp
@@ -99,19 +99,6 @@ class WebGL2Context : public WebGLContext {
   void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type,
                              WebGLintptr offset, GLsizei instanceCount);
   */
-
-  void DrawRangeElements(GLenum mode, GLuint start, GLuint end, GLsizei count,
-                         GLenum type, WebGLintptr byteOffset) {
-    const FuncScope funcScope(*this, "drawRangeElements");
-    if (IsContextLost()) return;
-
-    if (end < start) {
-      ErrorInvalidValue("end must be >= start.");
-      return;
-    }
-
-    DrawElementsInstanced(mode, count, type, byteOffset, 1);
-  }
 
   // ------------------------------------------------------------------------
   // Multiple Render Targets - WebGL2ContextMRTs.cpp

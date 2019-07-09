@@ -178,13 +178,13 @@ class ClientWebGLExtensionInstancedArrays : public ClientWebGLExtensionBase {
 
   void DrawArraysInstancedANGLE(GLenum mode, GLint first, GLsizei count,
                                 GLsizei primcount) {
-    mContext->DrawArraysInstanced(mode, first, count, primcount, true);
+    mContext->DrawArraysInstanced(mode, first, count, primcount);
   }
   void DrawElementsInstancedANGLE(GLenum mode, GLsizei count, GLenum type,
                                   WebGLintptr offset, GLsizei primcount) {
-    mContext->DrawElementsInstanced(mode, count, type, offset, primcount,
-                                    WebGLContextEndpoint::drawElementsInstanced,
-                                    true);
+    mContext->DrawElementsInstanced(
+        mode, count, type, offset, primcount,
+        WebGLContextEndpoint::drawElementsInstanced);
   }
   void VertexAttribDivisorANGLE(GLuint index, GLuint divisor) {
     mContext->VertexAttribDivisor(index, divisor, true);

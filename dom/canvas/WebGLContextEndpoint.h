@@ -54,6 +54,8 @@ class WebGLContextEndpoint {
     compressedTexSubImage3D,
     copyTexSubImage2D,
     copyTexSubImage3D,
+    drawArrays,
+    drawArraysInstanced,
     drawElements,
     drawElementsInstanced,
     drawRangeElements,

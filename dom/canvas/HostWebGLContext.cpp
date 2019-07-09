@@ -655,7 +655,7 @@ void HostWebGLContext::CopyBufferSubData(GLenum readTarget, GLenum writeTarget,
                                         writeOffset, size);
 }
 
-Maybe<UniquePtr<RawBuffer<>>> HostWebGLContext::GetBufferSubData(
+UniquePtr<RawBuffer<>> HostWebGLContext::GetBufferSubData(
     GLenum target, GLintptr srcByteOffset, size_t byteLen) {
   return GetWebGL2Context()->GetBufferSubData(target, srcByteOffset, byteLen);
 }
@@ -1435,42 +1435,21 @@ void HostWebGLContext::DeleteVertexArray(
   }
 }
 
-// InstancedElementsEXT
+// -
+
 void HostWebGLContext::DrawArraysInstanced(GLenum mode, GLint first,
                                            GLsizei count, GLsizei primcount,
-                                           bool aFromExtension) {
-  if (aFromExtension) {
-    auto* ext =
-        mContext->GetExtension<WebGLExtensionID::ANGLE_instanced_arrays>();
-    MOZ_RELEASE_ASSERT(ext);
-    return ext->DrawArraysInstancedANGLE(mode, first, count, primcount);
-  }
-
+                                           FuncScopeId aFuncId) {
+  const WebGLContext::FuncScope scope(*mContext, GetFuncScopeName(aFuncId));
   mContext->DrawArraysInstanced(mode, first, count, primcount);
 }
 
 void HostWebGLContext::DrawElementsInstanced(GLenum mode, GLsizei count,
                                              GLenum type, WebGLintptr offset,
                                              GLsizei primcount,
-                                             FuncScopeId aFuncId,
-                                             bool aFromExtension) {
+                                             FuncScopeId aFuncId) {
   const WebGLContext::FuncScope scope(*mContext, GetFuncScopeName(aFuncId));
-  if (aFromExtension) {
-    auto* ext =
-        mContext->GetExtension<WebGLExtensionID::ANGLE_instanced_arrays>();
-    MOZ_RELEASE_ASSERT(ext);
-    return ext->DrawElementsInstancedANGLE(mode, count, type, offset,
-                                           primcount);
-  }
-
   mContext->DrawElementsInstanced(mode, count, type, offset, primcount);
-}
-
-void HostWebGLContext::DrawRangeElements(GLenum mode, GLuint start, GLuint end,
-                                         GLsizei count, GLenum type,
-                                         WebGLintptr byteOffset) {
-  GetWebGL2Context()->DrawRangeElements(mode, start, end, count, type,
-                                        byteOffset);
 }
 
 // GLQueryEXT

@@ -444,9 +444,8 @@ class HostWebGLContext : public WebGLContextEndpoint {
                          GLintptr readOffset, GLintptr writeOffset,
                          GLsizeiptr size);
 
-  Maybe<UniquePtr<RawBuffer<>>> GetBufferSubData(GLenum target,
-                                                 GLintptr srcByteOffset,
-                                                 size_t byteLen);
+  UniquePtr<RawBuffer<>> GetBufferSubData(GLenum target, GLintptr srcByteOffset,
+                                          size_t byteLen);
 
   void BufferData(GLenum target, const RawBuffer<>& data, GLenum usage);
 
@@ -737,16 +736,11 @@ class HostWebGLContext : public WebGLContextEndpoint {
 
   // InstancedElementsEXT
   void DrawArraysInstanced(GLenum mode, GLint first, GLsizei count,
-                           GLsizei primcount, bool aFromExtension = false);
+                           GLsizei primcount, FuncScopeId aFuncId);
 
-  void DrawElementsInstanced(
-      GLenum mode, GLsizei count, GLenum type, WebGLintptr offset,
-      GLsizei primcount,
-      FuncScopeId aFuncId = FuncScopeId::drawElementsInstanced,
-      bool aFromExtension = false);
-
-  void DrawRangeElements(GLenum mode, GLuint start, GLuint end, GLsizei count,
-                         GLenum type, WebGLintptr byteOffset);
+  void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type,
+                             WebGLintptr offset, GLsizei primcount,
+                             FuncScopeId aFuncId);
 
   // GLQueryEXT
   void CreateQuery(const WebGLId<WebGLQuery>& aId,
