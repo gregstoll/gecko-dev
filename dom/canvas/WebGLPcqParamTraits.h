@@ -46,9 +46,6 @@ template <>
 struct IsTriviallySerializable<gfx::IntSize> : TrueType {};
 
 template <>
-struct IsTriviallySerializable<webgl::TexUnpackBlob> : TrueType {};
-
-template <>
 struct IsTriviallySerializable<SyncResponse> : TrueType {};
 
 template <>
@@ -237,6 +234,56 @@ struct PcqParamTraits<RawBuffer<T>> {
   static size_t MinSize(View& aView, const ParamType* aArg) {
     return aView.template MinSizeParam<size_t>() +
            aView.MinSizeBytes(aArg ? aArg->mLength * sizeof(T) : 0);
+  }
+};
+
+// NB: TexUnpackBlob is not IsTriviallySerializable because
+// it has a vtable.
+template <>
+struct PcqParamTraits<webgl::TexUnpackBlob> {
+  using ParamType = webgl::TexUnpackBlob;
+
+  static PcqStatus Write(ProducerView& aProducerView, const ParamType& aArg) {
+    aProducerView.WriteParam(aArg.mAlignment);
+    aProducerView.WriteParam(aArg.mRowLength);
+    aProducerView.WriteParam(aArg.mImageHeight);
+    aProducerView.WriteParam(aArg.mSkipPixels);
+    aProducerView.WriteParam(aArg.mSkipRows);
+    aProducerView.WriteParam(aArg.mSkipImages);
+    aProducerView.WriteParam(aArg.mWidth);
+    aProducerView.WriteParam(aArg.mHeight);
+    aProducerView.WriteParam(aArg.mDepth);
+    aProducerView.WriteParam(aArg.mSrcAlphaType);
+    return aProducerView.WriteParam(aArg.mNeedsExactUpload);
+  }
+
+  static PcqStatus Read(ConsumerView& aConsumerView, ParamType* aArg) {
+    aConsumerView.ReadParam(aArg ? &aArg->mAlignment : nullptr);
+    aConsumerView.ReadParam(aArg ? &aArg->mRowLength : nullptr);
+    aConsumerView.ReadParam(aArg ? &aArg->mImageHeight : nullptr);
+    aConsumerView.ReadParam(aArg ? &aArg->mSkipPixels : nullptr);
+    aConsumerView.ReadParam(aArg ? &aArg->mSkipRows : nullptr);
+    aConsumerView.ReadParam(aArg ? &aArg->mSkipImages : nullptr);
+    aConsumerView.ReadParam(aArg ? &aArg->mWidth : nullptr);
+    aConsumerView.ReadParam(aArg ? &aArg->mHeight : nullptr);
+    aConsumerView.ReadParam(aArg ? &aArg->mDepth : nullptr);
+    aConsumerView.ReadParam(aArg ? &aArg->mSrcAlphaType : nullptr);
+    return aConsumerView.ReadParam(aArg ? &aArg->mNeedsExactUpload : nullptr);
+  }
+
+  template <typename View>
+  static size_t MinSize(View& aView, const ParamType* aArg) {
+    return aView.MinSizeParam(aArg ? &aArg->mAlignment : nullptr) +
+           aView.MinSizeParam(aArg ? &aArg->mRowLength : nullptr) +
+           aView.MinSizeParam(aArg ? &aArg->mImageHeight : nullptr) +
+           aView.MinSizeParam(aArg ? &aArg->mSkipPixels : nullptr) +
+           aView.MinSizeParam(aArg ? &aArg->mSkipRows : nullptr) +
+           aView.MinSizeParam(aArg ? &aArg->mSkipImages : nullptr) +
+           aView.MinSizeParam(aArg ? &aArg->mWidth : nullptr) +
+           aView.MinSizeParam(aArg ? &aArg->mHeight : nullptr) +
+           aView.MinSizeParam(aArg ? &aArg->mDepth : nullptr) +
+           aView.MinSizeParam(aArg ? &aArg->mSrcAlphaType : nullptr) +
+           aView.MinSizeParam(aArg ? &aArg->mNeedsExactUpload : nullptr);
   }
 };
 
