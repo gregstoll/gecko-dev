@@ -161,6 +161,16 @@ ClientWebGLContext::MakeCrossProcessWebGLContext(WebGLVersion aVersion) {
                            (aCompositorBackend != LayersBackend::LAYERS_NONE) &&
                            (aCompositorBackend != LayersBackend::LAYERS_BASIC);
 
+  // Another exception: If e10s is disabled then run single process.
+  // There is no great way to determine if e10s is disabled so we
+  // base our decision on the existence of CompositorBridgeChild.
+  if (shouldRemoteWebGL && (!CompositorBridgeChild::Get())) {
+    WEBGL_BRIDGE_LOGI(
+        "Unable to run remote WebGL since e10s is disabled.  "
+        "Falling back to single-process WebGL.");
+    shouldRemoteWebGL = false;
+  }
+
   DebugOnly<bool> isRemoteHostProcess =
       XRE_IsGPUProcess() || XRE_IsParentProcess();
   MOZ_ASSERT(!isRemoteHostProcess);
