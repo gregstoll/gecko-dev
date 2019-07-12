@@ -495,7 +495,7 @@ MaybeWebGLVariant WebGLContext::GetParameter(GLenum pname) {
     // 4 floats
     case LOCAL_GL_COLOR_CLEAR_VALUE:
     case LOCAL_GL_BLEND_COLOR: {
-      Float32Array2 obj;
+      Float32Array4 obj;
       GLfloat fv[4] = {0};
       gl->fGetFloatv(pname, fv);
       for (uint32_t i = 0; i < 4; ++i) {

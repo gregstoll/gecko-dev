@@ -372,11 +372,11 @@ class ClientWebGLContext : public nsICanvasRenderingContextInternal,
       dom::Nullable<dom::OwningHTMLCanvasElementOrOffscreenCanvas>& retval);
 
   GLsizei DrawingBufferWidth() {
-    const FuncScope funcScope(this, "drawingBufferWidth");
+    const FuncScope funcScope(this, FuncScopeId::drawingBufferWidth);
     return DrawingBufferSize().width;
   }
   GLsizei DrawingBufferHeight() {
-    const FuncScope funcScope(this, "drawingBufferHeight");
+    const FuncScope funcScope(this, FuncScopeId::drawingBufferHeight);
     return DrawingBufferSize().height;
   }
   void GetContextAttributes(dom::Nullable<dom::WebGLContextAttributes>& retval);

@@ -767,8 +767,8 @@ ClientWebGLContext::SetDimensions(int32_t signedWidth, int32_t signedHeight) {
 }
 
 gfx::IntSize ClientWebGLContext::DrawingBufferSize() {
-  // TODO: This is absurd.
-  return Run<RPROC(DrawingBufferSize)>();
+  const FuncScope funcScope(this, FuncScopeId::drawingBufferSize);
+  return Run<RPROC(DrawingBufferSize)>(GetFuncScopeId());
 }
 
 void ClientWebGLContext::OnMemoryPressure() {
@@ -893,8 +893,54 @@ void ClientWebGLContext::DidRefresh() { Run<RPROC(DidRefresh)>(); }
 
 already_AddRefed<mozilla::gfx::SourceSurface>
 ClientWebGLContext::GetSurfaceSnapshot(gfxAlphaType* out_alphaType) {
-  MOZ_ASSERT_UNREACHABLE("TODO: ClientWebGLContext::GetSurfaceSnapshot");
-  return nullptr;
+  const FuncScope funcScope(this, FuncScopeId::getSurfaceSnapshot);
+  UniquePtr<RawSurface> rawSurf =
+      Run<RPROC(GetSurfaceSnapshot)>(GetFuncScopeId());
+  if (!rawSurf) {
+    return nullptr;
+  }
+  MOZ_ASSERT(rawSurf->HasData());
+
+  RefPtr<DataSourceSurface> surf = Factory::CreateWrappingDataSourceSurface(
+      rawSurf->Data(), rawSurf->Stride(), rawSurf->Size(), rawSurf->Format());
+
+  if (!surf) {
+    EnqueueErrorOutOfMemory("Failed to create client surface.");
+    return nullptr;
+  }
+
+  gfxAlphaType alphaType;
+  if (!mOptions.alpha) {
+    alphaType = gfxAlphaType::Opaque;
+  } else if (mOptions.premultipliedAlpha) {
+    alphaType = gfxAlphaType::Premult;
+  } else {
+    alphaType = gfxAlphaType::NonPremult;
+  }
+
+  if (out_alphaType) {
+    *out_alphaType = alphaType;
+  } else {
+    // Expects Opaque or Premult
+    if (alphaType == gfxAlphaType::NonPremult) {
+      gfxUtils::PremultiplyDataSurface(surf, surf);
+    }
+  }
+
+  RefPtr<DrawTarget> dt = Factory::CreateDrawTarget(
+      gfxPlatform::GetPlatform()->GetSoftwareBackend(), rawSurf->Size(),
+      SurfaceFormat::B8G8R8A8);
+  if (!dt) return nullptr;
+
+  dt->SetTransform(
+      Matrix::Translation(0.0, rawSurf->Size().height).PreScale(1.0, -1.0));
+
+  const gfx::Rect rect{0, 0, float(rawSurf->Size().width),
+                       float(rawSurf->Size().height)};
+  dt->DrawSurface(surf, rect, rect, DrawSurfaceOptions(),
+                  DrawOptions(1.0f, CompositionOp::OP_SOURCE));
+
+  return dt->Snapshot();
 }
 
 UniquePtr<uint8_t[]> ClientWebGLContext::GetImageBuffer(int32_t* out_format) {

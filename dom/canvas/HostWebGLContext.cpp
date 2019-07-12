@@ -225,7 +225,8 @@ SetDimensionsData HostWebGLContext::SetDimensions(int32_t signedWidth,
   return mContext->SetDimensions(signedWidth, signedHeight);
 }
 
-gfx::IntSize HostWebGLContext::DrawingBufferSize() {
+gfx::IntSize HostWebGLContext::DrawingBufferSize(FuncScopeId aFuncId) {
+  const WebGLContext::FuncScope scope(*mContext, GetFuncScopeName(aFuncId));
   return mContext->DrawingBufferSize();
 }
 
@@ -239,6 +240,11 @@ void HostWebGLContext::AllowContextRestore() {
 
 void HostWebGLContext::DidRefresh() { mContext->DidRefresh(); }
 
+UniquePtr<RawSurface> HostWebGLContext::GetSurfaceSnapshot(
+    FuncScopeId aFuncId) {
+  const WebGLContext::FuncScope scope(*mContext, GetFuncScopeName(aFuncId));
+  return mContext->GetSurfaceSnapshot();
+}
 // ------------------------- GL State -------------------------
 bool HostWebGLContext::IsContextLost() const {
   return mContext->IsContextLost();

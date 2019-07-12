@@ -237,6 +237,33 @@ struct PcqParamTraits<RawBuffer<T>> {
   }
 };
 
+template <>
+struct PcqParamTraits<RawSurface> {
+  using ParamType = RawSurface;
+
+  static PcqStatus Write(ProducerView& aProducerView, const ParamType& aArg) {
+    aProducerView.WriteParam(static_cast<const RawBuffer<>&>(aArg));
+    aProducerView.WriteParam(aArg.mStride);
+    aProducerView.WriteParam(aArg.mSize);
+    return aProducerView.WriteParam(aArg.mFormat);
+  }
+
+  static PcqStatus Read(ConsumerView& aConsumerView, ParamType* aArg) {
+    aConsumerView.ReadParam(static_cast<RawBuffer<>*>(aArg));
+    aConsumerView.ReadParam(aArg ? &aArg->mStride : nullptr);
+    aConsumerView.ReadParam(aArg ? &aArg->mSize : nullptr);
+    return aConsumerView.ReadParam(aArg ? &aArg->mFormat : nullptr);
+  }
+
+  template <typename View>
+  static size_t MinSize(View& aView, const ParamType* aArg) {
+    return aView.MinSizeParam(static_cast<const RawBuffer<>*>(aArg)) +
+           aView.MinSizeParam(aArg ? &aArg->mStride : nullptr) +
+           aView.MinSizeParam(aArg ? &aArg->mSize : nullptr) +
+           aView.MinSizeParam(aArg ? &aArg->mFormat : nullptr);
+  }
+};
+
 // NB: TexUnpackBlob is not IsTriviallySerializable because
 // it has a vtable.
 template <>

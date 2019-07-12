@@ -633,6 +633,28 @@ class RawBuffer {
   }
 };
 
+class RawSurface : public RawBuffer<> {
+ public:
+  gfx::IntSize Size() { return mSize; }
+  gfx::SurfaceFormat Format() { return mFormat; }
+  int32_t Stride() { return mStride; }
+
+  RawSurface() {}
+  RawSurface(gfx::IntSize size, gfx::SurfaceFormat format, int32_t stride,
+             size_t len, uint8_t* data, bool aTakeData = false)
+      : RawBuffer<>(len, data, aTakeData),
+        mSize(size),
+        mFormat(format),
+        mStride(stride) {}
+
+ protected:
+  friend struct mozilla::ipc::PcqParamTraits<RawSurface>;
+
+  gfx::IntSize mSize;
+  gfx::SurfaceFormat mFormat;
+  int32_t mStride;
+};
+
 }  // namespace mozilla
 
 #endif

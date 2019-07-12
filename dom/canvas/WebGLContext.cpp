@@ -1450,8 +1450,7 @@ void WebGLContext::ForceRestoreContext() {
   EnqueueUpdateContextLossStatus();
 }
 
-already_AddRefed<mozilla::gfx::SourceSurface> WebGLContext::GetSurfaceSnapshot(
-    gfxAlphaType* const out_alphaType) {
+UniquePtr<RawSurface> WebGLContext::GetSurfaceSnapshot() {
   const FuncScope funcScope(*this, "<GetSurfaceSnapshot>");
   if (IsContextLost()) return nullptr;
 
@@ -1460,43 +1459,24 @@ already_AddRefed<mozilla::gfx::SourceSurface> WebGLContext::GetSurfaceSnapshot(
   const auto surfFormat =
       mOptions.alpha ? SurfaceFormat::B8G8R8A8 : SurfaceFormat::B8G8R8X8;
   const auto& size = mDefaultFB->mSize;
-  RefPtr<DataSourceSurface> surf;
-  surf = Factory::CreateDataSourceSurfaceWithStride(size, surfFormat,
-                                                    size.width * 4);
-  if (NS_WARN_IF(!surf)) return nullptr;
 
-  ReadPixelsIntoDataSurface(gl, surf);
-
-  gfxAlphaType alphaType;
-  if (!mOptions.alpha) {
-    alphaType = gfxAlphaType::Opaque;
-  } else if (mOptions.premultipliedAlpha) {
-    alphaType = gfxAlphaType::Premult;
-  } else {
-    alphaType = gfxAlphaType::NonPremult;
+  size_t nBytes = size.width * 4 * size.height;
+  MOZ_ASSERT(nBytes > 0);
+  auto ret = MakeUnique<RawSurface>(size, surfFormat, size.width * 4, nBytes,
+                                    new uint8_t[nBytes], true /* ownsData */);
+  if (!ret) {
+    ErrorOutOfMemory("Failed to create host Surface");
+    return nullptr;
   }
 
-  if (out_alphaType) {
-    *out_alphaType = alphaType;
-  } else {
-    // Expects Opaque or Premult
-    if (alphaType == gfxAlphaType::NonPremult) {
-      gfxUtils::PremultiplyDataSurface(surf, surf);
-    }
-  }
+  MOZ_ASSERT(ret->HasData());
 
-  RefPtr<DrawTarget> dt = Factory::CreateDrawTarget(
-      gfxPlatform::GetPlatform()->GetSoftwareBackend(), size,
-      SurfaceFormat::B8G8R8A8);
-  if (!dt) return nullptr;
+  RefPtr<DataSourceSurface> dss = Factory::CreateWrappingDataSourceSurface(
+      ret->Data(), ret->Stride(), ret->Size(), ret->Format());
+  if (NS_WARN_IF(!dss)) return nullptr;
 
-  dt->SetTransform(Matrix::Translation(0.0, size.height).PreScale(1.0, -1.0));
-
-  const gfx::Rect rect{0, 0, float(size.width), float(size.height)};
-  dt->DrawSurface(surf, rect, rect, DrawSurfaceOptions(),
-                  DrawOptions(1.0f, CompositionOp::OP_SOURCE));
-
-  return dt->Snapshot();
+  ReadPixelsIntoDataSurface(gl, dss);
+  return ret;
 }
 
 void WebGLContext::DidRefresh() {

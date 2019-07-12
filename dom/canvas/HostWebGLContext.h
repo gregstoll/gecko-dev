@@ -254,7 +254,7 @@ class HostWebGLContext : public WebGLContextEndpoint {
 
   SetDimensionsData SetDimensions(int32_t signedWidth, int32_t signedHeight);
 
-  gfx::IntSize DrawingBufferSize();
+  gfx::IntSize DrawingBufferSize(FuncScopeId aFuncId);
 
   void SetCompositableHost(RefPtr<layers::CompositableHost>& aCompositableHost);
 
@@ -263,6 +263,8 @@ class HostWebGLContext : public WebGLContextEndpoint {
   void AllowContextRestore();
 
   void DidRefresh();
+
+  UniquePtr<RawSurface> GetSurfaceSnapshot(FuncScopeId aFuncId);
 
   // ------------------------- GL State -------------------------
   bool IsContextLost() const;
