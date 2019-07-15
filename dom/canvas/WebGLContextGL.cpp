@@ -1193,6 +1193,9 @@ Maybe<UniquePtr<RawBuffer<>>> WebGLContext::ReadPixels(
     ErrorOutOfMemory("ReadPixels could not allocate temp memory");
     return Nothing();
   }
+  // ReadPixels relies on regions outside of what it writes to to be
+  // pre-cleared.
+  memset(bytes, 0, byteLen);
   UniquePtr<RawBuffer<>> buf = MakeUnique<RawBuffer<>>(byteLen, bytes, true);
   ReadPixelsImpl(x, y, width, height, format, type, bytes, byteLen);
   return Some(std::move(buf));
