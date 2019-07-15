@@ -116,7 +116,7 @@ function Test(gl, prog, shouldFinish) {
     WebGLTestUtils.checkCanvasRect(gl, gl.drawingBufferWidth/2,
                                    gl.drawingBufferHeight/2, 1, 1,
                                    [iColor, iColor, iColor, 255],
-                                   'Should blend as if alpha is 1.0.');
+                                   'Should blend as if alpha is 1.0 #1.');
 
     dataURL_post = gl.canvas.toDataURL();
     //console.log('After blending: ' + dataURL_post);

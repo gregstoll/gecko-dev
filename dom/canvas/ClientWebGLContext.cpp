@@ -1401,7 +1401,7 @@ void ClientWebGLContext::BlendEquationSeparate(GLenum modeRGB,
 }
 
 void ClientWebGLContext::BlendFunc(GLenum sfactor, GLenum dfactor) {
-  Run<RPROC(BlendEquationSeparate)>(sfactor, dfactor);
+  Run<RPROC(BlendFunc)>(sfactor, dfactor);
 }
 
 void ClientWebGLContext::BlendFuncSeparate(GLenum srcRGB, GLenum dstRGB,
