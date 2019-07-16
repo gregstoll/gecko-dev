@@ -2113,10 +2113,8 @@ void ClientWebGLContext::DeleteShader(
 
 void ClientWebGLContext::UseProgram(
     const ClientWebGLObject<WebGLProgram>* prog) {
-  if (!prog) {
-    return;
-  }
-  Run<RPROC(UseProgram)>(*prog);
+  Run<RPROC(UseProgram)>(prog ? *prog
+                              : ClientWebGLObject<WebGLProgram>::Null());
 }
 
 void ClientWebGLContext::GetAttachedShaders(
