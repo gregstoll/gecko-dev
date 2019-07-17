@@ -158,8 +158,12 @@ WebGLId<WebGLUniformLocation> HostWebGLContext::GetUniformLocation(
   if (!prog) {
     return WebGLId<WebGLUniformLocation>::Invalid();
   }
-  return Insert(
-      RefPtr<WebGLUniformLocation>(mContext->GetUniformLocation(*prog, name)));
+  auto ret =
+      RefPtr<WebGLUniformLocation>(mContext->GetUniformLocation(*prog, name));
+  if (!ret) {
+    return WebGLId<WebGLUniformLocation>::Null();
+  }
+  return Insert(std::move(ret));
 }
 
 WebGLId<WebGLBuffer> HostWebGLContext::CreateBuffer() {
