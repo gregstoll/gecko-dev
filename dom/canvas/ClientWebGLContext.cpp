@@ -415,34 +415,6 @@ void ClientWebGLContext::PostContextCreationError(const nsCString& text) const {
 
 // ---
 
-// Dispatch a command to the host, using data in WebGLMethodDispatcher for
-// information: e.g. to choose the right synchronization protocol.
-template <typename ReturnType>
-struct WebGLClientDispatcher {
-  // non-const method
-  template <size_t Id, typename... MethodArgs, typename... GivenArgs>
-  static ReturnType Run(const ClientWebGLContext& c,
-                        ReturnType (HostWebGLContext::*method)(MethodArgs...),
-                        GivenArgs&&... aArgs) {
-    // Non-void calls must be sync, otherwise what would we return?
-    MOZ_ASSERT(WebGLMethodDispatcher::SyncType<Id>() == CommandSyncType::SYNC);
-    return c.DispatchSync<Id, ReturnType>(
-        static_cast<const MethodArgs&>(aArgs)...);
-  }
-
-  // const method
-  template <size_t Id, typename... MethodArgs, typename... GivenArgs>
-  static ReturnType Run(const ClientWebGLContext& c,
-                        ReturnType (HostWebGLContext::*method)(MethodArgs...)
-                            const,
-                        GivenArgs&&... aArgs) {
-    // Non-void calls must be sync, otherwise what would we return?
-    MOZ_ASSERT(WebGLMethodDispatcher::SyncType<Id>() == CommandSyncType::SYNC);
-    return c.DispatchSync<Id, ReturnType>(
-        static_cast<const MethodArgs&>(aArgs)...);
-  }
-};
-
 // This method is used for validating parameters before they are sent
 // to the host.  It returns a reference to the object that should actually
 // be serialized.  Currently, this only replaces invalid ClientWebGLObjects
@@ -469,14 +441,79 @@ struct ValidateRPCArg<const ToType> {
 
 template <typename WebGLClass>
 struct ValidateRPCArg<const WebGLId<WebGLClass>> {
+  // Replace ClientWebGLObjects with Invalid IDs if they are for a different
+  // context.
   const WebGLId<WebGLClass>&& operator()(
-      ClientWebGLObject<WebGLClass>&& aArg) const {
+      const ClientWebGLObject<WebGLClass>&& aArg) const {
     if (aArg.IsValidForContext(&mClientContext)) {
-      return std::forward<WebGLId<WebGLClass>&&>(aArg);
+      return std::forward<const WebGLId<WebGLClass>>(aArg);
     }
     return WebGLId<WebGLClass>::Invalid();
   }
+
+  // WebGLIds that aren't ClientWebGLObjects are just IDs -- they have
+  // no associated context to validate.
+  const WebGLId<WebGLClass>&& operator()(
+      const WebGLId<WebGLClass>&& aArg) const {
+    return aArg;
+  }
+
+  explicit ValidateRPCArg(const ClientWebGLContext& aCxt)
+      : mClientContext(aCxt) {}
+
   const ClientWebGLContext& mClientContext;
+};
+
+template <typename WebGLClass>
+struct ValidateRPCArg<const WebGLId<WebGLClass>&> {
+  // Replace ClientWebGLObjects with Invalid IDs if they are for a different
+  // context.
+  const WebGLId<WebGLClass>& operator()(
+      const ClientWebGLObject<WebGLClass>& aArg) const {
+    if (aArg.IsValidForContext(&mClientContext)) {
+      return static_cast<const WebGLId<WebGLClass>&>(aArg);
+    }
+    return WebGLId<WebGLClass>::Invalid();
+  }
+
+  // WebGLIds that aren't ClientWebGLObjects are just IDs -- they have
+  // no associated context to validate.
+  const WebGLId<WebGLClass>& operator()(const WebGLId<WebGLClass>& aArg) const {
+    return aArg;
+  }
+
+  explicit ValidateRPCArg(const ClientWebGLContext& aCxt)
+      : mClientContext(aCxt) {}
+
+  const ClientWebGLContext& mClientContext;
+};
+
+// Dispatch a command to the host, using data in WebGLMethodDispatcher for
+// information: e.g. to choose the right synchronization protocol.
+template <typename ReturnType>
+struct WebGLClientDispatcher {
+  // non-const method
+  template <size_t Id, typename... MethodArgs, typename... GivenArgs>
+  static ReturnType Run(const ClientWebGLContext& c,
+                        ReturnType (HostWebGLContext::*method)(MethodArgs...),
+                        GivenArgs&&... aArgs) {
+    // Non-void calls must be sync, otherwise what would we return?
+    MOZ_ASSERT(WebGLMethodDispatcher::SyncType<Id>() == CommandSyncType::SYNC);
+    return c.DispatchSync<Id, ReturnType>(ValidateRPCArg<const MethodArgs&&>{c}(
+        std::forward<GivenArgs>(aArgs))...);
+  }
+
+  // const method
+  template <size_t Id, typename... MethodArgs, typename... GivenArgs>
+  static ReturnType Run(const ClientWebGLContext& c,
+                        ReturnType (HostWebGLContext::*method)(MethodArgs...)
+                            const,
+                        GivenArgs&&... aArgs) {
+    // Non-void calls must be sync, otherwise what would we return?
+    MOZ_ASSERT(WebGLMethodDispatcher::SyncType<Id>() == CommandSyncType::SYNC);
+    return c.DispatchSync<Id, ReturnType>(ValidateRPCArg<const MethodArgs&&>{c}(
+        std::forward<GivenArgs>(aArgs))...);
+  }
 };
 
 template <>
@@ -487,9 +524,11 @@ struct WebGLClientDispatcher<void> {
                   void (HostWebGLContext::*method)(MethodArgs...),
                   GivenArgs&&... aArgs) {
     if (WebGLMethodDispatcher::SyncType<Id>() == CommandSyncType::SYNC) {
-      c.DispatchVoidSync<Id>(ValidateRPCArg<const MethodArgs&&>{c}(aArgs)...);
+      c.DispatchVoidSync<Id>(ValidateRPCArg<const MethodArgs&&>{c}(
+          std::forward<GivenArgs>(aArgs))...);
     } else {
-      c.DispatchAsync<Id>(ValidateRPCArg<const MethodArgs&&>{c}(aArgs)...);
+      c.DispatchAsync<Id>(ValidateRPCArg<const MethodArgs&&>{c}(
+          std::forward<GivenArgs>(aArgs))...);
     }
   }
 
@@ -499,9 +538,11 @@ struct WebGLClientDispatcher<void> {
                   void (HostWebGLContext::*method)(MethodArgs...) const,
                   GivenArgs&&... aArgs) {
     if (WebGLMethodDispatcher::SyncType<Id>() == CommandSyncType::SYNC) {
-      c.DispatchVoidSync<Id>(ValidateRPCArg<const MethodArgs&&>{c}(aArgs)...);
+      c.DispatchVoidSync<Id>(ValidateRPCArg<const MethodArgs&&>{c}(
+          std::forward<GivenArgs>(aArgs))...);
     } else {
-      c.DispatchAsync<Id>(ValidateRPCArg<const MethodArgs&&>{c}(aArgs)...);
+      c.DispatchAsync<Id>(ValidateRPCArg<const MethodArgs&&>{c}(
+          std::forward<GivenArgs>(aArgs))...);
     }
   }
 };
@@ -518,8 +559,8 @@ ReturnType ClientWebGLContext::Run(Args&&... aArgs) const {
     MOZ_ASSERT(mHostContext);
     return ((mHostContext.get())->*method)(std::forward<Args>(aArgs)...);
   }
-  return WebGLClientDispatcher<ReturnType>::template Run<Id>(*this, method,
-                                                             aArgs...);
+  return WebGLClientDispatcher<ReturnType>::template Run<Id>(
+      *this, method, std::forward<Args>(aArgs)...);
 }
 
 // -------------------------------------------------------------------------
@@ -1002,8 +1043,9 @@ ClientWebGLContext::GetInputStream(const char* mimeType,
 // map _and_ increments its ref count again, so the already_AddRefed return
 // value has a ref-count of 2.
 #define DEFINE_WEBGL_METHODS(_TYPE)                                         \
+  StaticRefPtr<ClientWebGL##_TYPE> ClientWebGL##_TYPE::sNull;               \
   void ClientWebGLContext::ReleaseWebGLObject(                              \
-      const WebGLId<WebGL##_TYPE>* id) {                                    \
+      const ClientWebGLObject<WebGL##_TYPE>* id) {                          \
     Run<RPROC(ReleaseWebGLObject<WebGL##_TYPE>)>(*id);                      \
     Remove(*id);                                                            \
   }                                                                         \
@@ -1552,20 +1594,20 @@ void ClientWebGLContext::Viewport(GLint x, GLint y, GLsizei width,
 void ClientWebGLContext::BindBuffer(
     GLenum target, const ClientWebGLObject<WebGLBuffer>* buffer) {
   Run<RPROC(BindBuffer)>(
-      target, buffer ? *buffer : ClientWebGLObject<WebGLBuffer>::Null());
+      target, buffer ? *buffer : *ClientWebGLBuffer::Null(this).get());
 }
 
 void ClientWebGLContext::BindBufferBase(
     GLenum target, GLuint index, const ClientWebGLObject<WebGLBuffer>* buffer) {
   Run<RPROC(BindBufferBase)>(
-      target, index, buffer ? *buffer : ClientWebGLObject<WebGLBuffer>::Null());
+      target, index, buffer ? *buffer : *ClientWebGLBuffer::Null(this).get());
 }
 
 void ClientWebGLContext::BindBufferRange(
     GLenum target, GLuint index, const ClientWebGLObject<WebGLBuffer>* buffer,
     WebGLintptr offset, WebGLsizeiptr size) {
   Run<RPROC(BindBufferRange)>(
-      target, index, buffer ? *buffer : ClientWebGLObject<WebGLBuffer>::Null(),
+      target, index, buffer ? *buffer : *ClientWebGLBuffer::Null(this).get(),
       offset, size);
 }
 
@@ -1683,7 +1725,7 @@ void ClientWebGLContext::DeleteFramebuffer(
 void ClientWebGLContext::BindFramebuffer(
     GLenum target, const ClientWebGLObject<WebGLFramebuffer>* fb) {
   Run<RPROC(BindFramebuffer)>(
-      target, fb ? *fb : ClientWebGLObject<WebGLFramebuffer>::Null());
+      target, fb ? *fb : *ClientWebGLFramebuffer::Null(this).get());
 }
 
 void ClientWebGLContext::FramebufferRenderbuffer(
@@ -1691,7 +1733,7 @@ void ClientWebGLContext::FramebufferRenderbuffer(
     const ClientWebGLObject<WebGLRenderbuffer>* rb) {
   Run<RPROC(FramebufferRenderbuffer)>(
       target, attachment, rbTarget,
-      rb ? *rb : ClientWebGLObject<WebGLRenderbuffer>::Null());
+      rb ? *rb : *ClientWebGLRenderbuffer::Null(this).get());
 }
 
 void ClientWebGLContext::FramebufferTexture2D(
@@ -1699,7 +1741,7 @@ void ClientWebGLContext::FramebufferTexture2D(
     const ClientWebGLObject<WebGLTexture>* tex, GLint level) {
   Run<RPROC(FramebufferTexture2D)>(
       target, attachment, texImageTarget,
-      tex ? *tex : ClientWebGLObject<WebGLTexture>::Null(), level);
+      tex ? *tex : *ClientWebGLTexture::Null(this).get(), level);
 }
 
 void ClientWebGLContext::BlitFramebuffer(GLint srcX0, GLint srcY0, GLint srcX1,
@@ -1720,7 +1762,7 @@ void ClientWebGLContext::FramebufferTextureLayer(
     GLint layer) {
   Run<RPROC(FramebufferTextureLayer)>(
       target, attachment,
-      textureId ? (*textureId) : ClientWebGLObject<WebGLTexture>::Null(), level,
+      textureId ? (*textureId) : *ClientWebGLTexture::Null(this).get(), level,
       layer, !textureId);
 }
 
@@ -2137,8 +2179,7 @@ void ClientWebGLContext::DeleteShader(
 
 void ClientWebGLContext::UseProgram(
     const ClientWebGLObject<WebGLProgram>* prog) {
-  Run<RPROC(UseProgram)>(prog ? *prog
-                              : ClientWebGLObject<WebGLProgram>::Null());
+  Run<RPROC(UseProgram)>(prog ? *prog : *ClientWebGLProgram::Null(this).get());
 }
 
 void ClientWebGLContext::GetAttachedShaders(

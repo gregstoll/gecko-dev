@@ -99,25 +99,32 @@ bool ClientWebGLObject<WebGLType>::sLogMe = true;
 
 // Every WebGL type with a client version exposed to JS needs to use this macro
 // to associate its C++ type with the JS binding interface.
-#define DEFINE_WEBGL_CLIENT_TYPE_2(_WebGLType, _WebGLBindingType)       \
-  class ClientWebGL##_WebGLType                                         \
-      : public ClientWebGLObject<WebGL##_WebGLType> {                   \
-   public:                                                              \
-    ClientWebGL##_WebGLType(uint64_t aId, ClientWebGLContext* aContext) \
-        : ClientWebGLObject<WebGL##_WebGLType>(aId, aContext) {}        \
-    JSObject* WrapObject(JSContext* cx,                                 \
-                         JS::Handle<JSObject*> givenProto) override {   \
-      return dom::WebGL##_WebGLBindingType##_Binding::Wrap(cx, this,    \
-                                                           givenProto); \
-    }                                                                   \
-                                                                        \
-   protected:                                                           \
-    virtual ~ClientWebGL##_WebGLType(){};                               \
-  };                                                                    \
-  inline RefPtr<ClientWebGL##_WebGLType> downcast(                      \
-      RefPtr<ClientWebGLObject<WebGL##_WebGLType>>&& obj) {             \
-    MOZ_ASSERT(obj);                                                    \
-    return obj.forget().template downcast<ClientWebGL##_WebGLType>();   \
+#define DEFINE_WEBGL_CLIENT_TYPE_2(_WebGLType, _WebGLBindingType)           \
+  class ClientWebGL##_WebGLType                                             \
+      : public ClientWebGLObject<WebGL##_WebGLType> {                       \
+   public:                                                                  \
+    ClientWebGL##_WebGLType(uint64_t aId, ClientWebGLContext* aContext)     \
+        : ClientWebGLObject<WebGL##_WebGLType>(aId, aContext) {}            \
+    JSObject* WrapObject(JSContext* cx,                                     \
+                         JS::Handle<JSObject*> givenProto) override {       \
+      return dom::WebGL##_WebGLBindingType##_Binding::Wrap(cx, this,        \
+                                                           givenProto);     \
+    }                                                                       \
+    static RefPtr<ClientWebGL##_WebGLType> Null(ClientWebGLContext* aCxt) { \
+      if (!sNull) {                                                         \
+        sNull = new ClientWebGL##_WebGLType(0, aCxt);                       \
+      }                                                                     \
+      return sNull;                                                         \
+    }                                                                       \
+                                                                            \
+   protected:                                                               \
+    virtual ~ClientWebGL##_WebGLType(){};                                   \
+    static StaticRefPtr<ClientWebGL##_WebGLType> sNull;                     \
+  };                                                                        \
+  inline RefPtr<ClientWebGL##_WebGLType> downcast(                          \
+      RefPtr<ClientWebGLObject<WebGL##_WebGLType>>&& obj) {                 \
+    MOZ_ASSERT(obj);                                                        \
+    return obj.forget().template downcast<ClientWebGL##_WebGLType>();       \
   }
 
 // Usually, the JS binding name is the same as the WebGL type name
@@ -456,7 +463,7 @@ class ClientWebGLContext : public nsICanvasRenderingContextInternal,
   // a template method.  We expand the template with macros instead.
 #define DECLARE_CLIENTWEBGLOBJECT(_TYPE) \
   DEFINE_CLIENTWEBGLOBJECT_MAP(_TYPE)    \
-  void ReleaseWebGLObject(const WebGLId<WebGL##_TYPE>* aId);
+  void ReleaseWebGLObject(const ClientWebGLObject<WebGL##_TYPE>* aId);
 
   DECLARE_CLIENTWEBGLOBJECT(Buffer)
   DECLARE_CLIENTWEBGLOBJECT(Framebuffer)

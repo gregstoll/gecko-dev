@@ -168,7 +168,7 @@ class HostWebGLContext : public WebGLContextEndpoint {
       const WebGLContext::FuncScope scope(*mContext, aCmdName);
       Unused << mContext->IsContextLost();
       mContext->ErrorInvalidOperation(
-          "Null object or object from "
+          "Invalid object or object from "
           "a different WebGL context (or older generation of this one) "
           "was passed as argument.");
     }
