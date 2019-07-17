@@ -419,9 +419,7 @@ struct ExtensionSets {
   nsTArray<WebGLExtensionID> mSystem;
 };
 
-// Options are split in to "simple" and not for the sole reason that the
-// simple options are IsTriviallySerializable.
-struct SimpleWebGLContextOptions {
+struct WebGLContextOptions {
   dom::WebGLPowerPreference powerPreference =
       dom::WebGLPowerPreference::Default;
   bool alpha = true;
@@ -431,22 +429,20 @@ struct SimpleWebGLContextOptions {
   bool antialias = true;
   bool preserveDrawingBuffer = false;
   bool failIfMajorPerformanceCaveat = false;
-  bool shouldResistFingerprinting = true;
-  bool enableDebugRendererInfo = false;
-  bool privilegedExtensionsEnabled = false;
-
-  bool operator==(const SimpleWebGLContextOptions&) const;
-  bool operator!=(const SimpleWebGLContextOptions& r) const {
-    return !(*this == r);
-  }
-};
-
-struct WebGLContextOptions : public SimpleWebGLContextOptions {
-  nsString rendererStringOverride;
-  nsString vendorStringOverride;
 
   bool operator==(const WebGLContextOptions&) const;
   bool operator!=(const WebGLContextOptions& r) const { return !(*this == r); }
+};
+
+struct WebGLPreferences {
+  bool shouldResistFingerprinting = true;
+  bool enableDebugRendererInfo = false;
+  bool privilegedExtensionsEnabled = false;
+  nsString rendererStringOverride;
+  nsString vendorStringOverride;
+
+  bool operator==(const WebGLPreferences&) const;
+  bool operator!=(const WebGLPreferences& r) const { return !(*this == r); }
 };
 
 // return value for the SetDimensions message

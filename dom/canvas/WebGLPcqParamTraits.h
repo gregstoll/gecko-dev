@@ -28,7 +28,7 @@ template <>
 struct IsTriviallySerializable<WebGLShaderPrecisionFormat> : TrueType {};
 
 template <>
-struct IsTriviallySerializable<SimpleWebGLContextOptions> : TrueType {};
+struct IsTriviallySerializable<WebGLContextOptions> : TrueType {};
 
 template <>
 struct IsTriviallySerializable<WebGLPixelStore> : TrueType {};
@@ -49,18 +49,21 @@ template <>
 struct IsTriviallySerializable<SyncResponse> : TrueType {};
 
 template <>
-struct PcqParamTraits<WebGLContextOptions> {
-  using ParamType = WebGLContextOptions;
+struct PcqParamTraits<WebGLPreferences> {
+  using ParamType = WebGLPreferences;
 
   static PcqStatus Write(ProducerView& aProducerView, const ParamType& aArg) {
-    aProducerView.WriteParam(
-        static_cast<const SimpleWebGLContextOptions&>(aArg));
+    aProducerView.WriteParam(aArg.shouldResistFingerprinting);
+    aProducerView.WriteParam(aArg.enableDebugRendererInfo);
+    aProducerView.WriteParam(aArg.privilegedExtensionsEnabled);
     aProducerView.WriteParam(aArg.rendererStringOverride);
     return aProducerView.WriteParam(aArg.vendorStringOverride);
   }
 
   static PcqStatus Read(ConsumerView& aConsumerView, ParamType* aArg) {
-    aConsumerView.ReadParam(aArg ? static_cast<SimpleWebGLContextOptions*>(aArg)
+    aConsumerView.ReadParam(aArg ? &aArg->shouldResistFingerprinting : nullptr);
+    aConsumerView.ReadParam(aArg ? &aArg->enableDebugRendererInfo : nullptr);
+    aConsumerView.ReadParam(aArg ? &aArg->privilegedExtensionsEnabled
                                  : nullptr);
     aConsumerView.ReadParam(aArg ? &aArg->rendererStringOverride : nullptr);
     return aConsumerView.ReadParam(aArg ? &aArg->vendorStringOverride
@@ -69,9 +72,11 @@ struct PcqParamTraits<WebGLContextOptions> {
 
   template <typename View>
   static size_t MinSize(View& aView, const ParamType* aArg) {
-    return aView.MinSizeParam(
-               aArg ? static_cast<const SimpleWebGLContextOptions*>(aArg)
-                    : nullptr) +
+    return aView.MinSizeParam(aArg ? &aArg->shouldResistFingerprinting
+                                   : nullptr) +
+           aView.MinSizeParam(aArg ? &aArg->enableDebugRendererInfo : nullptr) +
+           aView.MinSizeParam(aArg ? &aArg->privilegedExtensionsEnabled
+                                   : nullptr) +
            aView.MinSizeParam(aArg ? &aArg->rendererStringOverride : nullptr) +
            aView.MinSizeParam(aArg ? &aArg->vendorStringOverride : nullptr);
   }

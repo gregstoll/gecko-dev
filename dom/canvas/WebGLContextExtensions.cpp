@@ -84,7 +84,7 @@ bool WebGLContext::IsExtensionSupported(dom::CallerType callerType,
     allowPrivilegedExts = true;
   }
 
-  if (mOptions.privilegedExtensionsEnabled) {
+  if (mPrefs.privilegedExtensionsEnabled) {
     allowPrivilegedExts = true;
   }
 
@@ -203,11 +203,11 @@ bool WebGLContext::IsExtensionSupported(WebGLExtensionID ext) const {
       return WebGLExtensionCompressedTextureS3TC_SRGB::IsSupported(this);
 
     case WebGLExtensionID::WEBGL_debug_renderer_info:
-      return mOptions.enableDebugRendererInfo &&
-             !mOptions.shouldResistFingerprinting;
+      return mPrefs.enableDebugRendererInfo &&
+             !mPrefs.shouldResistFingerprinting;
 
     case WebGLExtensionID::WEBGL_debug_shaders:
-      return !mOptions.shouldResistFingerprinting;
+      return !mPrefs.shouldResistFingerprinting;
 
     case WebGLExtensionID::WEBGL_depth_texture:
       return WebGLExtensionDepthTexture::IsSupported(this);

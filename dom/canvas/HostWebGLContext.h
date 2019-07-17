@@ -252,6 +252,8 @@ class HostWebGLContext : public WebGLContextEndpoint {
 
   void SetContextOptions(const WebGLContextOptions& options);
 
+  void SetPreferences(const WebGLPreferences& aPrefs);
+
   SetDimensionsData SetDimensions(int32_t signedWidth, int32_t signedHeight);
 
   gfx::IntSize DrawingBufferSize(FuncScopeId aFuncId);
@@ -794,10 +796,8 @@ class HostWebGLContext : public WebGLContextEndpoint {
     return const_cast<WebGL2Context*>(constThis->GetWebGL2Context());
   }
 
-  mozilla::ipc::Shmem PopShmem() { return mShmemStack.PopLastElement(); }
-
+  bool mSetPreferences;
   RefPtr<WebGLContext> mContext;
-  nsTArray<mozilla::ipc::Shmem> mShmemStack;
   ClientWebGLContext* mClientContext;
 };
 

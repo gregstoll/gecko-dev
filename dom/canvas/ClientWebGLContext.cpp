@@ -70,6 +70,47 @@ static bool GetJSScalarFromGLType(GLenum type,
   }
 }
 
+JSObject* ClientWebGLContext::WrapObject(JSContext* cx,
+                                         JS::Handle<JSObject*> givenProto) {
+  switch (mVersion) {
+    case WEBGL1:
+      return dom::WebGLRenderingContext_Binding::Wrap(cx, this, givenProto);
+    case WEBGL2:
+      return dom::WebGL2RenderingContext_Binding::Wrap(cx, this, givenProto);
+    default:
+      MOZ_ASSERT_UNREACHABLE("Invalid WebGL Version");
+      return nullptr;
+  }
+}
+
+WebGLPreferences ClientWebGLContext::GetFixedWebGLPrefs() const {
+  WebGLPreferences ret;
+  ret.enableDebugRendererInfo =
+      Preferences::GetBool("webgl.enable-debug-renderer-info", false);
+  nsresult res = Preferences::GetString("webgl.renderer-string-override",
+                                        ret.rendererStringOverride);
+  if (!NS_SUCCEEDED(res)) {
+    ret.rendererStringOverride.AssignLiteral(u"");
+  }
+  res = Preferences::GetString("webgl.vendor-string-override",
+                               ret.vendorStringOverride);
+  if (!NS_SUCCEEDED(res)) {
+    ret.vendorStringOverride.AssignLiteral(u"");
+  }
+  ret.privilegedExtensionsEnabled =
+      gfxPrefs::WebGLPrivilegedExtensionsEnabled();
+  MOZ_ASSERT(mCanvasElement || mOffscreenCanvas);
+  ret.shouldResistFingerprinting =
+      mCanvasElement ?
+                     // If we're constructed from a canvas element
+          nsContentUtils::ShouldResistFingerprinting(GetOwnerDoc())
+                     :
+                     // If we're constructed from an offscreen canvas
+          nsContentUtils::ShouldResistFingerprinting(
+              mOffscreenCanvas->GetOwnerGlobal()->PrincipalOrNull());
+  return ret;
+}
+
 /* static */ RefPtr<ClientWebGLContext>
 ClientWebGLContext::MakeSingleProcessWebGLContext(WebGLVersion aVersion) {
   UniquePtr<HostWebGLContext> host = HostWebGLContext::Create(aVersion);
@@ -805,6 +846,12 @@ ClientWebGLContext::SetContextOptions(JSContext* cx,
     return NS_ERROR_UNEXPECTED;
   }
 
+  if (!mSetPreferences) {
+    WebGLPreferences prefs = GetFixedWebGLPrefs();
+    Run<RPROC(SetPreferences)>(prefs);
+    mSetPreferences = true;
+  }
+
   WebGLContextOptions newOpts;
 
   newOpts.alpha = !gfxPrefs::WebGLDefaultNoAlpha();
@@ -816,29 +863,6 @@ ClientWebGLContext::SetContextOptions(JSContext* cx,
   newOpts.failIfMajorPerformanceCaveat =
       attributes.mFailIfMajorPerformanceCaveat;
   newOpts.powerPreference = attributes.mPowerPreference;
-  newOpts.enableDebugRendererInfo =
-      Preferences::GetBool("webgl.enable-debug-renderer-info", false);
-  nsresult res = Preferences::GetString("webgl.renderer-string-override",
-                                        newOpts.rendererStringOverride);
-  if (!NS_SUCCEEDED(res)) {
-    newOpts.rendererStringOverride.AssignLiteral(u"");
-  }
-  res = Preferences::GetString("webgl.vendor-string-override",
-                               newOpts.vendorStringOverride);
-  if (!NS_SUCCEEDED(res)) {
-    newOpts.vendorStringOverride.AssignLiteral(u"");
-  }
-  newOpts.privilegedExtensionsEnabled =
-      gfxPrefs::WebGLPrivilegedExtensionsEnabled();
-  MOZ_ASSERT(mCanvasElement || mOffscreenCanvas);
-  newOpts.shouldResistFingerprinting =
-      mCanvasElement ?
-                     // If we're constructed from a canvas element
-          nsContentUtils::ShouldResistFingerprinting(GetOwnerDoc())
-                     :
-                     // If we're constructed from an offscreen canvas
-          nsContentUtils::ShouldResistFingerprinting(
-              mOffscreenCanvas->GetOwnerGlobal()->PrincipalOrNull());
 
   if (attributes.mAlpha.WasPassed()) {
     newOpts.alpha = attributes.mAlpha.Value();

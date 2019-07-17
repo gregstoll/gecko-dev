@@ -283,6 +283,8 @@ class WebGLContext : public SupportsWeakPtr<WebGLContext> {
             result.result, mPixelStore};
   }
 
+  void SetPreferences(const WebGLPreferences& aPrefs);
+
   void SetCompositableHost(RefPtr<layers::CompositableHost>& aCompositableHost);
 
   /**
@@ -949,6 +951,7 @@ class WebGLContext : public SupportsWeakPtr<WebGLContext> {
   uint32_t mGLMaxViewportDims[2];
 
   WebGLContextOptions mOptions;
+  WebGLPreferences mPrefs;
 
  public:
   GLenum LastColorAttachmentEnum() const {

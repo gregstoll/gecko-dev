@@ -97,6 +97,7 @@ HostWebGLContext::HostWebGLContext(
     : WebGLContextEndpoint(aVersion),
       mCommandSink(std::move(aCommandSink)),
       mErrorSource(std::move(aErrorSource)),
+      mSetPreferences(false),
       mContext(aContext),
       mClientContext(nullptr) {
   mContext->SetHost(this);
@@ -218,6 +219,15 @@ Maybe<ICRData> HostWebGLContext::InitializeCanvasRenderer(
 
 void HostWebGLContext::SetContextOptions(const WebGLContextOptions& options) {
   mContext->SetOptions(options);
+}
+
+void HostWebGLContext::SetPreferences(const WebGLPreferences& aPrefs) {
+  // Make sure we only set the preferences once.
+  if (mSetPreferences) {
+    return;
+  }
+  mContext->SetPreferences(aPrefs);
+  mSetPreferences = true;
 }
 
 SetDimensionsData HostWebGLContext::SetDimensions(int32_t signedWidth,

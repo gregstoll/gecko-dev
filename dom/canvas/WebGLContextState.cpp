@@ -144,11 +144,11 @@ MaybeWebGLVariant WebGLContext::GetParameter(GLenum pname) {
 
         switch (pname) {
           case UNMASKED_RENDERER_WEBGL:
-            ret = mOptions.rendererStringOverride;
+            ret = mPrefs.rendererStringOverride;
             driverEnum = LOCAL_GL_RENDERER;
             break;
           case UNMASKED_VENDOR_WEBGL:
-            ret = mOptions.vendorStringOverride;
+            ret = mPrefs.vendorStringOverride;
             driverEnum = LOCAL_GL_VENDOR;
             break;
           default:

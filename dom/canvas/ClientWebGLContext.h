@@ -34,6 +34,8 @@
 
 namespace mozilla {
 
+struct WebGLPreferences;
+
 namespace dom {
 class WebGLChild;
 }
@@ -261,17 +263,7 @@ class ClientWebGLContext : public nsICanvasRenderingContextInternal,
   // -------------------------------------------------------------------------
  protected:
   JSObject* WrapObject(JSContext* cx,
-                       JS::Handle<JSObject*> givenProto) override {
-    switch (mVersion) {
-      case WEBGL1:
-        return dom::WebGLRenderingContext_Binding::Wrap(cx, this, givenProto);
-      case WEBGL2:
-        return dom::WebGL2RenderingContext_Binding::Wrap(cx, this, givenProto);
-      default:
-        MOZ_ASSERT_UNREACHABLE("Invalid WebGL Version");
-        return nullptr;
-    }
-  }
+                       JS::Handle<JSObject*> givenProto) override;
 
   JS::Value ToJSValue(JSContext* cx, const MaybeWebGLVariant& aVariant,
                       ErrorResult& rv) const;
@@ -387,6 +379,8 @@ class ClientWebGLContext : public nsICanvasRenderingContextInternal,
   gfx::IntSize DrawingBufferSize();
   bool HasAlphaSupport() { return mSurfaceInfo.supportsAlpha; }
   void AllowContextRestore();
+  // Return immutable preferences for the context, set at construction time.
+  WebGLPreferences GetFixedWebGLPrefs() const;
 
   // -------------------------------------------------------------------------
   // Client WebGL Object Tracking
@@ -1896,6 +1890,7 @@ class ClientWebGLContext : public nsICanvasRenderingContextInternal,
   bool mOptionsFrozen = false;
   bool mInvalidated = false;
   bool mCapturedFrameInvalidated = false;
+  bool mSetPreferences = false;
 };
 
 template <typename WebGLType>

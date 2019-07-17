@@ -100,17 +100,15 @@ using namespace mozilla::gfx;
 using namespace mozilla::gl;
 using namespace mozilla::layers;
 
-bool SimpleWebGLContextOptions::operator==(
-    const SimpleWebGLContextOptions& r) const {
-  return memcmp(this, &r, sizeof(SimpleWebGLContextOptions)) == 0;
+bool WebGLContextOptions::operator==(const WebGLContextOptions& r) const {
+  return memcmp(this, &r, sizeof(WebGLContextOptions)) == 0;
 }
 
-bool WebGLContextOptions::operator==(const WebGLContextOptions& r) const {
-  if (static_cast<const SimpleWebGLContextOptions&>(*this) !=
-      static_cast<const SimpleWebGLContextOptions&>(r)) {
-    return false;
-  }
-  return (rendererStringOverride == r.rendererStringOverride) &&
+bool WebGLPreferences::operator==(const WebGLPreferences& r) const {
+  return (shouldResistFingerprinting == r.shouldResistFingerprinting) &&
+         (enableDebugRendererInfo == r.enableDebugRendererInfo) &&
+         (privilegedExtensionsEnabled == r.privilegedExtensionsEnabled) &&
+         (rendererStringOverride == r.rendererStringOverride) &&
          (vendorStringOverride == r.vendorStringOverride);
 }
 
@@ -859,6 +857,10 @@ WebGLContext::DoSetDimensionsData WebGLContext::DoSetDimensions(
 
   gl->ResetSyncCallCount("WebGLContext Initialization");
   return {NS_OK, true};
+}
+
+void WebGLContext::SetPreferences(const WebGLPreferences& aPrefs) {
+  mPrefs = aPrefs;
 }
 
 void WebGLContext::SetCompositableHost(

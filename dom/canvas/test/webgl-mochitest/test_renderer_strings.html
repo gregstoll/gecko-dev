@@ -16,12 +16,18 @@ function AssertError(gl, expected, info) {
       + actual.toString(16));
 }
 
-var gl;
-
 var RENDERER_OVERRIDE = 'overridden renderer';
 var VENDOR_OVERRIDE = 'overridden vendor';
 
 function TestExt() {
+  var canvas = document.createElement('canvas');
+  gl = canvas.getContext('experimental-webgl');
+  if (!gl) {
+    todo(gl, 'Get WebGL working here first.');
+    ok(true, 'Test complete.');
+    return;
+  }
+
   var ext = gl.getExtension('WEBGL_debug_renderer_info');
   ok(ext, 'When pref enabled: Should have access to \'WEBGL_debug_renderer_info\'.');
   AssertError(gl, 0, 'start of test');
@@ -39,6 +45,7 @@ function TestExt() {
      + vendor + '\'');
 
   var prefArrArr = [
+    ['webgl.enable-debug-renderer-info', true],
     ['webgl.renderer-string-override', RENDERER_OVERRIDE],
     ['webgl.vendor-string-override', VENDOR_OVERRIDE],
   ];
@@ -47,6 +54,14 @@ function TestExt() {
 }
 
 function TestOverrides() {
+  var canvas = document.createElement('canvas');
+  gl = canvas.getContext('experimental-webgl');
+  if (!gl) {
+    todo(gl, 'Get WebGL working here first.');
+    ok(true, 'Test complete.');
+    return;
+  }
+
   var ext = gl.getExtension('WEBGL_debug_renderer_info');
   ok(ext, 'When overrides set: Should have access to \'WEBGL_debug_renderer_info\'.');
   AssertError(gl, 0, 'start of test');
@@ -71,15 +86,6 @@ function TestOverrides() {
 }
 
 function TestDisable() {
-  var ext = gl.getExtension('WEBGL_debug_renderer_info');
-  ok(!ext,
-     'When pref disabled: Should not have access to \'WEBGL_debug_renderer_info\'.');
-
-  ok(true, 'Test complete.');
-  SimpleTest.finish();
-}
-
-(function() {
   var canvas = document.createElement('canvas');
   gl = canvas.getContext('experimental-webgl');
   if (!gl) {
@@ -88,8 +94,18 @@ function TestDisable() {
     return;
   }
 
-  SimpleTest.waitForExplicitFinish();
+  var ext = gl.getExtension('WEBGL_debug_renderer_info');
+  ok(!ext,
+     'When pref disabled: Should not have access to \'WEBGL_debug_renderer_info\'.');
 
+  ok(true, 'Test complete.');
+
+  SimpleTest.finish();
+}
+
+(function() {
+  SimpleTest.waitForExplicitFinish();
+  
   var prefArrArr = [
     ['webgl.enable-debug-renderer-info', true],
   ];

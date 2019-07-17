@@ -88,19 +88,19 @@ void WebGL2Context::CopyBufferSubData(GLenum readTarget, GLenum writeTarget,
 UniquePtr<RawBuffer<>> WebGL2Context::GetBufferSubData(
     GLenum target, WebGLintptr srcByteOffset, size_t byteLen) {
   const FuncScope funcScope(*this, "getBufferSubData");
-  if (IsContextLost()) return {};
+  if (IsContextLost()) return nullptr;
 
   const auto& buffer = ValidateBufferSelection(target);
-  if (!buffer) return {};
+  if (!buffer) return nullptr;
 
-  if (!buffer->ValidateRange(srcByteOffset, byteLen)) return {};
+  if (!buffer->ValidateRange(srcByteOffset, byteLen)) return nullptr;
 
   ////
 
   if (!CheckedInt<GLintptr>(srcByteOffset).isValid() ||
       !CheckedInt<GLsizeiptr>(byteLen).isValid()) {
     ErrorOutOfMemory("offset or size too large for platform.");
-    return {};
+    return nullptr;
   }
   const GLsizeiptr glByteLen(byteLen);
 
@@ -129,7 +129,7 @@ UniquePtr<RawBuffer<>> WebGL2Context::GetBufferSubData(
   uint8_t* bytes = new uint8_t[byteLen];
   if (!bytes) {
     ErrorOutOfMemory("Could not allocate temp array");
-    return {};
+    return nullptr;
   }
 
   const ScopedLazyBind readBind(gl, target, buffer);
