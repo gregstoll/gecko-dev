@@ -445,18 +445,25 @@ class ClientWebGLContext : public nsICanvasRenderingContextInternal,
 
  public:
   // Define the client ID map and accessors for the given type
-#define DEFINE_CLIENTWEBGLOBJECT_MAP(_TYPE)                    \
-  ClientObjectIdMap<WebGL##_TYPE> m##_TYPE##Map;               \
-  bool Insert(RefPtr<ClientWebGLObject<WebGL##_TYPE>>& aObj) { \
-    MOZ_ASSERT(aObj->Id());                                    \
-    return m##_TYPE##Map.put(*aObj, aObj);                     \
-  }                                                            \
-  RefPtr<ClientWebGLObject<WebGL##_TYPE>> Find(                \
-      const WebGLId<WebGL##_TYPE>& aId) {                      \
-    auto it = m##_TYPE##Map.lookup(aId);                       \
-    return it ? it->value() : nullptr;                         \
-  }                                                            \
-  void Remove(const WebGLId<WebGL##_TYPE>& aId) { m##_TYPE##Map.remove(aId); }
+  template <typename WebGLType>
+  void ClearAll();
+
+#define DEFINE_CLIENTWEBGLOBJECT_MAP(_TYPE)                                    \
+  ClientObjectIdMap<WebGL##_TYPE> m##_TYPE##Map;                               \
+  bool Insert(RefPtr<ClientWebGLObject<WebGL##_TYPE>>& aObj) {                 \
+    MOZ_ASSERT(aObj->Id());                                                    \
+    return m##_TYPE##Map.put(*aObj, aObj);                                     \
+  }                                                                            \
+  RefPtr<ClientWebGLObject<WebGL##_TYPE>> Find(                                \
+      const WebGLId<WebGL##_TYPE>& aId) {                                      \
+    auto it = m##_TYPE##Map.lookup(aId);                                       \
+    return it ? it->value() : nullptr;                                         \
+  }                                                                            \
+  void Remove(const WebGLId<WebGL##_TYPE>& aId) { m##_TYPE##Map.remove(aId); } \
+  template <>                                                                  \
+  void ClearAll<WebGL##_TYPE>() {                                              \
+    m##_TYPE##Map.clear();                                                     \
+  }
 
   // Annoying but, since we don't want to include the WebGLMethodDispatcher
   // in this header due to its size, we can't define ReleaseWebGLObject as

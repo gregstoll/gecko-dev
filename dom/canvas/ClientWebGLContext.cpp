@@ -240,6 +240,22 @@ ClientWebGLContext::ClientWebGLContext(UniquePtr<HostWebGLContext>&& aHost)
 }
 
 ClientWebGLContext::~ClientWebGLContext() {
+  // Destroy all owned objects, which may end up using RPC to free
+  // them in the host process -- so do this before severing the
+  // connection.
+  ClearAll<WebGLBuffer>();
+  ClearAll<WebGLFramebuffer>();
+  ClearAll<WebGLProgram>();
+  ClearAll<WebGLQuery>();
+  ClearAll<WebGLRenderbuffer>();
+  ClearAll<WebGLSampler>();
+  ClearAll<WebGLShader>();
+  ClearAll<WebGLSync>();
+  ClearAll<WebGLTexture>();
+  ClearAll<WebGLTransformFeedback>();
+  ClearAll<WebGLUniformLocation>();
+  ClearAll<WebGLVertexArray>();
+
   RemovePostRefreshObserver();
   if (mWebGLChild) {
     Unused << mWebGLChild->Send__delete__(mWebGLChild);
