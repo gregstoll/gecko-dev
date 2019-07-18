@@ -2673,12 +2673,12 @@ void ClientWebGLContext::ReadPixels(GLint x, GLint y, GLsizei width,
     return;
   }
 
-  Maybe<UniquePtr<RawBuffer<>>> result =
-      Run<RPROC(ReadPixels2)>(x, y, width, height, format, type, byteLen);
+  Maybe<UniquePtr<RawBuffer<>>> result = Run<RPROC(ReadPixels2)>(
+      x, y, width, height, format, type, RawBuffer<>(byteLen, bytes));
   if (!result) {
     return;
   }
-  MOZ_ASSERT(result.ref()->Length() == byteLen);
+  MOZ_RELEASE_ASSERT(result.ref()->Length() == byteLen);
   memcpy(bytes, result.ref()->Data(), byteLen);
 }
 

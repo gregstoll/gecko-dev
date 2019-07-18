@@ -169,7 +169,7 @@ static MaybeWebGLTexUnpackVariant ClientFromView(
   if (view) {
     if (!webgl->ValidateArrayBufferView(
             *view, viewElemOffset, viewElemLengthOverride, errorVal,
-            const_cast<uint8_t**>(&bytes), &availByteCount)) {
+            const_cast<uint8_t**>(&bytes), &availByteCount, false)) {
       return Nothing();
     }
   }

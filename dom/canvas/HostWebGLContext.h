@@ -639,7 +639,7 @@ class HostWebGLContext : public WebGLContextEndpoint {
 
   Maybe<UniquePtr<RawBuffer<>>> ReadPixels2(GLint x, GLint y, GLsizei width,
                                             GLsizei height, GLenum format,
-                                            GLenum type, size_t byteLen);
+                                            GLenum type, RawBuffer<>&& aBuffer);
 
   // ----------------------------- Sampler -----------------------------------
   void CreateSampler(const WebGLId<WebGLSampler>& aId);

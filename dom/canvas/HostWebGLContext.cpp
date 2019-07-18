@@ -1206,8 +1206,9 @@ void HostWebGLContext::ReadPixels1(GLint x, GLint y, GLsizei width,
 
 Maybe<UniquePtr<RawBuffer<>>> HostWebGLContext::ReadPixels2(
     GLint x, GLint y, GLsizei width, GLsizei height, GLenum format, GLenum type,
-    size_t byteLen) {
-  return mContext->ReadPixels(x, y, width, height, format, type, byteLen);
+    RawBuffer<>&& aBuffer) {
+  return mContext->ReadPixels(x, y, width, height, format, type,
+                              std::move(aBuffer));
 }
 
 // ----------------------------- Sampler -----------------------------------

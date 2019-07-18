@@ -558,7 +558,7 @@ class WebGLContext : public SupportsWeakPtr<WebGLContext> {
 
   Maybe<UniquePtr<RawBuffer<>>> ReadPixels(GLint x, GLint y, GLsizei width,
                                            GLsizei height, GLenum format,
-                                           GLenum type, size_t byteLen);
+                                           GLenum type, RawBuffer<>&& aBuffer);
 
   ////
 

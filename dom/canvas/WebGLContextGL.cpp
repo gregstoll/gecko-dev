@@ -1178,7 +1178,7 @@ bool WebGLContext::ValidatePackSize(uint32_t width, uint32_t height,
 
 Maybe<UniquePtr<RawBuffer<>>> WebGLContext::ReadPixels(
     GLint x, GLint y, GLsizei width, GLsizei height, GLenum format, GLenum type,
-    size_t byteLen) {
+    RawBuffer<>&& aBuffer) {
   const FuncScope funcScope(*this, "readPixels");
   if (IsContextLost()) return Nothing();
 
@@ -1188,17 +1188,11 @@ Maybe<UniquePtr<RawBuffer<>>> WebGLContext::ReadPixels(
   }
 
   // TODO: Allocate the Shmem earlier so we can use it here instead of copying
-  uint8_t* bytes = new uint8_t[byteLen];
-  if (!bytes) {
-    ErrorOutOfMemory("ReadPixels could not allocate temp memory");
-    return Nothing();
-  }
-  // ReadPixels relies on regions outside of what it writes to to be
-  // pre-cleared.
-  memset(bytes, 0, byteLen);
-  UniquePtr<RawBuffer<>> buf = MakeUnique<RawBuffer<>>(byteLen, bytes, true);
+  size_t byteLen = aBuffer.Length();
+  uint8_t* bytes = aBuffer.Data();
+  MOZ_ASSERT(bytes || (byteLen == 0));
   ReadPixelsImpl(x, y, width, height, format, type, bytes, byteLen);
-  return Some(std::move(buf));
+  return Some(MakeUnique<RawBuffer<>>(std::move(aBuffer)));
 }
 
 void WebGLContext::ReadPixels(GLint x, GLint y, GLsizei width, GLsizei height,

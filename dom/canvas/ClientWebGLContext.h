@@ -657,7 +657,8 @@ class ClientWebGLContext : public nsICanvasRenderingContextInternal,
                                GLuint elemOffset, GLuint elemCountOverride,
                                const GLenum errorEnum,
                                uint8_t** const out_bytes,
-                               size_t* const out_byteLen) const;
+                               size_t* const out_byteLen,
+                               bool allowZeroLengthResult = true) const;
 
  protected:
   void EnqueueErrorPrintfHelper(GLenum aGLError, const nsCString& msg) const;
