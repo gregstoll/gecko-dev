@@ -2929,7 +2929,7 @@ void ClientWebGLContext::TransformFeedbackVaryings(
 // ------------------------------ Extensions ------------------------------
 
 const Maybe<ExtensionSets>& ClientWebGLContext::GetCachedExtensions() {
-  if (mSupportedExtensions) {
+  if (!mSupportedExtensions) {
     mSupportedExtensions = Run<RPROC(GetSupportedExtensions)>();
     if (mSupportedExtensions) {
       mSupportedExtensions.ref().mNonSystem.Sort();
@@ -2947,8 +2947,12 @@ RefPtr<ClientWebGLExtensionBase> ClientWebGLContext::GetExtension(
   return UseExtension(ext);
 }
 
+typedef Array<bool, static_cast<uint8_t>(WebGLExtensionID::Max)>
+    EnabledExtensionsArray;
+
 template <WebGLExtensionID id = WebGLExtensionID(0)>
-void EnableImplicitExtensions(bool enabledExtensions[], WebGLExtensionID ext) {
+void EnableImplicitExtensions(EnabledExtensionsArray& enabledExtensions,
+                              WebGLExtensionID ext) {
   using Entry = WebGLExtensionClassMap<id>;
   if (id == ext) {
     enabledExtensions[static_cast<uint8_t>(ext)] = true;
@@ -2963,7 +2967,8 @@ void EnableImplicitExtensions(bool enabledExtensions[], WebGLExtensionID ext) {
 }
 
 template <>
-void EnableImplicitExtensions<WebGLExtensionID::Max>(bool[], WebGLExtensionID) {
+void EnableImplicitExtensions<WebGLExtensionID::Max>(EnabledExtensionsArray&,
+                                                     WebGLExtensionID) {
   MOZ_RELEASE_ASSERT(false, "Invalid ID");
 }
 

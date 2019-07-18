@@ -1076,6 +1076,12 @@ void HostWebGLContext::VertexAttribI4ui(GLuint index, GLuint x, GLuint y,
 
 void HostWebGLContext::VertexAttribDivisor(GLuint index, GLuint divisor,
                                            bool aFromExtension) {
+  if (aFromExtension) {
+    auto* ext =
+        mContext->GetExtension<WebGLExtensionID::ANGLE_instanced_arrays>();
+    MOZ_RELEASE_ASSERT(ext);
+    return ext->VertexAttribDivisorANGLE(index, divisor);
+  }
   GetWebGL2Context()->VertexAttribDivisor(index, divisor);
 }
 
