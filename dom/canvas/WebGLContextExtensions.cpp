@@ -314,10 +314,10 @@ void ClientWebGLContext::GetExtension(JSContext* cx, const nsAString& wideName,
   // step 2: If we have permission to use the extension and if the extension
   // hadn't been previously been created then we have to tell the host to
   // activate it.
-  ClientWebGLExtensionBase* extObj = GetExtension(callerType, ext, true);
+  RefPtr<ClientWebGLExtensionBase> extObj = GetExtension(callerType, ext, true);
   if (!extObj) return;
 
-  retval.set(WebGLObjectAsJSObject(cx, extObj, rv));
+  retval.set(WebGLObjectAsJSObject(cx, std::move(extObj), rv));
 }
 
 void WebGLContext::CreateExtension(WebGLExtensionID ext) {
@@ -458,92 +458,138 @@ const Maybe<ExtensionSets> WebGLContext::GetSupportedExtensions() {
   return ret;
 }
 
-ClientWebGLExtensionBase* ClientWebGLContext::UseExtension(
+RefPtr<ClientWebGLExtensionBase> ClientWebGLContext::UseExtension(
     WebGLExtensionID ext) {
-  if (!mEnabledExtension[static_cast<uint8_t>(ext)]) {
+  if (!mEnabledExtensions[static_cast<uint8_t>(ext)]) {
     return nullptr;
+  }
+
+  ClientWebGLExtensionBase* ret = nullptr;
+  if (ext < WebGLExtensionID::Max) {
+    ret = mExtensions[static_cast<size_t>(ext)];
+    if (ret) {
+      return ret;
+    }
   }
 
   switch (ext) {
     // ANGLE_
     case WebGLExtensionID::ANGLE_instanced_arrays:
-      return new ClientWebGLExtensionInstancedArrays(this);
+      ret = new ClientWebGLExtensionInstancedArrays(this);
+      break;
 
     // EXT_
     case WebGLExtensionID::EXT_blend_minmax:
-      return new ClientWebGLExtensionBlendMinMax(this);
+      ret = new ClientWebGLExtensionBlendMinMax(this);
+      break;
     case WebGLExtensionID::EXT_color_buffer_float:
-      return new ClientWebGLExtensionEXTColorBufferFloat(this);
+      ret = new ClientWebGLExtensionEXTColorBufferFloat(this);
+      break;
     case WebGLExtensionID::EXT_color_buffer_half_float:
-      return new ClientWebGLExtensionColorBufferHalfFloat(this);
+      ret = new ClientWebGLExtensionColorBufferHalfFloat(this);
+      break;
     case WebGLExtensionID::EXT_disjoint_timer_query:
-      return new ClientWebGLExtensionDisjointTimerQuery(this);
+      ret = new ClientWebGLExtensionDisjointTimerQuery(this);
+      break;
     case WebGLExtensionID::EXT_float_blend:
-      return new ClientWebGLExtensionFloatBlend(this);
+      ret = new ClientWebGLExtensionFloatBlend(this);
+      break;
     case WebGLExtensionID::EXT_frag_depth:
-      return new ClientWebGLExtensionFragDepth(this);
+      ret = new ClientWebGLExtensionFragDepth(this);
+      break;
     case WebGLExtensionID::EXT_shader_texture_lod:
-      return new ClientWebGLExtensionShaderTextureLod(this);
+      ret = new ClientWebGLExtensionShaderTextureLod(this);
+      break;
     case WebGLExtensionID::EXT_sRGB:
-      return new ClientWebGLExtensionSRGB(this);
+      ret = new ClientWebGLExtensionSRGB(this);
+      break;
     case WebGLExtensionID::EXT_texture_compression_bptc:
-      return new ClientWebGLExtensionCompressedTextureBPTC(this);
+      ret = new ClientWebGLExtensionCompressedTextureBPTC(this);
+      break;
     case WebGLExtensionID::EXT_texture_compression_rgtc:
-      return new ClientWebGLExtensionCompressedTextureRGTC(this);
+      ret = new ClientWebGLExtensionCompressedTextureRGTC(this);
+      break;
     case WebGLExtensionID::EXT_texture_filter_anisotropic:
-      return new ClientWebGLExtensionTextureFilterAnisotropic(this);
+      ret = new ClientWebGLExtensionTextureFilterAnisotropic(this);
+      break;
 
     // MOZ_
     case WebGLExtensionID::MOZ_debug:
-      return new ClientWebGLExtensionMOZDebug(this);
+      ret = new ClientWebGLExtensionMOZDebug(this);
+      break;
 
-    // OES_
+      // OES_
+      break;
     case WebGLExtensionID::OES_element_index_uint:
-      return new ClientWebGLExtensionElementIndexUint(this);
+      ret = new ClientWebGLExtensionElementIndexUint(this);
+      break;
     case WebGLExtensionID::OES_fbo_render_mipmap:
-      return new ClientWebGLExtensionFBORenderMipmap(this);
+      ret = new ClientWebGLExtensionFBORenderMipmap(this);
+      break;
     case WebGLExtensionID::OES_standard_derivatives:
-      return new ClientWebGLExtensionStandardDerivatives(this);
+      ret = new ClientWebGLExtensionStandardDerivatives(this);
+      break;
     case WebGLExtensionID::OES_texture_float:
-      return new ClientWebGLExtensionTextureFloat(this);
+      ret = new ClientWebGLExtensionTextureFloat(this);
+      break;
     case WebGLExtensionID::OES_texture_float_linear:
-      return new ClientWebGLExtensionTextureFloatLinear(this);
+      ret = new ClientWebGLExtensionTextureFloatLinear(this);
+      break;
     case WebGLExtensionID::OES_texture_half_float:
-      return new ClientWebGLExtensionTextureHalfFloat(this);
+      ret = new ClientWebGLExtensionTextureHalfFloat(this);
+      break;
     case WebGLExtensionID::OES_texture_half_float_linear:
-      return new ClientWebGLExtensionTextureHalfFloatLinear(this);
+      ret = new ClientWebGLExtensionTextureHalfFloatLinear(this);
+      break;
     case WebGLExtensionID::OES_vertex_array_object:
-      return new ClientWebGLExtensionVertexArray(this);
+      ret = new ClientWebGLExtensionVertexArray(this);
+      break;
 
     // WEBGL_
     case WebGLExtensionID::WEBGL_color_buffer_float:
-      return new ClientWebGLExtensionColorBufferFloat(this);
+      ret = new ClientWebGLExtensionColorBufferFloat(this);
+      break;
     case WebGLExtensionID::WEBGL_compressed_texture_astc:
-      return new ClientWebGLExtensionCompressedTextureASTC(this);
+      ret = new ClientWebGLExtensionCompressedTextureASTC(this);
+      break;
     case WebGLExtensionID::WEBGL_compressed_texture_etc:
-      return new ClientWebGLExtensionCompressedTextureES3(this);
+      ret = new ClientWebGLExtensionCompressedTextureES3(this);
+      break;
     case WebGLExtensionID::WEBGL_compressed_texture_etc1:
-      return new ClientWebGLExtensionCompressedTextureETC1(this);
+      ret = new ClientWebGLExtensionCompressedTextureETC1(this);
+      break;
     case WebGLExtensionID::WEBGL_compressed_texture_pvrtc:
-      return new ClientWebGLExtensionCompressedTexturePVRTC(this);
+      ret = new ClientWebGLExtensionCompressedTexturePVRTC(this);
+      break;
     case WebGLExtensionID::WEBGL_compressed_texture_s3tc:
-      return new ClientWebGLExtensionCompressedTextureS3TC(this);
+      ret = new ClientWebGLExtensionCompressedTextureS3TC(this);
+      break;
     case WebGLExtensionID::WEBGL_compressed_texture_s3tc_srgb:
-      return new ClientWebGLExtensionCompressedTextureS3TC_SRGB(this);
+      ret = new ClientWebGLExtensionCompressedTextureS3TC_SRGB(this);
+      break;
     case WebGLExtensionID::WEBGL_debug_renderer_info:
-      return new ClientWebGLExtensionDebugRendererInfo(this);
+      ret = new ClientWebGLExtensionDebugRendererInfo(this);
+      break;
     case WebGLExtensionID::WEBGL_debug_shaders:
-      return new ClientWebGLExtensionDebugShaders(this);
+      ret = new ClientWebGLExtensionDebugShaders(this);
+      break;
     case WebGLExtensionID::WEBGL_depth_texture:
-      return new ClientWebGLExtensionDepthTexture(this);
+      ret = new ClientWebGLExtensionDepthTexture(this);
+      break;
     case WebGLExtensionID::WEBGL_draw_buffers:
-      return new ClientWebGLExtensionDrawBuffers(this);
+      ret = new ClientWebGLExtensionDrawBuffers(this);
+      break;
     case WebGLExtensionID::WEBGL_lose_context:
-      return new ClientWebGLExtensionLoseContext(this);
+      ret = new ClientWebGLExtensionLoseContext(this);
+      break;
     default:
       MOZ_ASSERT_UNREACHABLE("illegal extension enum");
-      return nullptr;
   }
+
+  if (ret) {
+    mExtensions[static_cast<size_t>(ext)] = ret;
+  }
+  return ret;
 }
 
 }  // namespace mozilla

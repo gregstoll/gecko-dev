@@ -410,7 +410,8 @@ class ClientWebGLContext : public nsICanvasRenderingContextInternal,
                                  ErrorResult& rv) const;
 
   template <typename WebGLObjectType>
-  JSObject* WebGLObjectAsJSObject(JSContext* cx, const WebGLObjectType*,
+  JSObject* WebGLObjectAsJSObject(JSContext* cx,
+                                  RefPtr<WebGLObjectType>&& object,
                                   ErrorResult& rv) const;
 
   template <typename WebGLType>
@@ -1699,16 +1700,22 @@ class ClientWebGLContext : public nsICanvasRenderingContextInternal,
 
   const Maybe<ExtensionSets>& GetCachedExtensions();
 
-  ClientWebGLExtensionBase* GetExtension(dom::CallerType callerType,
-                                         WebGLExtensionID ext,
-                                         bool toEnable = true);
+  RefPtr<ClientWebGLExtensionBase> GetExtension(dom::CallerType callerType,
+                                                WebGLExtensionID ext,
+                                                bool toEnable = true);
 
   void EnableExtension(dom::CallerType callerType, WebGLExtensionID ext);
 
-  ClientWebGLExtensionBase* UseExtension(WebGLExtensionID ext);
+  RefPtr<ClientWebGLExtensionBase> UseExtension(WebGLExtensionID ext);
 
-  Maybe<ExtensionSets> mExtensions;
-  bool mEnabledExtension[static_cast<uint8_t>(WebGLExtensionID::Max)];
+  Maybe<ExtensionSets> mSupportedExtensions;
+  typedef Array<bool, static_cast<uint8_t>(WebGLExtensionID::Max)>
+      EnabledExtensionsArray;
+  EnabledExtensionsArray mEnabledExtensions;
+  typedef Array<RefPtr<ClientWebGLExtensionBase>,
+                static_cast<uint8_t>(WebGLExtensionID::Max)>
+      ExtensionsArray;
+  ExtensionsArray mExtensions;
 
   // ---------------------------- Misc Extensions ----------------------------
  public:
@@ -2016,8 +2023,8 @@ JS::Value ClientWebGLContext::WebGLObjectAsJSValue(
 
 template <typename WebGLObjectType>
 JSObject* ClientWebGLContext::WebGLObjectAsJSObject(
-    JSContext* cx, const WebGLObjectType* object, ErrorResult& rv) const {
-  JS::Value v = WebGLObjectAsJSValue(cx, object, rv);
+    JSContext* cx, RefPtr<WebGLObjectType>&& object, ErrorResult& rv) const {
+  JS::Value v = WebGLObjectAsJSValue(cx, std::move(object), rv);
   if (v.isNull()) return nullptr;
 
   return &v.toObject();

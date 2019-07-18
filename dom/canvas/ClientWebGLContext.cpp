@@ -227,7 +227,7 @@ ClientWebGLContext::MakeCrossProcessWebGLContext(WebGLVersion aVersion) {
 }
 
 void ClientWebGLContext::CommonInit() {
-  memset(mEnabledExtension, 0, sizeof(mEnabledExtension));
+  memset(mEnabledExtensions.begin(), 0, sizeof(mEnabledExtensions));
 }
 
 ClientWebGLContext::ClientWebGLContext(UniquePtr<HostWebGLContext>&& aHost)
@@ -2929,17 +2929,17 @@ void ClientWebGLContext::TransformFeedbackVaryings(
 // ------------------------------ Extensions ------------------------------
 
 const Maybe<ExtensionSets>& ClientWebGLContext::GetCachedExtensions() {
-  if (!mExtensions) {
-    mExtensions = Run<RPROC(GetSupportedExtensions)>();
-    if (mExtensions) {
-      mExtensions.ref().mNonSystem.Sort();
-      mExtensions.ref().mSystem.Sort();
+  if (mSupportedExtensions) {
+    mSupportedExtensions = Run<RPROC(GetSupportedExtensions)>();
+    if (mSupportedExtensions) {
+      mSupportedExtensions.ref().mNonSystem.Sort();
+      mSupportedExtensions.ref().mSystem.Sort();
     }
   }
-  return mExtensions;
+  return mSupportedExtensions;
 }
 
-ClientWebGLExtensionBase* ClientWebGLContext::GetExtension(
+RefPtr<ClientWebGLExtensionBase> ClientWebGLContext::GetExtension(
     dom::CallerType callerType, WebGLExtensionID ext, bool toEnable) {
   if (toEnable) {
     EnableExtension(callerType, ext);
@@ -2978,7 +2978,7 @@ void ClientWebGLContext::EnableExtension(dom::CallerType callerType,
        exts.ref().mSystem.ContainsSorted(ext))) {
     Run<RPROC(EnableExtension)>(callerType, ext);
     // The host will enable implicitly enabled extensions.
-    EnableImplicitExtensions<>(mEnabledExtension, ext);
+    EnableImplicitExtensions<>(mEnabledExtensions, ext);
   }
 }
 
