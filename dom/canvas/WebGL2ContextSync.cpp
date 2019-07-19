@@ -29,10 +29,7 @@ already_AddRefed<WebGLSync> WebGL2Context::FenceSync(GLenum condition,
   }
 
   RefPtr<WebGLSync> globj = new WebGLSync(this, condition, flags);
-
-  const auto& availRunnable = EnsureAvailabilityRunnable();
-  availRunnable->mSyncs.push_back(globj);
-
+  mUnavailableSyncs.push_back(globj);
   return globj.forget();
 }
 

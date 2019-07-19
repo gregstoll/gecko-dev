@@ -105,7 +105,6 @@ class CompositableHost;
 }
 
 namespace webgl {
-class AvailabilityRunnable;
 struct CachedDrawFetchLimits;
 struct FormatInfo;
 class FormatUsageAuthority;
@@ -159,22 +158,6 @@ struct IndexedBufferBinding {
 
 ////////////////////////////////////
 
-namespace webgl {
-class AvailabilityRunnable final : public Runnable {
- public:
-  const RefPtr<WebGLContext> mWebGL;  // Prevent CC
-  std::vector<RefPtr<WebGLQuery>> mQueries;
-  std::vector<RefPtr<WebGLSync>> mSyncs;
-
-  explicit AvailabilityRunnable(WebGLContext* webgl);
-  ~AvailabilityRunnable();
-
-  NS_IMETHOD Run() override;
-};
-}  // namespace webgl
-
-////////////////////////////////////////////////////////////////////////////////
-
 class WebGLContext : public SupportsWeakPtr<WebGLContext> {
   friend class ScopedDrawCallWrapper;
   friend class ScopedDrawWithTransformFeedback;
@@ -197,7 +180,6 @@ class WebGLContext : public SupportsWeakPtr<WebGLContext> {
   friend class WebGLExtensionMOZDebug;
   friend class WebGLExtensionVertexArray;
   friend class WebGLMemoryTracker;
-  friend class webgl::AvailabilityRunnable;
   friend struct webgl::LinkedProgramInfo;
   friend class webgl::ScopedPrepForResourceClear;
   friend struct webgl::UniformBlockInfo;
@@ -1452,14 +1434,15 @@ class WebGLContext : public SupportsWeakPtr<WebGLContext> {
   }
 
   // --
- private:
-  webgl::AvailabilityRunnable* mAvailabilityRunnable = nullptr;
-
  public:
-  webgl::AvailabilityRunnable* EnsureAvailabilityRunnable();
+  void MakeQueriesAndSyncsAvailable();
+
+ protected:
+  std::vector<RefPtr<WebGLQuery>> mUnavailableQueries;
+  std::vector<RefPtr<WebGLSync>> mUnavailableSyncs;
 
   // -
-
+ public:
   // Friend list
   friend class ScopedCopyTexImageSource;
   friend class ScopedResolveTexturesForDraw;

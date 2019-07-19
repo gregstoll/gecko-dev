@@ -1147,6 +1147,8 @@ already_AddRefed<ClientWebGLSync> ClientWebGLContext::FenceSync(
     GLenum condition, GLbitfield flags) {
   auto id = GenerateId<WebGLSync>();
   Run<RPROC(FenceSync)>(id, condition, flags);
+  // Tell the host the next time that JS returns to the event loop.
+  MaybePostSyncQueryUpdate();
   return Make(id).forget().downcast<ClientWebGLSync>();
 }
 
@@ -2745,6 +2747,8 @@ void ClientWebGLContext::DeleteQuery(const ClientWebGLObject<WebGLQuery>* query,
                                      bool aFromExtension) const {
   if (!query) return;
   Run<RPROC(DeleteQuery)>(*query, aFromExtension);
+  // Tell the host the next time that JS returns to the event loop.
+  MaybePostSyncQueryUpdate();
 }
 
 void ClientWebGLContext::BeginQuery(GLenum target,
@@ -2755,11 +2759,15 @@ void ClientWebGLContext::BeginQuery(GLenum target,
 
 void ClientWebGLContext::EndQuery(GLenum target, bool aFromExtension) const {
   Run<RPROC(EndQuery)>(target, aFromExtension);
+  // Tell the host the next time that JS returns to the event loop.
+  MaybePostSyncQueryUpdate();
 }
 
 void ClientWebGLContext::QueryCounter(
     const ClientWebGLObject<WebGLQuery>& query, GLenum target) const {
   Run<RPROC(QueryCounter)>(query, target);
+  // Tell the host the next time that JS returns to the event loop.
+  MaybePostSyncQueryUpdate();
 }
 
 // --------------------------- Buffer Operations --------------------------
@@ -2985,6 +2993,27 @@ void ClientWebGLContext::EnableExtension(dom::CallerType callerType,
     // The host will enable implicitly enabled extensions.
     EnableImplicitExtensions<>(mEnabledExtensions, ext);
   }
+}
+
+void ClientWebGLContext::MaybePostSyncQueryUpdate() const {
+  if (mPostedSyncQueryUpdate) {
+    return;
+  }
+  mPostedSyncQueryUpdate = true;
+  RefPtr<nsIRunnable> runnable = NewRunnableMethod(
+      "ClientWebGLContext::MakeQueriesAndSyncsAvailable", this,
+      &ClientWebGLContext::MakeQueriesAndSyncsAvailable);
+  Document* document = GetOwnerDoc();
+  if (document) {
+    document->Dispatch(TaskCategory::Other, runnable.forget());
+  } else {
+    NS_DispatchToCurrentThread(runnable.forget());
+  }
+}
+
+void ClientWebGLContext::MakeQueriesAndSyncsAvailable() const {
+  mPostedSyncQueryUpdate = false;
+  Run<RPROC(MakeQueriesAndSyncsAvailable)>();
 }
 
 // ---------------------------- Misc Extensions ----------------------------

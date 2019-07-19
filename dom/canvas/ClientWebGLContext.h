@@ -1709,6 +1709,13 @@ class ClientWebGLContext : public nsICanvasRenderingContextInternal,
 
   RefPtr<ClientWebGLExtensionBase> UseExtension(WebGLExtensionID ext);
 
+  // Tell the host the next time that JS returns to the event loop.  We issue
+  // a task to know when that happens, unless one has already been issued.
+  void MaybePostSyncQueryUpdate() const;
+
+  // We have detected that JS returned to the event loop.  Notify the host.
+  void MakeQueriesAndSyncsAvailable() const;
+
   Maybe<ExtensionSets> mSupportedExtensions;
   typedef Array<bool, static_cast<uint8_t>(WebGLExtensionID::Max)>
       EnabledExtensionsArray;
@@ -1717,6 +1724,7 @@ class ClientWebGLContext : public nsICanvasRenderingContextInternal,
                 static_cast<uint8_t>(WebGLExtensionID::Max)>
       ExtensionsArray;
   ExtensionsArray mExtensions;
+  mutable bool mPostedSyncQueryUpdate = false;
 
   // ---------------------------- Misc Extensions ----------------------------
  public:

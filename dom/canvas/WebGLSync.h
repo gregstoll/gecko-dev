@@ -18,7 +18,7 @@ class AvailabilityRunnable;
 class WebGLSync final : public WebGLRefCountedObject<WebGLSync>,
                         public LinkedListElement<WebGLSync> {
   friend class WebGL2Context;
-  friend class webgl::AvailabilityRunnable;
+  friend class WebGLContext;
 
   const GLsync mGLName;
   const uint64_t mFenceId;

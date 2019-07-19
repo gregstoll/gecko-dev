@@ -88,8 +88,7 @@ void WebGLQuery::EndQuery() {
 
   ////
 
-  const auto& availRunnable = mContext->EnsureAvailabilityRunnable();
-  availRunnable->mQueries.push_back(this);
+  mContext->mUnavailableQueries.push_back(this);
 }
 
 MaybeWebGLVariant WebGLQuery::GetQueryParameter(GLenum pname) const {
@@ -199,8 +198,7 @@ void WebGLQuery::QueryCounter(GLenum target) {
   const auto& gl = mContext->gl;
   gl->fQueryCounter(mGLName, mTarget);
 
-  const auto& availRunnable = mContext->EnsureAvailabilityRunnable();
-  availRunnable->mQueries.push_back(this);
+  mContext->mUnavailableQueries.push_back(this);
 }
 
 }  // namespace mozilla

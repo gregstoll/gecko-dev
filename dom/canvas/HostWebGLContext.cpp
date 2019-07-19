@@ -1385,6 +1385,10 @@ const Maybe<ExtensionSets> HostWebGLContext::GetSupportedExtensions() {
   return mContext->GetSupportedExtensions();
 }
 
+void HostWebGLContext::MakeQueriesAndSyncsAvailable() {
+  mContext->MakeQueriesAndSyncsAvailable();
+}
+
 void HostWebGLContext::DrawBuffers(const nsTArray<GLenum>& buffers,
                                    bool aFromExtension) {
   if (aFromExtension) {

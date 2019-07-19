@@ -715,6 +715,8 @@ class HostWebGLContext : public WebGLContextEndpoint {
 
   const Maybe<ExtensionSets> GetSupportedExtensions();
 
+  void MakeQueriesAndSyncsAvailable();
+
   void DrawBuffers(const nsTArray<GLenum>& buffers,
                    bool aFromExtension = false);
 

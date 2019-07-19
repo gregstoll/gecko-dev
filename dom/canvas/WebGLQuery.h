@@ -19,7 +19,7 @@ class AvailabilityRunnable;
 
 class WebGLQuery final : public WebGLRefCountedObject<WebGLQuery>,
                          public LinkedListElement<WebGLQuery> {
-  friend class webgl::AvailabilityRunnable;
+  friend class WebGLContext;
   friend class WebGLRefCountedObject<WebGLQuery>;
 
  public:
