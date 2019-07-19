@@ -134,6 +134,8 @@ MaybeWebGLVariant WebGLUniformLocation::GetUniform() const {
     case LOCAL_GL_UNSIGNED_INT_SAMPLER_2D_ARRAY: {
       GLint buffer[kMaxElemSize] = {0};
       gl->fGetUniformiv(prog, mLoc, buffer);
+      if (elemSize == 1) return AsSomeVariant(buffer[0]);
+
       nsTArray<int32_t> ret;
       ret.AppendElements(buffer, elemSize);
       return AsSomeVariant(ret);
@@ -145,6 +147,8 @@ MaybeWebGLVariant WebGLUniformLocation::GetUniform() const {
     case LOCAL_GL_BOOL_VEC4: {
       GLint buffer[kMaxElemSize] = {0};
       gl->fGetUniformiv(prog, mLoc, buffer);
+      if (elemSize == 1) return AsSomeVariant(static_cast<bool>(buffer[0]));
+
       nsTArray<bool> ret;
       ret.AppendElements(buffer, elemSize);
       return AsSomeVariant(ret);
@@ -165,6 +169,8 @@ MaybeWebGLVariant WebGLUniformLocation::GetUniform() const {
     case LOCAL_GL_FLOAT_MAT4x3: {
       GLfloat buffer[16] = {0.0f};
       gl->fGetUniformfv(prog, mLoc, buffer);
+      if (elemSize == 1) return AsSomeVariant(buffer[0]);
+
       nsTArray<float> ret;
       ret.AppendElements(buffer, elemSize);
       return AsSomeVariant(ret);
@@ -176,6 +182,8 @@ MaybeWebGLVariant WebGLUniformLocation::GetUniform() const {
     case LOCAL_GL_UNSIGNED_INT_VEC4: {
       GLuint buffer[kMaxElemSize] = {0};
       gl->fGetUniformuiv(prog, mLoc, buffer);
+      if (elemSize == 1) return AsSomeVariant(buffer[0]);
+
       nsTArray<uint32_t> ret;
       ret.AppendElements(buffer, elemSize);
       return AsSomeVariant(ret);

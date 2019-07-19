@@ -957,14 +957,14 @@ nsString WebGLProgram::GetActiveUniformBlockName(
     GLuint uniformBlockIndex) const {
   if (!IsLinked()) {
     mContext->ErrorInvalidOperation("`program` must be linked.");
-    return EmptyString();
+    return VoidString();
   }
 
   const webgl::LinkedProgramInfo* linkInfo = LinkInfo();
   GLuint uniformBlockCount = (GLuint)linkInfo->uniformBlocks.size();
   if (uniformBlockIndex >= uniformBlockCount) {
     mContext->ErrorInvalidValue("index %u invalid.", uniformBlockIndex);
-    return EmptyString();
+    return VoidString();
   }
 
   const auto& blockInfo = linkInfo->uniformBlocks[uniformBlockIndex];

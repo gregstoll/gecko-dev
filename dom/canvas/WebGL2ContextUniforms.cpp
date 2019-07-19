@@ -239,9 +239,9 @@ MaybeWebGLVariant WebGL2Context::GetActiveUniformBlockParameter(
 nsString WebGL2Context::GetActiveUniformBlockName(const WebGLProgram& program,
                                                   GLuint uniformBlockIndex) {
   const FuncScope funcScope(*this, "getActiveUniformBlockName");
-  if (IsContextLost()) return EmptyString();
+  if (IsContextLost()) return VoidString();
 
-  if (!ValidateObject("program", program)) return EmptyString();
+  if (!ValidateObject("program", program)) return VoidString();
 
   return program.GetActiveUniformBlockName(uniformBlockIndex);
 }
