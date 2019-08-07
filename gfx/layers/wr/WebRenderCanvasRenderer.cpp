@@ -54,6 +54,11 @@ bool WebRenderCanvasRendererAsync::CreateCompositable() {
     }
 
     mCanvasClient->Connect();
+
+    if (mOOPRenderer) {
+      static_cast<CanvasClientOOP*>(mCanvasClient.get())
+          ->SetRenderer(mOOPRenderer);
+    }
   }
 
   if (!mPipelineId) {

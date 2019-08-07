@@ -11,9 +11,11 @@
 #include "mozilla/layers/LayerTransactionChild.h"
 #include "mozilla/layers/OOPCanvasRenderer.h"
 #include "mozilla/layers/TextureClientSharedSurface.h"
+#include "mozilla/layers/WebRenderBridgeChild.h"
 #include "TexUnpackBlob.h"
 #include "WebGLContextEndpoint.h"
 #include "mozilla/dom/WebGLContextEvent.h"
+#include "HostIpdlWebGLBridge.h"
 #include "HostWebGLContext.h"
 #include "WebGLMethodDispatcher.h"
 #include "WebGLChild.h"
@@ -113,7 +115,9 @@ WebGLPreferences ClientWebGLContext::GetFixedWebGLPrefs() const {
 
 /* static */ RefPtr<ClientWebGLContext>
 ClientWebGLContext::MakeSingleProcessWebGLContext(WebGLVersion aVersion) {
-  UniquePtr<HostWebGLContext> host = HostWebGLContext::Create(aVersion);
+  WebGLGfxFeatures features = HostIpdlWebGLBridge::GetWebGLFeatures();
+  UniquePtr<HostWebGLContext> host =
+      WrapUnique(HostWebGLContext::Create(aVersion, features));
   if (!host) {
     return nullptr;
   }
@@ -324,15 +328,28 @@ void ClientWebGLContext::DrainErrorQueue(bool toReissue) {
 }
 
 bool ClientWebGLContext::UpdateCompositableHandle(
-    LayerTransactionChild* aLayerTransaction, CompositableHandle aHandle) {
+    LayerTransactionChild* aLayerTransactionChild, CompositableHandle aHandle) {
   // When running OOP WebGL (i.e. when we have a WebGLChild actor), tell the
   // host about the new compositable.  When running in-process, we don't need to
   // care.
   if (mWebGLChild) {
     WEBGL_BRIDGE_LOGI("[%p] Setting CompositableHandle to %" PRIx64, this,
                       aHandle.Value());
-    return mWebGLChild->SendUpdateCompositableHandle(aLayerTransaction,
-                                                     aHandle);
+    return mWebGLChild->SendUpdateLayerCompositableHandle(
+        aLayerTransactionChild, aHandle);
+  }
+  return true;
+}
+
+bool ClientWebGLContext::UpdateCompositableHandle(
+    layers::WebRenderBridgeChild* aWrBridgeChild, CompositableHandle aHandle) {
+  // When running OOP WebGL (i.e. when we have a WebGLChild actor), tell the
+  // host about the new compositable.  When running in-process, we don't need to
+  // care.
+  if (mWebGLChild) {
+    WEBGL_BRIDGE_LOGI("[%p] Setting CompositableHandle to %" PRIx64, this,
+                      aHandle.Value());
+    return mWebGLChild->SendUpdateWRCompositableHandle(aWrBridgeChild, aHandle);
   }
   return true;
 }
@@ -356,14 +373,14 @@ void ClientWebGLContext::OnLostContext() {
   const auto kEventName = NS_LITERAL_STRING("webglcontextlost");
   const auto kCanBubble = CanBubble::eYes;
   const auto kIsCancelable = Cancelable::eYes;
-  bool useDefaultHandler;
+  bool useDefaultHandler = true;
 
   WEBGL_BRIDGE_LOGD("[%p] Posting webglcontextlost event", this);
   if (mCanvasElement) {
     nsContentUtils::DispatchTrustedEvent(
         mCanvasElement->OwnerDoc(), static_cast<nsIContent*>(mCanvasElement),
         kEventName, kCanBubble, kIsCancelable, &useDefaultHandler);
-  } else {
+  } else if (mOffscreenCanvas) {
     // OffscreenCanvas case
     RefPtr<Event> event = new Event(mOffscreenCanvas, nullptr, nullptr);
     event->InitEvent(kEventName, kCanBubble, kIsCancelable);
@@ -387,7 +404,7 @@ void ClientWebGLContext::OnRestoredContext() {
         mCanvasElement->OwnerDoc(), static_cast<nsIContent*>(mCanvasElement),
         NS_LITERAL_STRING("webglcontextrestored"), CanBubble::eYes,
         Cancelable::eYes);
-  } else {
+  } else if (mOffscreenCanvas) {
     RefPtr<Event> event = new Event(mOffscreenCanvas, nullptr, nullptr);
     event->InitEvent(NS_LITERAL_STRING("webglcontextrestored"), CanBubble::eYes,
                      Cancelable::eYes);
@@ -440,17 +457,12 @@ void ClientWebGLContext::PostContextCreationError(const nsCString& text) const {
 template <typename ToType>
 struct ValidateRPCArg {
   template <typename FromType>
-  ToType&& operator()(FromType&& aArg) const {
-    return std::forward<ToType&&>(aArg);
+  ToType&& operator()(const FromType&& aArg) const {
+    return static_cast<ToType&&>(const_cast<FromType&&>(aArg));
   }
-  const ClientWebGLContext& mClientContext;
-};
-
-template <typename ToType>
-struct ValidateRPCArg<const ToType> {
   template <typename FromType>
-  const ToType&& operator()(const FromType&& aArg) const {
-    return ValidateRPCArg{mClientContext}(const_cast<FromType&&>(aArg));
+  ToType& operator()(const FromType& aArg) const {
+    return static_cast<ToType&>(const_cast<FromType&>(aArg));
   }
   const ClientWebGLContext& mClientContext;
 };
@@ -513,6 +525,14 @@ struct WebGLClientDispatcher {
   static ReturnType Run(const ClientWebGLContext& c,
                         ReturnType (HostWebGLContext::*method)(MethodArgs...),
                         GivenArgs&&... aArgs) {
+    // If we are running WebGL in this process then call the HostWebGLContext
+    // method directly.  Otherwise, dispatch over IPC.
+    if (!c.IsHostOOP()) {
+      MOZ_ASSERT(c.mHostContext);
+      return ((c.mHostContext.get())->*method)(
+          ValidateRPCArg<MethodArgs&&>{c}(std::forward<GivenArgs>(aArgs))...);
+    }
+
     // Non-void calls must be sync, otherwise what would we return?
     MOZ_ASSERT(WebGLMethodDispatcher::SyncType<Id>() == CommandSyncType::SYNC);
     return c.DispatchSync<Id, ReturnType>(ValidateRPCArg<const MethodArgs&&>{c}(
@@ -525,6 +545,14 @@ struct WebGLClientDispatcher {
                         ReturnType (HostWebGLContext::*method)(MethodArgs...)
                             const,
                         GivenArgs&&... aArgs) {
+    // If we are running WebGL in this process then call the HostWebGLContext
+    // method directly.  Otherwise, dispatch over IPC.
+    if (!c.IsHostOOP()) {
+      MOZ_ASSERT(c.mHostContext);
+      return ((c.mHostContext.get())->*method)(
+          ValidateRPCArg<MethodArgs&&>{c}(std::forward<GivenArgs>(aArgs))...);
+    }
+
     // Non-void calls must be sync, otherwise what would we return?
     MOZ_ASSERT(WebGLMethodDispatcher::SyncType<Id>() == CommandSyncType::SYNC);
     return c.DispatchSync<Id, ReturnType>(ValidateRPCArg<const MethodArgs&&>{c}(
@@ -539,6 +567,15 @@ struct WebGLClientDispatcher<void> {
   static void Run(const ClientWebGLContext& c,
                   void (HostWebGLContext::*method)(MethodArgs...),
                   GivenArgs&&... aArgs) {
+    // If we are running WebGL in this process then call the HostWebGLContext
+    // method directly.  Otherwise, dispatch over IPC.
+    if (!c.IsHostOOP()) {
+      MOZ_ASSERT(c.mHostContext);
+      ((c.mHostContext.get())->*method)(
+          ValidateRPCArg<MethodArgs&&>{c}(std::forward<GivenArgs>(aArgs))...);
+      return;
+    }
+
     if (WebGLMethodDispatcher::SyncType<Id>() == CommandSyncType::SYNC) {
       c.DispatchVoidSync<Id>(ValidateRPCArg<const MethodArgs&&>{c}(
           std::forward<GivenArgs>(aArgs))...);
@@ -553,6 +590,15 @@ struct WebGLClientDispatcher<void> {
   static void Run(const ClientWebGLContext& c,
                   void (HostWebGLContext::*method)(MethodArgs...) const,
                   GivenArgs&&... aArgs) {
+    // If we are running WebGL in this process then call the HostWebGLContext
+    // method directly.  Otherwise, dispatch over IPC.
+    if (!c.IsHostOOP()) {
+      MOZ_ASSERT(c.mHostContext);
+      ((c.mHostContext.get())->*method)(
+          ValidateRPCArg<MethodArgs&&>{c}(std::forward<GivenArgs>(aArgs))...);
+      return;
+    }
+
     if (WebGLMethodDispatcher::SyncType<Id>() == CommandSyncType::SYNC) {
       c.DispatchVoidSync<Id>(ValidateRPCArg<const MethodArgs&&>{c}(
           std::forward<GivenArgs>(aArgs))...);
@@ -563,18 +609,12 @@ struct WebGLClientDispatcher<void> {
   }
 };
 
-// If we are running WebGL in this process then call the HostWebGLContext
-// method directly.  Otherwise, dispatch over IPC.
 template <
     typename MethodType, MethodType method,
     typename ReturnType = typename FunctionTypeTraits<MethodType>::ReturnType,
     size_t Id = WebGLMethodDispatcher::Id<MethodType, method>(),
     typename... Args>
 ReturnType ClientWebGLContext::Run(Args&&... aArgs) const {
-  if (!IsHostOOP()) {
-    MOZ_ASSERT(mHostContext);
-    return ((mHostContext.get())->*method)(std::forward<Args>(aArgs)...);
-  }
   return WebGLClientDispatcher<ReturnType>::template Run<Id>(
       *this, method, std::forward<Args>(aArgs)...);
 }
@@ -633,11 +673,8 @@ class WebGLContextUserData : public LayerUserData {
 
 void ClientWebGLContext::BeginComposition() {
   // When running single-process WebGL, Present needs to be called in
-  // BeginComposition so that it is done _before_ the CanvasRenderer to
+  // BeginComposition so that it is done _before_ CanvasRenderer's
   // Update attaches it for composition.
-  // When running cross-process WebGL, Present needs to be called in
-  // EndComposition so that it happens _after_ the OOPCanvasRenderer's
-  // Update tells it what CompositableHost to use,
   if (!IsHostOOP()) {
     MOZ_ASSERT(mHostContext);
     WEBGL_BRIDGE_LOGI("[%p] Presenting", this);
@@ -646,9 +683,29 @@ void ClientWebGLContext::BeginComposition() {
 }
 
 void ClientWebGLContext::EndComposition() {
+  // When running cross-process WebGL, Present needs to be called in
+  // EndComposition so that it happens _after_ the OOPCanvasRenderer's
+  // Update tells it what Compositable to use.
   if (IsHostOOP()) {
+    MOZ_ASSERT(mWebGLChild);
     WEBGL_BRIDGE_LOGI("[%p] Presenting", this);
-    Run<RPROC(Present)>();
+
+    layers::SurfaceDescriptor surfDesc = Run<RPROC(Present)>();
+    if (surfDesc.type() == layers::SurfaceDescriptor::Tnull_t) {
+      return;
+    }
+
+    CompositorBridgeChild* cbc = CompositorBridgeChild::Get();
+    MOZ_ASSERT(cbc);
+    if (!cbc) {
+      return;
+    }
+    wr::MaybeExternalImageId externalImageId = cbc->GetNextExternalImageId();
+
+    bool toPremultAlpha = (!mOptions.premultipliedAlpha) && mOptions.alpha;
+
+    mWebGLChild->SendPresentToCompositable(
+        surfDesc, toPremultAlpha, GetCompositorBackendType(), externalImageId);
   }
 
   // Mark ourselves as no longer invalidated.
@@ -710,7 +767,7 @@ bool ClientWebGLContext::UpdateWebRenderCanvasData(
   return true;
 }
 
-mozilla::dom::PWebGLChild* ClientWebGLContext::GetWebGLChild() {
+mozilla::dom::WebGLChild* ClientWebGLContext::GetWebGLChild() {
   return mWebGLChild;
 }
 
@@ -874,9 +931,9 @@ void ClientWebGLContext::OnMemoryPressure() {
   return Run<RPROC(OnMemoryPressure)>();
 }
 
-static bool IsFeatureInBlacklist(const nsCOMPtr<nsIGfxInfo>& gfxInfo,
-                                 int32_t feature,
-                                 nsCString* const out_blacklistId) {
+static bool IsFeatureInClientBlacklist(const nsCOMPtr<nsIGfxInfo>& gfxInfo,
+                                       int32_t feature,
+                                       nsCString* const out_blacklistId) {
   int32_t status;
   if (!NS_SUCCEEDED(gfxUtils::ThreadSafeGetFeatureStatus(
           gfxInfo, feature, *out_blacklistId, &status))) {
@@ -934,8 +991,8 @@ ClientWebGLContext::SetContextOptions(JSContext* cx,
     const nsCOMPtr<nsIGfxInfo> gfxInfo = services::GetGfxInfo();
 
     nsCString blocklistId;
-    if (IsFeatureInBlacklist(gfxInfo, nsIGfxInfo::FEATURE_WEBGL_MSAA,
-                             &blocklistId)) {
+    if (IsFeatureInClientBlacklist(gfxInfo, nsIGfxInfo::FEATURE_WEBGL_MSAA,
+                                   &blocklistId)) {
       EnqueueWarning(nsCString(
           "Disallowing antialiased backbuffers due to blacklisting."));
       newOpts.antialias = false;
@@ -971,6 +1028,10 @@ void ClientWebGLContext::AllowContextRestore() {
 }
 
 void ClientWebGLContext::DidRefresh() { Run<RPROC(DidRefresh)>(); }
+
+layers::SurfaceDescriptor ClientWebGLContext::PrepareVRFrame() {
+  return Run<RPROC(PrepareVRFrame)>();
+}
 
 already_AddRefed<mozilla::gfx::SourceSurface>
 ClientWebGLContext::GetSurfaceSnapshot(gfxAlphaType* out_alphaType) {
@@ -1738,6 +1799,9 @@ void ClientWebGLContext::DeleteFramebuffer(
     return;
   }
   Run<RPROC(DeleteFramebuffer)>(*aFb);
+  if (aFb->IsValidForContext(this)) {
+    aFb->SetDeleted();
+  }
 }
 
 void ClientWebGLContext::BindFramebuffer(
@@ -1808,6 +1872,9 @@ void ClientWebGLContext::DeleteRenderbuffer(
     return;
   }
   Run<RPROC(DeleteRenderbuffer)>(*aRb);
+  if (aRb->IsValidForContext(this)) {
+    aRb->SetDeleted();
+  }
 }
 
 void ClientWebGLContext::GetInternalformatParameter(
@@ -1856,6 +1923,9 @@ void ClientWebGLContext::DeleteTexture(
     return;
   }
   Run<RPROC(DeleteTexture)>(*aTex);
+  if (aTex->IsValidForContext(this)) {
+    aTex->SetDeleted();
+  }
 }
 
 void ClientWebGLContext::ActiveTexture(GLenum texUnit) {
@@ -2185,6 +2255,9 @@ void ClientWebGLContext::DeleteProgram(
     return;
   }
   Run<RPROC(DeleteProgram)>(*aProg);
+  if (aProg->IsValidForContext(this)) {
+    aProg->SetDeleted();
+  }
 }
 
 void ClientWebGLContext::DeleteShader(
@@ -2193,6 +2266,9 @@ void ClientWebGLContext::DeleteShader(
     return;
   }
   Run<RPROC(DeleteShader)>(*aShader);
+  if (aShader->IsValidForContext(this)) {
+    aShader->SetDeleted();
+  }
 }
 
 void ClientWebGLContext::UseProgram(
@@ -2710,6 +2786,9 @@ void ClientWebGLContext::DeleteVertexArray(
     return;
   }
   Run<RPROC(DeleteVertexArray)>(*array, aFromExtension);
+  if (array->IsValidForContext(this)) {
+    array->SetDeleted();
+  }
 }
 
 void ClientWebGLContext::BindVertexArray(
@@ -2745,8 +2824,14 @@ void ClientWebGLContext::GetQueryParameter(
 
 void ClientWebGLContext::DeleteQuery(const ClientWebGLObject<WebGLQuery>* query,
                                      bool aFromExtension) const {
-  if (!query) return;
+  if (!query) {
+    return;
+  }
   Run<RPROC(DeleteQuery)>(*query, aFromExtension);
+  if (query->IsValidForContext(this)) {
+    query->SetDeleted();
+  }
+
   // Tell the host the next time that JS returns to the event loop.
   MaybePostSyncQueryUpdate();
 }
@@ -2777,6 +2862,9 @@ void ClientWebGLContext::DeleteBuffer(
     return;
   }
   Run<RPROC(DeleteBuffer)>(*aBuf);
+  if (aBuf->IsValidForContext(this)) {
+    aBuf->SetDeleted();
+  }
 }
 
 void ClientWebGLContext::ClearBufferfv(GLenum buffer, GLint drawBuffer,
@@ -2838,6 +2926,9 @@ void ClientWebGLContext::DeleteSampler(
     return;
   }
   Run<RPROC(DeleteSampler)>(*aId);
+  if (aId->IsValidForContext(this)) {
+    aId->SetDeleted();
+  }
 }
 
 void ClientWebGLContext::BindSampler(
@@ -2884,6 +2975,9 @@ void ClientWebGLContext::DeleteSync(const ClientWebGLObject<WebGLSync>* aId) {
     return;
   }
   Run<RPROC(DeleteSync)>(*aId);
+  if (aId->IsValidForContext(this)) {
+    aId->SetDeleted();
+  }
 }
 
 // -------------------------- Transform Feedback ---------------------------
@@ -2893,6 +2987,9 @@ void ClientWebGLContext::DeleteTransformFeedback(
     return;
   }
   Run<RPROC(DeleteTransformFeedback)>(*tf);
+  if (tf->IsValidForContext(this)) {
+    tf->SetDeleted();
+  }
 }
 
 void ClientWebGLContext::BindTransformFeedback(

@@ -118,6 +118,20 @@ class WebGLVertexArrayObject;
 template <typename T>
 class WebGLRefPtr;
 
+/**
+ * Used to report the reasons that WebGL context construction operations fail.
+ */
+struct FailureReason {
+  nsCString key;  // For reporting.
+  nsCString info;
+
+  FailureReason() {}
+
+  template <typename A, typename B>
+  FailureReason(const A& _key, const B& _info)
+      : key(nsCString(_key)), info(nsCString(_info)) {}
+};
+
 /*
  * Implementing WebGL (or OpenGL ES 2.0) on top of desktop OpenGL requires
  * emulating the vertex attrib 0 array when it's not enabled. Indeed,
@@ -649,6 +663,14 @@ class RawSurface : public RawBuffer<> {
   gfx::IntSize mSize;
   gfx::SurfaceFormat mFormat;
   int32_t mStride;
+};
+
+struct WebGLGfxFeatures {
+  bool hasAcceleratedLayers;
+  bool allowOpenGL;
+  FailureReason openGLFailureReason;
+  bool allowWebGL2;
+  FailureReason webGL2FailureReason;
 };
 
 }  // namespace mozilla

@@ -26,7 +26,9 @@ class WebGL2Context : public WebGLContext {
   virtual ~WebGL2Context(){};
 
   static bool IsSupported();
-  static WebGL2Context* Create() { return new WebGL2Context(); }
+  static WebGL2Context* Create(const WebGLGfxFeatures& aFeatures) {
+    return new WebGL2Context(aFeatures);
+  }
 
   virtual bool IsWebGL2() const override { return true; }
 
@@ -206,7 +208,8 @@ class WebGL2Context : public WebGLContext {
   */
 
  private:
-  WebGL2Context() {
+  explicit WebGL2Context(const WebGLGfxFeatures& aFeatures)
+      : WebGLContext(aFeatures) {
     MOZ_ASSERT(IsSupported(),
                "not supposed to create a WebGL2Context"
                "context when not supported");

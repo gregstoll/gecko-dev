@@ -5,134 +5,108 @@
 
 #include "WebGLParent.h"
 
+#include "mozilla/gfx/GPUProcessManager.h"
 #include "mozilla/layers/LayerTransactionParent.h"
 #include "mozilla/layers/TextureClientSharedSurface.h"
+#include "mozilla/layers/WebRenderBridgeParent.h"
+#include "HostIpdlWebGLBridge.h"
 #include "HostWebGLContext.h"
+#include "mozilla/layers/CompositorThread.h"
+#include "mozilla/layers/CompositorBridgeParent.h"
+#include "mozilla/webrender/RenderThread.h"
 
 namespace mozilla {
-
 namespace dom {
 
-/* static */ WebGLParent* WebGLParent::Create(
+WebGLParent::WebGLParent(
     WebGLVersion aVersion,
     UniquePtr<mozilla::HostWebGLCommandSink>&& aCommandSink,
     UniquePtr<mozilla::HostWebGLErrorSource>&& aErrorSource) {
-  UniquePtr<HostWebGLContext> host = HostWebGLContext::Create(
-      aVersion, std::move(aCommandSink), std::move(aErrorSource));
-
-  if (!host) {
-    WEBGL_BRIDGE_LOGE("Failed to create HostWebGLContext");
-    return nullptr;
-  }
-
-  WebGLParent* parent(new WebGLParent(std::move(host)));
-  if (!parent->BeginCommandQueueDrain()) {
-    WEBGL_BRIDGE_LOGE("Failed to start WebGL command queue drain");
-    return nullptr;
-  }
-
-  return parent;
+  WeakPtr<WebGLParent> weakParent = this;
+  mHostBridge = new HostIpdlWebGLBridge(
+      weakParent, aVersion, std::move(aCommandSink), std::move(aErrorSource));
 }
 
-WebGLParent::WebGLParent(UniquePtr<HostWebGLContext>&& aHost)
-    : mHost(std::move(aHost)) {}
+WebGLParent::~WebGLParent() { FreeHostBridge(); }
 
-bool WebGLParent::BeginCommandQueueDrain() {
-  if (mRunCommandsRunnable) {
-    // already running
-    return true;
+void WebGLParent::FreeHostBridge() {
+  // Tell host bridge to destroy itself on render thread, then forget
+  // the only reference to it on the IPDL thread.
+  if (mHostBridge) {
+    mHostBridge->Destroy();
+    mHostBridge = nullptr;
   }
-
-  WeakPtr<WebGLParent> weakThis = this;
-  mRunCommandsRunnable = NS_NewRunnableFunction(
-      "RunWebGLCommands", [weakThis]() { MaybeRunCommandQueue(weakThis); });
-  if (!mRunCommandsRunnable) {
-    MOZ_ASSERT_UNREACHABLE("Failed to create RunWebGLCommands Runnable");
-    return false;
-  }
-
-  // Start the recurring runnable.
-  return RunCommandQueue();
 }
 
-/* static */ bool WebGLParent::MaybeRunCommandQueue(
-    const WeakPtr<WebGLParent>& weakWebGLParent) {
-  // We don't have to worry about WebGLParent being deleted from under us
-  // as its not thread-safe so we must be the only thread using it.  In fact,
-  // WeakRef cannot atomically promote to a RefPtr so it is not thread safe
-  // either.
-  if (weakWebGLParent) {
-    // This will re-issue the task if the queue is still running.
-    return weakWebGLParent->RunCommandQueue();
-  }
-
-  // Context was deleted.  Do not re-issue the task.
-  return true;
-}
-
-bool WebGLParent::RunCommandQueue() {
-  if (!mRunCommandsRunnable) {
-    // The actor finished.  Do not re-issue the task.
-    return true;
-  }
-
-  // Drain the queue for up to kMaxWebGLCommandTimeSliceMs, then
-  // repeat no sooner than kDrainDelayMs later.
-  // TODO: Tune these.
-  static const uint32_t kMaxWebGLCommandTimeSliceMs = 1;
-  static const uint32_t kDrainDelayMs = 0;
-
-  TimeDuration timeSlice =
-      TimeDuration::FromMilliseconds(kMaxWebGLCommandTimeSliceMs);
-  CommandResult result = mHost->RunCommandsForDuration(timeSlice);
-  bool success = (result == CommandResult::kSuccess) ||
-                 (result == CommandResult::kQueueEmpty);
-  if (!success) {
-    // Tell client that this WebGLParent needs to be shut down
-    WEBGL_BRIDGE_LOGE("WebGLParent failed while running commands");
-    Unused << SendQueueFailed();
-    mRunCommandsRunnable = nullptr;
-    return false;
-  }
-
-  // Re-issue the task
-  MOZ_ASSERT(mRunCommandsRunnable);
-  MOZ_ASSERT(MessageLoop::current());
-  MessageLoop::current()->PostDelayedTask(do_AddRef(mRunCommandsRunnable),
-                                          kDrainDelayMs);
-  return true;
-}
-
-mozilla::ipc::IPCResult WebGLParent::Recv__delete__() {
-  mHost = nullptr;
-  return IPC_OK();
-}
-
-void WebGLParent::ActorDestroy(ActorDestroyReason aWhy) { mHost = nullptr; }
-
-mozilla::ipc::IPCResult WebGLParent::RecvUpdateCompositableHandle(
+mozilla::ipc::IPCResult WebGLParent::RecvUpdateLayerCompositableHandle(
     layers::PLayerTransactionParent* aLayerTransaction,
     const CompositableHandle& aHandle) {
-  auto layerTrans =
-      static_cast<layers::LayerTransactionParent*>(aLayerTransaction);
-  RefPtr<layers::CompositableHost> compositableHost(
-      layerTrans->FindCompositable(aHandle));
-  if (!compositableHost) {
-    return IPC_FAIL(this, "Failed to find CompositableHost for WebGL instance");
+  if (!mHostBridge) {
+    // Already destroyed the context
+    return IPC_OK();
   }
 
-  mHost->SetCompositableHost(compositableHost);
+  auto layerTransParent =
+      static_cast<layers::LayerTransactionParent*>(aLayerTransaction);
+  FindAndSetCompositableHost(layerTransParent, aHandle);
   return IPC_OK();
 }
 
-already_AddRefed<layers::SharedSurfaceTextureClient> WebGLParent::GetVRFrame() {
-  if (!mHost) {
-    return nullptr;
+mozilla::ipc::IPCResult WebGLParent::RecvUpdateWRCompositableHandle(
+    layers::PWebRenderBridgeParent* aWrBridge,
+    const CompositableHandle& aHandle) {
+  if (!mHostBridge) {
+    // Already destroyed the context
+    return IPC_OK();
   }
 
-  return mHost->GetVRFrame();
+  auto wrBridgeParent = static_cast<layers::WebRenderBridgeParent*>(aWrBridge);
+  FindAndSetCompositableHost(wrBridgeParent, aHandle);
+  return IPC_OK();
+}
+
+void WebGLParent::FindAndSetCompositableHost(
+    layers::CompositableParentManager* aCompositableMgr,
+    const CompositableHandle& aHandle) {
+  mCompositableHost = aCompositableMgr->FindCompositable(aHandle);
+  MOZ_RELEASE_ASSERT(mCompositableHost,
+                     "Failed to find CompositableHost for WebGL instance");
+}
+
+mozilla::ipc::IPCResult WebGLParent::RecvPresentToCompositable(
+    const layers::SurfaceDescriptor& aSurfDesc, bool aToPremultAlpha,
+    layers::LayersBackend aBackend,
+    const wr::MaybeExternalImageId& aExternalImageId) {
+  if (!mCompositableHost) {
+    return IPC_OK();
+  }
+
+  wr::MaybeExternalImageId externalImageId = aExternalImageId;
+  layers::TextureFlags flags = layers::TextureFlags::ORIGIN_BOTTOM_LEFT;
+  if (aToPremultAlpha) {
+    flags |= layers::TextureFlags::NON_PREMULTIPLIED;
+  }
+
+  RefPtr<layers::TextureHost> host = layers::TextureHost::Create(
+      aSurfDesc, null_t(),
+      static_cast<layers::CompositorBridgeParent*>(Manager()), aBackend, flags,
+      externalImageId);
+
+  if (!host) {
+    MOZ_ASSERT_UNREACHABLE("Present failed to create TextureHost.");
+    return IPC_OK();
+  }
+
+  AutoTArray<layers::CompositableHost::TimedTexture, 1> textures;
+  layers::CompositableHost::TimedTexture* t = textures.AppendElement();
+  t->mTexture = host;
+  t->mTimeStamp = TimeStamp::Now();
+  t->mPictureRect = nsIntRect(nsIntPoint(0, 0), nsIntSize(host->GetSize()));
+  t->mFrameID = 0;
+  t->mProducerID = 0;
+  mCompositableHost->UseTextureHost(textures);
+  return IPC_OK();
 }
 
 }  // namespace dom
-
 }  // namespace mozilla

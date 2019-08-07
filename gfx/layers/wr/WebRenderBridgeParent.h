@@ -23,6 +23,7 @@
 #include "mozilla/webrender/WebRenderAPI.h"
 #include "mozilla/webrender/RenderThread.h"
 #include "nsTArrayForwardDeclare.h"
+#include "Layers.h"
 
 namespace mozilla {
 
@@ -114,7 +115,7 @@ class WebRenderBridgeParent final
   mozilla::ipc::IPCResult RecvUpdateResources(
       nsTArray<OpUpdateResource>&& aUpdates,
       nsTArray<RefCountedShmem>&& aSmallShmems,
-      nsTArray<ipc::Shmem>&& aLargeShmems,
+      nsTArray<mozilla::ipc::Shmem>&& aLargeShmems,
       const wr::RenderRoot& aRenderRoot) override;
   mozilla::ipc::IPCResult RecvSetDisplayList(
       nsTArray<RenderRootDisplayListData>&& aDisplayLists,
@@ -299,11 +300,12 @@ class WebRenderBridgeParent final
   }
 
   bool SetDisplayList(wr::RenderRoot aRenderRoot, const LayoutDeviceRect& aRect,
-                      const wr::LayoutSize& aContentSize, ipc::ByteBuf&& aDL,
+                      const wr::LayoutSize& aContentSize,
+                      mozilla::ipc::ByteBuf&& aDL,
                       const wr::BuiltDisplayListDescriptor& aDLDesc,
                       const nsTArray<OpUpdateResource>& aResourceUpdates,
                       const nsTArray<RefCountedShmem>& aSmallShmems,
-                      const nsTArray<ipc::Shmem>& aLargeShmems,
+                      const nsTArray<mozilla::ipc::Shmem>& aLargeShmems,
                       const TimeStamp& aTxnStartTime,
                       wr::TransactionBuilder& aTxn, wr::Epoch aWrEpoch,
                       bool aValidTransaction, bool aObserveLayersUpdate);
@@ -317,7 +319,7 @@ class WebRenderBridgeParent final
 
   bool UpdateResources(const nsTArray<OpUpdateResource>& aResourceUpdates,
                        const nsTArray<RefCountedShmem>& aSmallShmems,
-                       const nsTArray<ipc::Shmem>& aLargeShmems,
+                       const nsTArray<mozilla::ipc::Shmem>& aLargeShmems,
                        wr::TransactionBuilder& aUpdates);
   bool AddExternalImage(wr::ExternalImageId aExtId, wr::ImageKey aKey,
                         wr::TransactionBuilder& aResources);

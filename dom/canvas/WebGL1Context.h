@@ -13,10 +13,13 @@ class HostWebGLContext;
 
 class WebGL1Context : public WebGLContext {
  public:
-  static WebGL1Context* Create() { return new WebGL1Context(); }
+  static WebGL1Context* Create(const WebGLGfxFeatures& aFeatures) {
+    return new WebGL1Context(aFeatures);
+  }
 
  private:
-  WebGL1Context() {}
+  explicit WebGL1Context(const WebGLGfxFeatures& aFeatures)
+      : WebGLContext(aFeatures) {}
 
   virtual UniquePtr<webgl::FormatUsageAuthority> CreateFormatUsage(
       gl::GLContext* gl) const override;

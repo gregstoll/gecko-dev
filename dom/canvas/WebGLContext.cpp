@@ -9,7 +9,6 @@
 #include <queue>
 
 #include "AccessCheck.h"
-#include "CompositableHost.h"
 #include "gfxConfig.h"
 #include "gfxContext.h"
 #include "gfxCrashReporterUtils.h"
@@ -112,7 +111,7 @@ bool WebGLPreferences::operator==(const WebGLPreferences& r) const {
          (vendorStringOverride == r.vendorStringOverride);
 }
 
-WebGLContext::WebGLContext()
+WebGLContext::WebGLContext(const WebGLGfxFeatures& aFeatures)
     : gl(mGL_OnlyClearInDestroyResourcesAndContext),  // const reference
       mMaxPerfWarnings(gfxPrefs::WebGLMaxPerfWarnings()),
       mNumPerfWarnings(0),
@@ -122,6 +121,7 @@ WebGLContext::WebGLContext()
       mBackend(LayersBackend::LAYERS_NONE),
       mDataAllocGLCallCount(0),
       mBypassShaderValidation(false),
+      mFeatures(aFeatures),
       mEmptyTFO(0),
       mContextLossHandler(this),
       mNeedsFakeNoAlpha(false),
@@ -305,47 +305,6 @@ void WebGLContext::OnMemoryPressure() {
 // nsICanvasRenderingContextInternal
 //
 
-static bool IsFeatureInBlacklist(const nsCOMPtr<nsIGfxInfo>& gfxInfo,
-                                 int32_t feature,
-                                 nsCString* const out_blacklistId) {
-  int32_t status;
-  if (!NS_SUCCEEDED(gfxUtils::ThreadSafeGetFeatureStatus(
-          gfxInfo, feature, *out_blacklistId, &status))) {
-    return false;
-  }
-
-  return status != nsIGfxInfo::FEATURE_STATUS_OK;
-}
-
-static bool HasAcceleratedLayers(const nsCOMPtr<nsIGfxInfo>& gfxInfo) {
-  int32_t status;
-
-  nsCString discardFailureId;
-  gfxUtils::ThreadSafeGetFeatureStatus(gfxInfo,
-                                       nsIGfxInfo::FEATURE_DIRECT3D_9_LAYERS,
-                                       discardFailureId, &status);
-  if (status) return true;
-  gfxUtils::ThreadSafeGetFeatureStatus(gfxInfo,
-                                       nsIGfxInfo::FEATURE_DIRECT3D_10_LAYERS,
-                                       discardFailureId, &status);
-  if (status) return true;
-  gfxUtils::ThreadSafeGetFeatureStatus(gfxInfo,
-                                       nsIGfxInfo::FEATURE_DIRECT3D_10_1_LAYERS,
-                                       discardFailureId, &status);
-  if (status) return true;
-  gfxUtils::ThreadSafeGetFeatureStatus(gfxInfo,
-                                       nsIGfxInfo::FEATURE_DIRECT3D_11_LAYERS,
-                                       discardFailureId, &status);
-  if (status) return true;
-  gfxUtils::ThreadSafeGetFeatureStatus(
-      gfxInfo, nsIGfxInfo::FEATURE_OPENGL_LAYERS, discardFailureId, &status);
-  if (status) return true;
-
-  return false;
-}
-
-// --
-
 bool WebGLContext::CreateAndInitGL(
     bool forceEnabled, std::vector<FailureReason>* const out_failReasons) {
   // Can't use WebGL in headless mode.
@@ -371,15 +330,8 @@ bool WebGLContext::CreateAndInitGL(
 
   // WebGL2 is separately blocked:
   if (IsWebGL2()) {
-    const nsCOMPtr<nsIGfxInfo> gfxInfo = services::GetGfxInfo();
-    const auto feature = nsIGfxInfo::FEATURE_WEBGL2;
-
-    FailureReason reason;
-    if (IsFeatureInBlacklist(gfxInfo, feature, &reason.key)) {
-      reason.info =
-          "Refused to create WebGL2 context because of blacklist"
-          " entry: ";
-      reason.info.Append(reason.key);
+    if (!mFeatures.allowWebGL2) {
+      FailureReason& reason = mFeatures.webGL2FailureReason;
       out_failReasons->push_back(reason);
       GenerateWarning("%s", reason.info.BeginReading());
       return false;
@@ -475,18 +427,9 @@ bool WebGLContext::CreateAndInitGL(
 #endif
 
   if (tryNativeGL && !forceEnabled) {
-    const nsCOMPtr<nsIGfxInfo> gfxInfo = services::GetGfxInfo();
-    const auto feature = nsIGfxInfo::FEATURE_WEBGL_OPENGL;
-
-    FailureReason reason;
-    if (IsFeatureInBlacklist(gfxInfo, feature, &reason.key)) {
-      reason.info =
-          "Refused to create native OpenGL context because of blacklist"
-          " entry: ";
-      reason.info.Append(reason.key);
-
+    if (!mFeatures.allowOpenGL) {
+      FailureReason& reason = mFeatures.openGLFailureReason;
       out_failReasons->push_back(reason);
-
       GenerateWarning("%s", reason.info.BeginReading());
       tryNativeGL = false;
     }
@@ -503,7 +446,7 @@ bool WebGLContext::CreateAndInitGL(
     const RefPtr<GLContext> gl =
         pfnCreateOffscreen(dummySize, surfaceCaps, flags, &failureId);
     if (!gl) {
-      out_failReasons->push_back(WebGLContext::FailureReason(failureId, info));
+      out_failReasons->push_back(FailureReason(failureId, info));
     }
     return gl;
   };
@@ -713,7 +656,7 @@ WebGLContext::DoSetDimensionsData WebGLContext::DoSetDimensions(
 
   if (mOptions.failIfMajorPerformanceCaveat) {
     nsCOMPtr<nsIGfxInfo> gfxInfo = services::GetGfxInfo();
-    if (!HasAcceleratedLayers(gfxInfo)) {
+    if (!mFeatures.hasAcceleratedLayers) {
       failureId = NS_LITERAL_CSTRING("FEATURE_FAILURE_WEBGL_PERF_CAVEAT");
       const nsLiteralCString text(
           "failIfMajorPerformanceCaveat: Compositor is not"
@@ -857,11 +800,6 @@ WebGLContext::DoSetDimensionsData WebGLContext::DoSetDimensions(
 
 void WebGLContext::SetPreferences(const WebGLPreferences& aPrefs) {
   mPrefs = aPrefs;
-}
-
-void WebGLContext::SetCompositableHost(
-    RefPtr<layers::CompositableHost>& aCompositableHost) {
-  mCompositableHost = aCompositableHost;
 }
 
 void ClientWebGLContext::LoseOldestWebGLContextIfLimitExceeded() {
@@ -1173,35 +1111,32 @@ void WriteFrontToFile(gl::GLContext* gl, GLScreenBuffer* screen,
   gfxUtils::WriteAsPNG(resultSurf, fname);
 }
 
-bool WebGLContext::Present() {
+layers::SurfaceDescriptor WebGLContext::Present() {
+  layers::SurfaceDescriptor surfDesc = null_t();
+
   if (!PresentScreenBuffer()) {
-    return false;
+    return surfDesc;
   }
 
   if (XRE_IsContentProcess()) {
     // That's all!
-    return true;
+    return surfDesc;
   }
 
   // Set the CompositableHost to use the front buffer as the display,
-  TextureFlags flags = TextureFlags::ORIGIN_BOTTOM_LEFT;
-  if ((!IsPremultAlpha()) && mOptions.alpha) {
-    flags |= TextureFlags::NON_PREMULTIPLIED;
-  }
-
   const auto& screen = gl->Screen();
   if (!screen->Front()->Surf()) {
     GenerateWarning(
         "Present failed due to missing front buffer. Losing context.");
     ForceLoseContext();
-    return false;
+    return surfDesc;
   }
 
   if (mBackend == LayersBackend::LAYERS_NONE) {
     GenerateWarning(
         "Present was not given a valid compositor layer type. Losing context.");
     ForceLoseContext();
-    return false;
+    return surfDesc;
   }
 
   // TODO: Due to an unfortunate initialization process, under some
@@ -1213,36 +1148,13 @@ bool WebGLContext::Present() {
   // remotely (ie when WebGL is run in the content process).
   if (screen->Front()->Surf()->mType == SharedSurfaceType::Basic) {
     NS_WARNING("Attempted to Present surface of Basic type in remoted WebGL.");
-    return true;
+    return surfDesc;
   }
 
-  // TODO: I probably need to hold onto screen->Front()->Surf() somehow
-  layers::SurfaceDescriptor surfaceDescriptor;
-  screen->Front()->Surf()->ToSurfaceDescriptor(&surfaceDescriptor);
-
-  if (!mCompositableHost) {
-    return false;
-  }
-
-  wr::MaybeExternalImageId noExternalImageId = Nothing();
-  RefPtr<TextureHost> host = TextureHost::Create(
-      surfaceDescriptor, null_t(), nullptr, mBackend, flags, noExternalImageId);
-
-  if (!host) {
-    GenerateWarning("Present failed to create TextuteHost. Losing context.");
-    ForceLoseContext();
-    return false;
-  }
-
-  AutoTArray<CompositableHost::TimedTexture, 1> textures;
-  CompositableHost::TimedTexture* t = textures.AppendElement();
-  t->mTexture = host;
-  t->mTimeStamp = TimeStamp::Now();
-  t->mPictureRect = nsIntRect(nsIntPoint(0, 0), nsIntSize(host->GetSize()));
-  t->mFrameID = 0;
-  t->mProducerID = 0;
-  mCompositableHost->UseTextureHost(textures);
-  return true;
+  // Hold screen surface until next Present.
+  mSurface = screen->Front();
+  mSurface->Surf()->ToSurfaceDescriptor(&surfDesc);
+  return surfDesc;
 }
 
 void WebGLContext::DummyReadFramebufferOperation() {
@@ -1869,9 +1781,11 @@ CheckedUint32 WebGLContext::GetUnpackSize(bool isFunc3D, uint32_t width,
 }
 
 #if defined(MOZ_WIDGET_ANDROID)
-already_AddRefed<layers::SharedSurfaceTextureClient>
-WebGLContext::GetVRFrame() {
-  if (!gl) return nullptr;
+layers::SurfaceDescriptor WebGLContext::PrepareVRFrame() {
+  layers::SurfaceDescriptor surfDesc = null_t();
+  if (!gl) {
+    return surfDesc;
+  }
 
   EnsureVRReady();
 
@@ -1888,23 +1802,34 @@ WebGLContext::GetVRFrame() {
   // compositor.
   PresentScreenBuffer(mVRScreen.get());
 
-  if (IsContextLost()) return nullptr;
+  if (IsContextLost()) {
+    return surfDesc;
+  }
 
-  RefPtr<SharedSurfaceTextureClient> sharedSurface = mVRScreen->Front();
-  if (!sharedSurface || !sharedSurface->Surf()) return nullptr;
+  // Keep the SharedSurfaceTextureClient alive long enough for
+  // 1 extra frame, accomodating overlapped asynchronous rendering.
+  mLastVRSurface = mSurface;
+
+  mSurface = mVRScreen->Front();
+  if (!mSurface || !mSurface->Surf()) {
+    return surfDesc;
+  }
 
   // Make sure that the WebGL buffer is committed to the attached SurfaceTexture
   // on Android.
-  sharedSurface->Surf()->ProducerAcquire();
-  sharedSurface->Surf()->Commit();
-  sharedSurface->Surf()->ProducerRelease();
+  mSurface->Surf()->ProducerAcquire();
+  mSurface->Surf()->Commit();
+  mSurface->Surf()->ProducerRelease();
 
-  return sharedSurface.forget();
+  mSurface->Surf()->ToSurfaceDescriptor(&surfDesc);
+  return surfDesc;
 }
 #else
-already_AddRefed<layers::SharedSurfaceTextureClient>
-WebGLContext::GetVRFrame() {
-  if (!gl) return nullptr;
+SurfaceDescriptor WebGLContext::PrepareVRFrame() {
+  SurfaceDescriptor surfDesc;
+  if (!gl) {
+    return surfDesc;
+  }
 
   EnsureVRReady();
   /**
@@ -1915,14 +1840,22 @@ WebGLContext::GetVRFrame() {
   PresentScreenBuffer();
 
   gl::GLScreenBuffer* screen = gl->Screen();
-  if (!screen) return nullptr;
+  if (!screen) {
+    return surfDesc;
+  }
 
-  RefPtr<SharedSurfaceTextureClient> sharedSurface = screen->Front();
-  if (!sharedSurface) return nullptr;
+  // Keep the SharedSurfaceTextureClient alive long enough for
+  // 1 extra frame, accomodating overlapped asynchronous rendering.
+  mLastVRSurface = mSurface;
 
-  return sharedSurface.forget();
+  mSurface = screen->Front();
+  if (!mSurface || !mSurface->Surf()) {
+    return surfDesc;
+  }
+
+  mSurface->Surf()->ToSurfaceDescriptor(&surfDesc);
+  return surfDesc;
 }
-
 #endif  // ifdefined(MOZ_WIDGET_ANDROID)
 
 void WebGLContext::EnsureVRReady() {

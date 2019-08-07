@@ -11,6 +11,7 @@
 #include "WebGLActiveInfo.h"
 #include "WebGLContext.h"
 #include "WebGLTypes.h"
+#include "mozilla/layers/LayersSurfaces.h"
 
 namespace mozilla {
 
@@ -47,6 +48,221 @@ struct IsTriviallySerializable<gfx::IntSize> : TrueType {};
 
 template <>
 struct IsTriviallySerializable<SyncResponse> : TrueType {};
+
+template <>
+struct IsTriviallySerializable<wr::WrExternalImageId> : TrueType {};
+
+template <>
+struct IsTriviallySerializable<layers::SurfaceDescriptorFileMapping>
+    : TrueType {};
+template <>
+struct IsTriviallySerializable<layers::SurfaceDescriptorDIB> : TrueType {};
+template <>
+struct IsTriviallySerializable<layers::SurfaceDescriptorD3D10> : TrueType {};
+template <>
+struct IsTriviallySerializable<layers::SurfaceDescriptorDXGIYCbCr> : TrueType {
+};
+template <>
+struct IsTriviallySerializable<layers::SurfaceDescriptorMacIOSurface>
+    : TrueType {};
+template <>
+struct IsTriviallySerializable<layers::SurfaceTextureDescriptor> : TrueType {};
+template <>
+struct IsTriviallySerializable<layers::EGLImageDescriptor> : TrueType {};
+template <>
+struct IsTriviallySerializable<layers::SurfaceDescriptorSharedGLTexture>
+    : TrueType {};
+template <>
+struct IsTriviallySerializable<layers::SurfaceDescriptorX11> : TrueType {};
+template <>
+struct IsTriviallySerializable<null_t> : TrueType {};
+
+template <>
+struct PcqParamTraits<layers::SurfaceDescriptor> {
+  using ParamType = layers::SurfaceDescriptor;
+
+  static PcqStatus Write(ProducerView& aProducerView, const ParamType& aArg) {
+    aProducerView.WriteParam(static_cast<uint8_t>(aArg.type()));
+    switch (aArg.type()) {
+      case ParamType::TSurfaceDescriptorFileMapping:
+        return aProducerView.WriteParam(
+            static_cast<const layers::SurfaceDescriptorFileMapping&>(aArg));
+      case ParamType::TSurfaceDescriptorDIB:
+        return aProducerView.WriteParam(
+            static_cast<const layers::SurfaceDescriptorDIB&>(aArg));
+      case ParamType::TSurfaceDescriptorD3D10:
+        return aProducerView.WriteParam(
+            static_cast<const layers::SurfaceDescriptorD3D10&>(aArg));
+      case ParamType::TSurfaceDescriptorDXGIYCbCr:
+        return aProducerView.WriteParam(
+            static_cast<const layers::SurfaceDescriptorDXGIYCbCr&>(aArg));
+      case ParamType::TSurfaceDescriptorMacIOSurface:
+        return aProducerView.WriteParam(
+            static_cast<const layers::SurfaceDescriptorMacIOSurface&>(aArg));
+      case ParamType::TSurfaceTextureDescriptor:
+        return aProducerView.WriteParam(
+            static_cast<const layers::SurfaceTextureDescriptor&>(aArg));
+      case ParamType::TEGLImageDescriptor:
+        return aProducerView.WriteParam(
+            static_cast<const layers::EGLImageDescriptor&>(aArg));
+      case ParamType::TSurfaceDescriptorSharedGLTexture:
+        return aProducerView.WriteParam(
+            static_cast<const layers::SurfaceDescriptorSharedGLTexture&>(aArg));
+      case ParamType::TSurfaceDescriptorX11:
+        return aProducerView.WriteParam(
+            static_cast<const layers::SurfaceDescriptorX11&>(aArg));
+      case ParamType::TSurfaceDescriptorGPUVideo:
+        return aProducerView.WriteParam(
+            static_cast<const layers::SurfaceDescriptorGPUVideo&>(aArg));
+      case ParamType::Tnull_t:
+        return aProducerView.WriteParam(static_cast<const null_t&>(aArg));
+      default:
+        MOZ_ASSERT_UNREACHABLE(
+            "Type of SurfaceDescriptor not yet supported by PcqParamTraits");
+        return PcqStatus::kFatalError;
+    }
+  }
+
+  static PcqStatus Read(ConsumerView& aConsumerView, ParamType* aArg) {
+    uint8_t data;
+    aConsumerView.ReadParam(&data);
+    auto type = static_cast<layers::SurfaceDescriptor::Type>(data);
+    switch (type) {
+      case ParamType::TSurfaceDescriptorFileMapping:
+        *aArg = layers::SurfaceDescriptorFileMapping();
+        return aConsumerView.ReadParam(
+            aArg ? &static_cast<layers::SurfaceDescriptorFileMapping&>(*aArg)
+                 : nullptr);
+      case ParamType::TSurfaceDescriptorDIB:
+        *aArg = layers::SurfaceDescriptorDIB();
+        return aConsumerView.ReadParam(
+            aArg ? &static_cast<layers::SurfaceDescriptorDIB&>(*aArg)
+                 : nullptr);
+      case ParamType::TSurfaceDescriptorD3D10:
+        *aArg = layers::SurfaceDescriptorD3D10();
+        return aConsumerView.ReadParam(
+            aArg ? &static_cast<layers::SurfaceDescriptorD3D10&>(*aArg)
+                 : nullptr);
+      case ParamType::TSurfaceDescriptorDXGIYCbCr:
+        *aArg = layers::SurfaceDescriptorDXGIYCbCr();
+        return aConsumerView.ReadParam(
+            aArg ? &static_cast<layers::SurfaceDescriptorDXGIYCbCr&>(*aArg)
+                 : nullptr);
+      case ParamType::TSurfaceDescriptorMacIOSurface:
+        *aArg = layers::SurfaceDescriptorMacIOSurface();
+        return aConsumerView.ReadParam(
+            aArg ? &static_cast<layers::SurfaceDescriptorMacIOSurface&>(*aArg)
+                 : nullptr);
+      case ParamType::TSurfaceTextureDescriptor:
+        *aArg = layers::SurfaceTextureDescriptor();
+        return aConsumerView.ReadParam(
+            aArg ? &static_cast<layers::SurfaceTextureDescriptor&>(*aArg)
+                 : nullptr);
+      case ParamType::TEGLImageDescriptor:
+        *aArg = layers::EGLImageDescriptor();
+        return aConsumerView.ReadParam(
+            aArg ? &static_cast<layers::EGLImageDescriptor&>(*aArg) : nullptr);
+      case ParamType::TSurfaceDescriptorSharedGLTexture:
+        *aArg = layers::SurfaceDescriptorSharedGLTexture();
+        return aConsumerView.ReadParam(
+            aArg
+                ? &static_cast<layers::SurfaceDescriptorSharedGLTexture&>(*aArg)
+                : nullptr);
+      case ParamType::TSurfaceDescriptorX11:
+        *aArg = layers::SurfaceDescriptorX11();
+        return aConsumerView.ReadParam(
+            aArg ? &static_cast<layers::SurfaceDescriptorX11&>(*aArg)
+                 : nullptr);
+      case ParamType::TSurfaceDescriptorGPUVideo:
+        *aArg = layers::SurfaceDescriptorGPUVideo();
+        return aConsumerView.ReadParam(
+            aArg ? &static_cast<layers::SurfaceDescriptorGPUVideo&>(*aArg)
+                 : nullptr);
+      case ParamType::Tnull_t:
+        *aArg = null_t();
+        return aConsumerView.ReadParam(aArg ? &static_cast<null_t&>(*aArg)
+                                            : nullptr);
+      default:
+        MOZ_ASSERT_UNREACHABLE(
+            "Type of SurfaceDescriptor not yet supported by PcqParamTraits");
+        return PcqStatus::kFatalError;
+    }
+  }
+
+  template <typename View>
+  static size_t MinSize(View& aView, const ParamType* aArg) {
+    uint8_t type;
+    return aView.MinSizeParam(&type);
+  }
+};
+
+template <>
+struct PcqParamTraits<layers::SurfaceDescriptorGPUVideo> {
+  using ParamType = layers::SurfaceDescriptorGPUVideo;
+
+  static PcqStatus Write(ProducerView& aProducerView, const ParamType& aArg) {
+    aProducerView.WriteParam(aArg.handle());
+    aProducerView.WriteParam(static_cast<uint8_t>(aArg.subdesc().type()));
+    switch (aArg.subdesc().type()) {
+      case layers::GPUVideoSubDescriptor::TSurfaceDescriptorD3D10:
+        return aProducerView.WriteParam(
+            static_cast<const layers::SurfaceDescriptorD3D10&>(aArg.subdesc()));
+      case layers::GPUVideoSubDescriptor::TSurfaceDescriptorDXGIYCbCr:
+        return aProducerView.WriteParam(
+            static_cast<const layers::SurfaceDescriptorDXGIYCbCr&>(
+                aArg.subdesc()));
+      case layers::GPUVideoSubDescriptor::Tnull_t:
+        return aProducerView.WriteParam(
+            static_cast<const null_t&>(aArg.subdesc()));
+      default:
+        MOZ_ASSERT_UNREACHABLE("Unknown type");
+        return PcqStatus::kFatalError;
+    }
+  }
+
+  static PcqStatus Read(ConsumerView& aConsumerView, ParamType* aArg) {
+    uint64_t handle;
+    aConsumerView.ReadParam(&handle);
+    uint8_t data;
+    aConsumerView.ReadParam(&data);
+    auto type = static_cast<layers::GPUVideoSubDescriptor::Type>(data);
+    switch (type) {
+      case layers::GPUVideoSubDescriptor::TSurfaceDescriptorD3D10:
+        if (aArg) {
+          aArg->subdesc() = layers::SurfaceDescriptorD3D10();
+        }
+        return aConsumerView.ReadParam(
+            aArg
+                ? &static_cast<layers::SurfaceDescriptorD3D10&>(aArg->subdesc())
+                : nullptr);
+      case layers::GPUVideoSubDescriptor::TSurfaceDescriptorDXGIYCbCr:
+        if (aArg) {
+          aArg->subdesc() = layers::SurfaceDescriptorDXGIYCbCr();
+        }
+        return aConsumerView.ReadParam(
+            aArg ? &static_cast<layers::SurfaceDescriptorDXGIYCbCr&>(
+                       aArg->subdesc())
+                 : nullptr);
+      case layers::GPUVideoSubDescriptor::Tnull_t:
+        if (aArg) {
+          aArg->subdesc() = null_t();
+        }
+        return aConsumerView.ReadParam(
+            aArg ? &static_cast<null_t&>(aArg->subdesc()) : nullptr);
+      default:
+        MOZ_ASSERT_UNREACHABLE("Unknown type");
+        return PcqStatus::kFatalError;
+    }
+  }
+
+  template <typename View>
+  static size_t MinSize(View& aView, const ParamType* aArg) {
+    uint64_t handle;
+    uint8_t data;
+    return aView.MinSizeParam(aArg ? &handle : nullptr) +
+           aView.MinSizeParam(aArg ? &data : nullptr);
+  }
+};
 
 template <>
 struct PcqParamTraits<WebGLPreferences> {

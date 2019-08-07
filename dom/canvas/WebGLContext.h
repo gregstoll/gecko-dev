@@ -100,10 +100,6 @@ class GLScreenBuffer;
 class MozFramebuffer;
 }  // namespace gl
 
-namespace layers {
-class CompositableHost;
-}
-
 namespace webgl {
 struct CachedDrawFetchLimits;
 struct FormatInfo;
@@ -227,7 +223,7 @@ class WebGLContext : public SupportsWeakPtr<WebGLContext> {
  public:
   MOZ_DECLARE_WEAKREFERENCE_TYPENAME(WebGLContext)
 
-  WebGLContext();
+  explicit WebGLContext(const WebGLGfxFeatures& aFeatures);
 
  protected:
   virtual ~WebGLContext();
@@ -239,8 +235,6 @@ class WebGLContext : public SupportsWeakPtr<WebGLContext> {
   // The HostWebGLContext owns us so this should be set for our entire
   // lifetime
   HostWebGLContext* mHost;
-
-  RefPtr<layers::CompositableHost> mCompositableHost;
 
   layers::LayersBackend mBackend;
 
@@ -266,8 +260,6 @@ class WebGLContext : public SupportsWeakPtr<WebGLContext> {
   }
 
   void SetPreferences(const WebGLPreferences& aPrefs);
-
-  void SetCompositableHost(RefPtr<layers::CompositableHost>& aCompositableHost);
 
   /**
    * An abstract base class to be implemented by callers wanting to be notified
@@ -382,7 +374,7 @@ class WebGLContext : public SupportsWeakPtr<WebGLContext> {
   bool PresentScreenBuffer(gl::GLScreenBuffer* const screen = nullptr);
 
   // Present to compositor
-  bool Present();
+  layers::SurfaceDescriptor Present();
 
   UniquePtr<RawSurface> GetSurfaceSnapshot();
 
@@ -518,7 +510,7 @@ class WebGLContext : public SupportsWeakPtr<WebGLContext> {
   WebGLPixelStore PixelStorei(GLenum pname, GLint param);
   void PolygonOffset(GLfloat factor, GLfloat units);
 
-  already_AddRefed<layers::SharedSurfaceTextureClient> GetVRFrame();
+  layers::SurfaceDescriptor PrepareVRFrame();
   void EnsureVRReady();
 
   ////
@@ -533,6 +525,9 @@ class WebGLContext : public SupportsWeakPtr<WebGLContext> {
                               GLint y, GLsizei width, GLsizei height,
                               GLenum format, GLenum destType, void* dest,
                               uint32_t dataLen, uint32_t rowStride);
+
+  RefPtr<layers::SharedSurfaceTextureClient> mSurface;
+  RefPtr<layers::SharedSurfaceTextureClient> mLastVRSurface;
 
  public:
   void ReadPixels(GLint x, GLint y, GLsizei width, GLsizei height,
@@ -934,6 +929,7 @@ class WebGLContext : public SupportsWeakPtr<WebGLContext> {
 
   WebGLContextOptions mOptions;
   WebGLPreferences mPrefs;
+  WebGLGfxFeatures mFeatures;
 
  public:
   GLenum LastColorAttachmentEnum() const {
@@ -1028,17 +1024,6 @@ class WebGLContext : public SupportsWeakPtr<WebGLContext> {
   // WebGL 2 specifics (implemented in WebGL2Context.cpp)
  public:
   virtual bool IsWebGL2() const = 0;
-
-  struct FailureReason {
-    nsCString key;  // For reporting.
-    nsCString info;
-
-    FailureReason() {}
-
-    template <typename A, typename B>
-    FailureReason(const A& _key, const B& _info)
-        : key(nsCString(_key)), info(nsCString(_info)) {}
-  };
 
  protected:
   bool InitWebGL2(FailureReason* const out_failReason);

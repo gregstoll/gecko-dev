@@ -10,50 +10,68 @@
 #include "mozilla/dom/PWebGLParent.h"
 #include "mozilla/dom/WebGLCrossProcessCommandQueue.h"
 #include "mozilla/dom/WebGLErrorQueue.h"
-#include "mozilla/WeakPtr.h"
 
 namespace mozilla {
 
+class HostIpdlWebGLBridge;
 class HostWebGLContext;
 
-namespace layers {
-class SharedSurfaceTextureClient;
+namespace gfx {
+class VRLayerParent;
 }
 
+namespace layers {
+class CompositableHost;
+class CompositableParentManager;
+}  // namespace layers
+
 namespace dom {
+
+class WebGLParent;
 
 class WebGLParent : public PWebGLParent, public SupportsWeakPtr<WebGLParent> {
  public:
   MOZ_DECLARE_WEAKREFERENCE_TYPENAME(WebGLParent)
 
-  static WebGLParent* Create(
-      WebGLVersion aVersion,
-      UniquePtr<mozilla::HostWebGLCommandSink>&& aCommandSink,
-      UniquePtr<mozilla::HostWebGLErrorSource>&& aErrorSource);
-
-  already_AddRefed<layers::SharedSurfaceTextureClient> GetVRFrame();
+  WebGLParent(WebGLVersion aVersion,
+              UniquePtr<mozilla::HostWebGLCommandSink>&& aCommandSink,
+              UniquePtr<mozilla::HostWebGLErrorSource>&& aErrorSource);
 
  protected:
   friend PWebGLParent;
 
   explicit WebGLParent(UniquePtr<HostWebGLContext>&& aHost);
 
-  bool BeginCommandQueueDrain();
-  static bool MaybeRunCommandQueue(const WeakPtr<WebGLParent>& weakWebGLParent);
-  bool RunCommandQueue();
-
-  mozilla::ipc::IPCResult RecvUpdateCompositableHandle(
+  mozilla::ipc::IPCResult RecvUpdateLayerCompositableHandle(
       layers::PLayerTransactionParent* aLayerTransaction,
       const CompositableHandle& aHandle);
 
-  mozilla::ipc::IPCResult Recv__delete__() override;
+  mozilla::ipc::IPCResult RecvUpdateWRCompositableHandle(
+      layers::PWebRenderBridgeParent* aWrBridge,
+      const CompositableHandle& aHandle);
 
-  void ActorDestroy(ActorDestroyReason aWhy) override;
+  void FindAndSetCompositableHost(
+      layers::CompositableParentManager* aCompositableMgr,
+      const CompositableHandle& aHandle);
 
-  UniquePtr<HostWebGLContext> mHost;
+  mozilla::ipc::IPCResult RecvPresentToCompositable(
+      const layers::SurfaceDescriptor& aSurfDesc, bool aToPremultAlpha,
+      layers::LayersBackend aBackend,
+      const wr::MaybeExternalImageId& aExternalImageId);
 
-  // Runnable that repeatedly processes our WebGL command queue
-  RefPtr<Runnable> mRunCommandsRunnable;
+  mozilla::ipc::IPCResult Recv__delete__() override {
+    FreeHostBridge();
+    return IPC_OK();
+  }
+
+  void ActorDestroy(ActorDestroyReason aWhy) override { FreeHostBridge(); }
+
+  ~WebGLParent();
+
+  void FreeHostBridge();
+
+  RefPtr<HostIpdlWebGLBridge> mHostBridge;
+  RefPtr<layers::CompositableHost> mCompositableHost;
 };
 
 }  // namespace dom

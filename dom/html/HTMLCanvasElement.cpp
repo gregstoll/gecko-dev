@@ -1308,6 +1308,12 @@ layers::OOPCanvasRenderer* HTMLCanvasElement::GetOOPCanvasRenderer() {
   return mOOPCanvasRenderer;
 }
 
+layers::SurfaceDescriptor HTMLCanvasElement::PrepareVRFrame() {
+  ClientWebGLContext* context = GetClientWebGLContext();
+  MOZ_ASSERT(context);
+  return context->PrepareVRFrame();
+}
+
 layers::LayersBackend HTMLCanvasElement::GetCompositorBackendType() const {
   nsIWidget* docWidget = nsContentUtils::WidgetForDocument(OwnerDoc());
   if (docWidget) {
@@ -1440,15 +1446,6 @@ ClientWebGLContext* HTMLCanvasElement::GetClientWebGLContext() {
   }
 
   return static_cast<ClientWebGLContext*>(GetContextAtIndex(0));
-}
-
-PWebGLChild* HTMLCanvasElement::GetWebGLChild() {
-  ClientWebGLContext* webgl = GetClientWebGLContext();
-  if (!webgl) {
-    return nullptr;
-  }
-
-  return webgl->GetWebGLChild();
 }
 
 }  // namespace dom

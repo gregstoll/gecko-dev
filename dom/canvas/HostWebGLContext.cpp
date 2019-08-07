@@ -6,8 +6,10 @@
 #include "HostWebGLContext.h"
 
 #include "CompositableHost.h"
+#include "mozilla/layers/CompositorThread.h"
 #include "mozilla/layers/LayerTransactionChild.h"
 #include "mozilla/layers/TextureClientSharedSurface.h"
+#include "mozilla/webrender/RenderThread.h"
 
 #include "TexUnpackBlob.h"
 #include "WebGL1Context.h"
@@ -78,12 +80,12 @@ DEFINE_OBJECT_ID_MAP_FUNCS(UniformLocation);
 #define MaybeFind(aId, aReturnObj) Find(aId, aReturnObj, __func__)
 
 /* static */ WebGLContext* HostWebGLContext::MakeWebGLContext(
-    WebGLVersion aVersion) {
+    WebGLVersion aVersion, const WebGLGfxFeatures& aFeatures) {
   switch (aVersion) {
     case WEBGL1:
-      return WebGL1Context::Create();
+      return WebGL1Context::Create(aFeatures);
     case WEBGL2:
-      return WebGL2Context::Create();
+      return WebGL2Context::Create(aFeatures);
     default:
       MOZ_ASSERT_UNREACHABLE("Illegal WebGLVersion");
       return nullptr;
@@ -91,7 +93,8 @@ DEFINE_OBJECT_ID_MAP_FUNCS(UniformLocation);
 }
 
 HostWebGLContext::HostWebGLContext(
-    WebGLVersion aVersion, RefPtr<WebGLContext> aContext,
+    WebGLVersion aVersion, const WebGLGfxFeatures& aFeatures,
+    RefPtr<WebGLContext> aContext,
     UniquePtr<HostWebGLCommandSink>&& aCommandSink,
     UniquePtr<HostWebGLErrorSource>&& aErrorSource)
     : WebGLContextEndpoint(aVersion),
@@ -100,6 +103,8 @@ HostWebGLContext::HostWebGLContext(
       mSetPreferences(false),
       mContext(aContext),
       mClientContext(nullptr) {
+  MOZ_ASSERT(IsWebGLRenderThread());
+
   mContext->SetHost(this);
   if (mCommandSink) {
     mCommandSink->SetHostContext(this);
@@ -107,32 +112,67 @@ HostWebGLContext::HostWebGLContext(
 }
 
 HostWebGLContext::~HostWebGLContext() {
+  MOZ_ASSERT(IsWebGLRenderThread());
   if (mContext) {
     mContext->SetHost(nullptr);
   }
 }
 
-/* static */ UniquePtr<HostWebGLContext> HostWebGLContext::Create(
-    WebGLVersion aVersion, UniquePtr<HostWebGLCommandSink>&& aCommandSink,
+/* static */ HostWebGLContext* HostWebGLContext::Create(
+    WebGLVersion aVersion, const WebGLGfxFeatures& aFeatures,
+    UniquePtr<HostWebGLCommandSink>&& aCommandSink,
     UniquePtr<HostWebGLErrorSource>&& aErrorSource) {
-  WebGLContext* context = MakeWebGLContext(aVersion);
+  WebGLContext* context = MakeWebGLContext(aVersion, aFeatures);
   if (!context) {
     return nullptr;
   }
-  return WrapUnique(new HostWebGLContext(
-      aVersion, context, std::move(aCommandSink), std::move(aErrorSource)));
+  return new HostWebGLContext(aVersion, aFeatures, context,
+                              std::move(aCommandSink), std::move(aErrorSource));
 }
 
 CommandResult HostWebGLContext::RunCommandsForDuration(TimeDuration aDuration) {
+  MOZ_ASSERT(IsWebGLRenderThread());
   return mCommandSink->ProcessUpToDuration(aDuration);
 }
 
-void HostWebGLContext::SetCompositableHost(
-    RefPtr<CompositableHost>& aCompositableHost) {
-  mContext->SetCompositableHost(aCompositableHost);
+/* static */ bool HostWebGLContext::IsWebGLRenderThread() {
+  // If this context is not remote then we should be on the main thread.
+  if (XRE_IsContentProcess()) {
+    return NS_IsMainThread();
+  }
+
+  // The context must be on the GPU process.  If we are using WebRender
+  // then this is the Renderer thread.  Otherwise it is the Compositor thread.
+  MOZ_ASSERT(XRE_IsGPUProcess() || XRE_IsParentProcess());
+
+  // TODO: A better test for whether or not to use WebRender?
+  bool useWR = wr::RenderThread::Get();
+  if (useWR) {
+    return wr::RenderThread::IsInRenderThread();
+  }
+
+  return layers::CompositorThreadHolder::IsInCompositorThread();
 }
 
-void HostWebGLContext::Present() { mContext->Present(); }
+/* static */ MessageLoop* HostWebGLContext::WebGLRenderThreadMessageLoop() {
+  if (XRE_IsContentProcess()) {
+    return layers::CompositorBridgeChild::Get()
+               ? layers::CompositorBridgeChild::Get()->GetMessageLoop()
+               : nullptr;
+  }
+
+  MOZ_ASSERT(XRE_IsGPUProcess() || XRE_IsParentProcess());
+  return wr::RenderThread::Get() ? wr::RenderThread::Loop()
+                                 : layers::CompositorThreadHolder::Loop();
+}
+
+layers::SurfaceDescriptor HostWebGLContext::Present() {
+  return mContext->Present();
+}
+
+SurfaceDescriptor HostWebGLContext::PrepareVRFrame() {
+  return mContext->PrepareVRFrame();
+}
 
 void HostWebGLContext::CreateFramebuffer(const WebGLId<WebGLFramebuffer>& aId) {
   Insert(mContext->CreateFramebuffer(), aId);
@@ -1603,11 +1643,6 @@ void HostWebGLContext::OnRestoredContext() {
     return;
   }
   mErrorSource->RunCommand(WebGLErrorCommand::OnRestoredContext);
-}
-
-already_AddRefed<layers::SharedSurfaceTextureClient>
-HostWebGLContext::GetVRFrame() {
-  return mContext->GetVRFrame();
 }
 
 }  // namespace mozilla

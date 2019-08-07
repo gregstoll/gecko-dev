@@ -63,13 +63,15 @@ class LayerTransactionParent final : public PLayerTransactionParent,
 
   ShmemAllocator* AsShmemAllocator() override { return this; }
 
-  bool AllocShmem(size_t aSize, ipc::SharedMemory::SharedMemoryType aType,
-                  ipc::Shmem* aShmem) override;
+  bool AllocShmem(size_t aSize,
+                  mozilla::ipc::SharedMemory::SharedMemoryType aType,
+                  mozilla::ipc::Shmem* aShmem) override;
 
-  bool AllocUnsafeShmem(size_t aSize, ipc::SharedMemory::SharedMemoryType aType,
-                        ipc::Shmem* aShmem) override;
+  bool AllocUnsafeShmem(size_t aSize,
+                        mozilla::ipc::SharedMemory::SharedMemoryType aType,
+                        mozilla::ipc::Shmem* aShmem) override;
 
-  void DeallocShmem(ipc::Shmem& aShmem) override;
+  void DeallocShmem(mozilla::ipc::Shmem& aShmem) override;
 
   bool IsSameProcess() const override;
 

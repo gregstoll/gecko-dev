@@ -36,6 +36,7 @@ class CompositableHandle;
 class Layer;
 class LayerManager;
 class LayerTransactionChild;
+class WebRenderBridgeChild;
 class WebRenderCanvasData;
 }  // namespace layers
 namespace gfx {
@@ -198,6 +199,12 @@ class nsICanvasRenderingContextInternal : public nsISupports,
 
   virtual bool UpdateCompositableHandle(
       LayerTransactionChild* aLayerTransaction, CompositableHandle aHandle) {
+    return false;
+  }
+
+  virtual bool UpdateCompositableHandle(
+      mozilla::layers::WebRenderBridgeChild* aWrBridgeChild,
+      CompositableHandle aHandle) {
     return false;
   }
 

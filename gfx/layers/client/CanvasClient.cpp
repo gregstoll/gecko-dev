@@ -23,7 +23,8 @@
 #include "mozilla/layers/OOPCanvasRenderer.h"
 #include "mozilla/layers/TextureClient.h"  // for TextureClient, etc
 #include "mozilla/layers/TextureClientOGL.h"
-#include "nsDebug.h"      // for printf_stderr, NS_ASSERTION
+#include "mozilla/layers/WebRenderBridgeChild.h"
+#include "nsDebug.h"  // for printf_stderr, NS_ASSERTION
 #include "nsICanvasRenderingContextInternal.h"
 #include "nsXULAppAPI.h"  // for XRE_GetProcessType, etc
 #include "TextureClientSharedSurface.h"
@@ -522,17 +523,20 @@ CanvasClientOOP::~CanvasClientOOP() {}
 void CanvasClientOOP::SetLayer(ShadowableLayer* aLayer,
                                OOPCanvasRenderer* aRenderer) {
   mLayer = aLayer;
+  SetRenderer(aRenderer);
+  Connect();
+}
+
+void CanvasClientOOP::SetRenderer(OOPCanvasRenderer* aRenderer) {
   mCanvasContext = aRenderer->mContext;
   MOZ_ASSERT(mCanvasContext);
-  Connect();
   aRenderer->mCanvasClient = this;
 }
 
 void CanvasClientOOP::Update(gfx::IntSize aSize,
                              ShareableCanvasRenderer* aRenderer,
                              wr::RenderRoot aRenderRoot) {
-  // DLP: TODO: aRenderRoot?
-  if (!GetForwarder() || !mLayer || !mCanvasContext || !aRenderer) {
+  if (!GetForwarder() || !mCanvasContext || !aRenderer) {
     return;
   }
 
@@ -542,13 +546,25 @@ void CanvasClientOOP::Update(gfx::IntSize aSize,
     return;
   }
 
-  MOZ_ASSERT(GetForwarder() && GetForwarder()->AsLayerForwarder() &&
-             GetForwarder()->AsLayerForwarder()->GetShadowManager());
+  bool success;
+  if (mLayer) {
+    MOZ_ASSERT(GetForwarder() && GetForwarder()->AsLayerForwarder() &&
+               GetForwarder()->AsLayerForwarder()->GetShadowManager());
+    static_cast<ShadowLayerForwarder*>(GetForwarder())->Attach(this, mLayer);
+    LayerTransactionChild* ltc =
+        GetForwarder()->AsLayerForwarder()->GetShadowManager();
+    success = mCanvasContext->UpdateCompositableHandle(ltc, handle);
+  } else {
+    MOZ_ASSERT(GetForwarder());
+    WebRenderBridgeChild* wrbc =
+        static_cast<WebRenderBridgeChild*>(GetForwarder());
+    MOZ_ASSERT(wrbc);
+    if (!wrbc) {
+      return;
+    }
+    success = mCanvasContext->UpdateCompositableHandle(wrbc, handle);
+  }
 
-  static_cast<ShadowLayerForwarder*>(GetForwarder())->Attach(this, mLayer);
-  LayerTransactionChild* ltc =
-      GetForwarder()->AsLayerForwarder()->GetShadowManager();
-  bool success = mCanvasContext->UpdateCompositableHandle(ltc, handle);
   if (!success) {
     return;
   }

@@ -27,12 +27,10 @@ class VRLayerParent : public PVRLayerParent {
 
  public:
   VRLayerParent(uint32_t aVRDisplayID, const uint32_t aGroup);
-  virtual mozilla::ipc::IPCResult RecvSubmitFrame(
-      mozilla::dom::PWebGLParent* aPWebGLParent, const uint64_t& aFrameId,
-      const uint64_t& aLastFrameId, const gfx::Rect& aLeftEyeRect,
-      const gfx::Rect& aRightEyeRect) override;
 
-  mozilla::ipc::IPCResult RecvClearSurfaces() override;
+  mozilla::ipc::IPCResult RecvSubmitFrame(
+      const layers::SurfaceDescriptor& aSurfDesc, const uint64_t& aFrameId,
+      const gfx::Rect& aLeftEyeRect, const gfx::Rect& aRightEyeRect) override;
 
   virtual mozilla::ipc::IPCResult RecvDestroy() override;
 

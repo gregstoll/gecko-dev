@@ -83,6 +83,10 @@ class ClientWebGLObject : public WebGLId<WebGLType>,
 
   inline ClientWebGLObject(uint64_t aId, ClientWebGLContext* aContext);
 
+  // Indicates that a Delete method (e.g. DeleteShader) was called on this
+  // object.
+  void SetDeleted() const { mIsDeleted = true; }
+
  protected:
   inline ClientWebGLContext* GetContext() const;
 
@@ -90,6 +94,10 @@ class ClientWebGLObject : public WebGLId<WebGLType>,
 
   nsWeakPtr mContext;
   uint64_t mGeneration;
+  // When true, this object should no longer be considered valid for its
+  // context, although we keep the (weak) reference to the context because
+  // it is still our "parent object".
+  mutable bool mIsDeleted;
   bool mLogMe;
   static bool sLogMe;
 };
@@ -306,6 +314,9 @@ class ClientWebGLContext : public nsICanvasRenderingContextInternal,
 
   bool UpdateCompositableHandle(LayerTransactionChild* aLayerTransaction,
                                 CompositableHandle aHandle) override;
+  bool UpdateCompositableHandle(
+      mozilla::layers::WebRenderBridgeChild* aWrBridgeChild,
+      CompositableHandle aHandle) override;
 
   // ------
 
@@ -346,6 +357,8 @@ class ClientWebGLContext : public nsICanvasRenderingContextInternal,
     return NS_ERROR_NOT_IMPLEMENTED;
   }
 
+  layers::SurfaceDescriptor PrepareVRFrame();
+
   // ------
 
   void Invalidate();
@@ -380,7 +393,7 @@ class ClientWebGLContext : public nsICanvasRenderingContextInternal,
   }
   void GetContextAttributes(dom::Nullable<dom::WebGLContextAttributes>& retval);
 
-  mozilla::dom::PWebGLChild* GetWebGLChild();
+  mozilla::dom::WebGLChild* GetWebGLChild();
 
  private:
   gfx::IntSize DrawingBufferSize();
@@ -1927,7 +1940,7 @@ template <typename WebGLType>
 bool ClientWebGLObject<WebGLType>::IsValidForContext(
     const ClientWebGLContext* aContext) const {
   const auto context = GetContext();
-  return this->IsNull() || (context && (context == aContext) &&
+  return this->IsNull() || ((!mIsDeleted) && context && (context == aContext) &&
                             (mGeneration == aContext->Generation()));
 }
 
@@ -1976,6 +1989,7 @@ ClientWebGLObject<WebGLType>::ClientWebGLObject(uint64_t aId,
                                                 ClientWebGLContext* aContext)
     : WebGLId<WebGLType>(aId),
       mGeneration(aContext->Generation()),
+      mIsDeleted(false),
       mLogMe(sLogMe) {
   if (mLogMe) {
     WEBGL_BRIDGE_LOGD("[%p] Created WebGLObject %lu", this,

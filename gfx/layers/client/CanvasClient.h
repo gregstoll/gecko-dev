@@ -213,6 +213,8 @@ class CanvasClientOOP final : public CanvasClient {
 
   void SetLayer(ShadowableLayer* aLayer, OOPCanvasRenderer* aRenderer);
 
+  void SetRenderer(OOPCanvasRenderer* aRenderer);
+
  protected:
   nsICanvasRenderingContextInternal* mCanvasContext = nullptr;
   ShadowableLayer* mLayer = nullptr;

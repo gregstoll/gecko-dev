@@ -44,7 +44,6 @@ class VRLayerChild : public PVRLayerChild {
  private:
   VRLayerChild();
   virtual ~VRLayerChild();
-  void ClearSurfaces();
   virtual void ActorDestroy(ActorDestroyReason aWhy) override;
 
   RefPtr<dom::HTMLCanvasElement> mCanvasElement;
@@ -62,6 +61,7 @@ class VRLayerChild : public PVRLayerChild {
   gfx::Rect mRightEyeRect;
 
   uint64_t mLastSubmittedFrameId;
+  bool mSubmittedOnce;
 };
 
 }  // namespace gfx

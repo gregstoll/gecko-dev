@@ -5,10 +5,15 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
+include LayersSurfaces;
+
 include protocol PCompositorBridge;
 include protocol PLayerTransaction;
-
+include protocol PWebRenderBridge;
+  
 using mozilla::layers::CompositableHandle from "mozilla/layers/LayersTypes.h";
+using mozilla::layers::LayersBackend from "mozilla/layers/LayersTypes.h";
+using mozilla::wr::MaybeExternalImageId from "mozilla/webrender/WebRenderTypes.h";
 
 namespace mozilla {
 namespace dom {
@@ -26,8 +31,16 @@ parent:
   async __delete__();
 
   // DLP: TODO: Does this need to be sync?
-  sync UpdateCompositableHandle(PLayerTransaction aLayerTrans,
-                         CompositableHandle aHandle);
+  sync UpdateLayerCompositableHandle(PLayerTransaction aLayerTrans,
+                                     CompositableHandle aHandle);
+
+  sync UpdateWRCompositableHandle(PWebRenderBridge aWrBridge,
+                                  CompositableHandle aHandle);
+
+  async PresentToCompositable(SurfaceDescriptor aSurfDesc,
+                              bool aToPremultAlpha,
+                              LayersBackend aBackend,
+                              MaybeExternalImageId aExternalImageId);
 
 child:
   // Tell client that this queue needs to be shut down

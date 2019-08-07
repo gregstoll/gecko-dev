@@ -7,20 +7,20 @@
 #include "VRLayerChild.h"
 #include "gfxPlatform.h"
 #include "mozilla/dom/HTMLCanvasElement.h"
+#include "mozilla/dom/HTMLCanvasElement.h"
 
 namespace mozilla {
 namespace gfx {
 
 VRLayerChild::VRLayerChild()
-    : mCanvasElement(nullptr), mIPCOpen(false), mLastSubmittedFrameId(0) {
+    : mCanvasElement(nullptr),
+      mIPCOpen(false),
+      mLastSubmittedFrameId(0),
+      mSubmittedOnce(false) {
   MOZ_COUNT_CTOR(VRLayerChild);
 }
 
-VRLayerChild::~VRLayerChild() {
-  ClearSurfaces();
-
-  MOZ_COUNT_DTOR(VRLayerChild);
-}
+VRLayerChild::~VRLayerChild() { MOZ_COUNT_DTOR(VRLayerChild); }
 
 void VRLayerChild::Initialize(dom::HTMLCanvasElement* aCanvasElement,
                               const gfx::Rect& aLeftEyeRect,
@@ -42,21 +42,32 @@ void VRLayerChild::SubmitFrame(const VRDisplayInfo& aDisplayInfo) {
     return;
   }
 
+#if defined(MOZ_WIDGET_ANDROID)
+  /**
+   * Do not blit WebGL to a SurfaceTexture until the last submitted frame is
+   * already processed and the new frame poses are ready. SurfaceTextures need
+   * to be released in the VR render thread in order to allow to be used again
+   * in the WebGLContext GLScreenBuffer producer. Not doing so causes some
+   * freezes, crashes or other undefined behaviour.
+   */
+  if ((mSubmittedOnce) && (aDisplayInfo.mDisplayState.lastSubmittedFrameId !=
+                           mLastSubmittedFrameId)) {
+    return;
+  }
+#endif  // defined(MOZ_WIDGET_ANDROID)
+
   mLastSubmittedFrameId = frameId;
 
-  PWebGLChild* webGLChild = mCanvasElement->GetWebGLChild();
-  if (!webGLChild) {
+  SurfaceDescriptor vrSurfDesc = mCanvasElement->PrepareVRFrame();
+  if (vrSurfDesc == null_t()) {
     return;
   }
 
-  SendSubmitFrame(webGLChild, frameId,
-                  aDisplayInfo.mDisplayState.lastSubmittedFrameId, mLeftEyeRect,
-                  mRightEyeRect);
+  mSubmittedOnce = true;
+  SendSubmitFrame(vrSurfDesc, frameId, mLeftEyeRect, mRightEyeRect);
 }
 
 bool VRLayerChild::IsIPCOpen() { return mIPCOpen; }
-
-void VRLayerChild::ClearSurfaces() { SendClearSurfaces(); }
 
 void VRLayerChild::ActorDestroy(ActorDestroyReason aWhy) { mIPCOpen = false; }
 

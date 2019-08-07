@@ -663,8 +663,8 @@ dom::PWebGLParent* ContentCompositorBridgeParent::AllocPWebGLParent(
     const WebGLVersion& aVersion,
     UniquePtr<HostWebGLCommandSink>&& aCommandSink,
     UniquePtr<HostWebGLErrorSource>&& aErrorSource) {
-  return dom::WebGLParent::Create(aVersion, std::move(aCommandSink),
-                                  std::move(aErrorSource));
+  return new dom::WebGLParent(aVersion, std::move(aCommandSink),
+                              std::move(aErrorSource));
 }
 
 bool ContentCompositorBridgeParent::DeallocPWebGLParent(

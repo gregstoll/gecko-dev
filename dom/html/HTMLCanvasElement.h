@@ -36,6 +36,7 @@ class Layer;
 class LayerManager;
 class OOPCanvasRenderer;
 class SharedSurfaceTextureClient;
+class SurfaceDescriptor;
 class WebRenderCanvasData;
 }  // namespace layers
 namespace gfx {
@@ -50,7 +51,6 @@ class File;
 class HTMLCanvasPrintState;
 class OffscreenCanvas;
 class PrintCallback;
-class PWebGLChild;
 class RequestedFrameRefreshObserver;
 
 // Listen visibilitychange and memory-pressure event and inform
@@ -336,7 +336,7 @@ class HTMLCanvasElement final : public nsGenericHTMLElement,
 
   layers::OOPCanvasRenderer* GetOOPCanvasRenderer();
 
-  PWebGLChild* GetWebGLChild();
+  layers::SurfaceDescriptor PrepareVRFrame();
 
  protected:
   virtual ~HTMLCanvasElement();

@@ -53,8 +53,8 @@ class CompositableHost;
  */
 class HostWebGLContext : public WebGLContextEndpoint {
  public:
-  static UniquePtr<HostWebGLContext> Create(
-      WebGLVersion aVersion,
+  static HostWebGLContext* Create(
+      WebGLVersion aVersion, const WebGLGfxFeatures& aFeatures,
       UniquePtr<HostWebGLCommandSink>&& aCommandSink = nullptr,
       UniquePtr<HostWebGLErrorSource>&& aErrorSource = nullptr);
 
@@ -63,7 +63,8 @@ class HostWebGLContext : public WebGLContextEndpoint {
   WebGLContext* GetWebGLContext() { return mContext; }
 
  protected:
-  HostWebGLContext(WebGLVersion aVersion, RefPtr<WebGLContext> aContext,
+  HostWebGLContext(WebGLVersion aVersion, const WebGLGfxFeatures& aFeatures,
+                   RefPtr<WebGLContext> aContext,
                    UniquePtr<HostWebGLCommandSink>&& aCommandSink,
                    UniquePtr<HostWebGLErrorSource>&& aErrorSource);
 
@@ -246,7 +247,9 @@ class HostWebGLContext : public WebGLContextEndpoint {
   }
 
   // ------------------------- Composition -------------------------
-  void Present();
+  layers::SurfaceDescriptor Present();
+
+  layers::SurfaceDescriptor PrepareVRFrame();
 
   Maybe<ICRData> InitializeCanvasRenderer(layers::LayersBackend backend);
 
@@ -257,8 +260,6 @@ class HostWebGLContext : public WebGLContextEndpoint {
   SetDimensionsData SetDimensions(int32_t signedWidth, int32_t signedHeight);
 
   gfx::IntSize DrawingBufferSize(FuncScopeId aFuncId);
-
-  void SetCompositableHost(RefPtr<layers::CompositableHost>& aCompositableHost);
 
   void OnMemoryPressure();
 
@@ -783,10 +784,12 @@ class HostWebGLContext : public WebGLContextEndpoint {
 
   // Etc
  public:
-  already_AddRefed<layers::SharedSurfaceTextureClient> GetVRFrame();
+  static MessageLoop* WebGLRenderThreadMessageLoop();
+  static bool IsWebGLRenderThread();
 
  protected:
-  static WebGLContext* MakeWebGLContext(WebGLVersion aVersion);
+  static WebGLContext* MakeWebGLContext(WebGLVersion aVersion,
+                                        const WebGLGfxFeatures& aFeatures);
 
   const WebGL2Context* GetWebGL2Context() const {
     MOZ_RELEASE_ASSERT(mContext->IsWebGL2(), "Requires WebGL2 context");
