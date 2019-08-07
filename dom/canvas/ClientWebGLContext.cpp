@@ -1934,10 +1934,8 @@ void ClientWebGLContext::ActiveTexture(GLenum texUnit) {
 
 void ClientWebGLContext::BindTexture(
     GLenum texTarget, const ClientWebGLObject<WebGLTexture>* tex) {
-  if (!tex) {
-    return;
-  }
-  Run<RPROC(BindTexture)>(texTarget, *tex);
+  Run<RPROC(BindTexture)>(texTarget,
+                          tex ? *tex : *ClientWebGLTexture::Null(this).get());
 }
 
 void ClientWebGLContext::GenerateMipmap(GLenum texTarget) {
