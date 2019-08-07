@@ -275,14 +275,13 @@ void WebGLContext::CompressedTexImage(uint8_t funcDims, GLenum rawTarget,
                                       GLsizei depth, GLint border,
                                       UniquePtr<webgl::TexUnpackBytes>&& src,
                                       const Maybe<GLsizei>& expectedImageSize) {
-  if (!src) {
-    ErrorImplementationBug("No TexUnpackBytes received");
-    return;
-  }
-
   TexImageTarget target;
   WebGLTexture* tex;
   if (!ValidateTexImageTarget(this, funcDims, rawTarget, &target, &tex)) return;
+  if (!src) {
+    return;
+  }
+
   tex->CompressedTexImage(target, level, internalFormat, width, height, depth,
                           border, std::move(src), expectedImageSize);
 }
