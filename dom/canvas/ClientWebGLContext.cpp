@@ -2116,6 +2116,10 @@ void ClientWebGLContext::TexImage3D(GLenum target, GLint level,
   const FuncScope scope(this, FuncScopeId::texImage3D);
   const uint8_t funcDims = 3;
 
+  if (!ValidateViewType(unpackType, src)) {
+    return;
+  }
+
   MaybeWebGLTexUnpackVariant blob =
       From(target, width, height, depth, border, src);
   if (!blob) {
@@ -2136,6 +2140,10 @@ void ClientWebGLContext::TexSubImage3D(GLenum target, GLint level,
                                        const TexImageSource& src) {
   const FuncScope scope(this, FuncScopeId::texSubImage3D);
   const uint8_t funcDims = 3;
+
+  if (!ValidateViewType(unpackType, src)) {
+    return;
+  }
 
   MaybeWebGLTexUnpackVariant blob = From(target, width, height, depth, 0, src);
   if (!blob) {
