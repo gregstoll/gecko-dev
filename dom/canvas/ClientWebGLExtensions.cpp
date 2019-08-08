@@ -7,7 +7,7 @@
 
 namespace mozilla {
 
-NS_IMPL_CYCLE_COLLECTION_WRAPPERCACHE_0(ClientWebGLExtensionBase)
+NS_IMPL_CYCLE_COLLECTION_WRAPPERCACHE(ClientWebGLExtensionBase, mContext)
 
 NS_IMPL_CYCLE_COLLECTION_ROOT_NATIVE(ClientWebGLExtensionBase, AddRef)
 NS_IMPL_CYCLE_COLLECTION_UNROOT_NATIVE(ClientWebGLExtensionBase, Release)
