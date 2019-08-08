@@ -1309,7 +1309,8 @@ struct MaybeWebGLVariantMatcher {
   }
 
   JS::Value match(const nsTArray<uint32_t>& x) {
-    JSObject* obj = dom::Uint32Array::Create(mCx, mCxt, x.Length(), &x[0]);
+    JSObject* obj = dom::Uint32Array::Create(mCx, mCxt, x.Length(),
+                                             x.Length() ? &x[0] : nullptr);
     if (!obj) {
       *mRv = NS_ERROR_OUT_OF_MEMORY;
       mCxt->EnqueueErrorOutOfMemory("ToJSValue: Out of memory.");
@@ -1318,7 +1319,8 @@ struct MaybeWebGLVariantMatcher {
   }
 
   JS::Value match(const nsTArray<int32_t>& x) {
-    JSObject* obj = dom::Int32Array::Create(mCx, mCxt, x.Length(), &x[0]);
+    JSObject* obj = dom::Int32Array::Create(mCx, mCxt, x.Length(),
+                                            x.Length() ? &x[0] : nullptr);
     if (!obj) {
       *mRv = NS_ERROR_OUT_OF_MEMORY;
       mCxt->EnqueueErrorOutOfMemory("ToJSValue: Out of memory.");
@@ -1327,7 +1329,8 @@ struct MaybeWebGLVariantMatcher {
   }
 
   JS::Value match(const nsTArray<float>& x) {
-    JSObject* obj = dom::Float32Array::Create(mCx, mCxt, x.Length(), &x[0]);
+    JSObject* obj = dom::Float32Array::Create(mCx, mCxt, x.Length(),
+                                              x.Length() ? &x[0] : nullptr);
     if (!obj) {
       *mRv = NS_ERROR_OUT_OF_MEMORY;
       mCxt->EnqueueErrorOutOfMemory("ToJSValue: Out of memory.");
@@ -1337,7 +1340,7 @@ struct MaybeWebGLVariantMatcher {
 
   JS::Value match(const nsTArray<bool>& x) {
     JS::Rooted<JS::Value> obj(mCx);
-    if (!dom::ToJSValue(mCx, &x[0], x.Length(), &obj)) {
+    if (!dom::ToJSValue(mCx, x.Length() ? &x[0] : nullptr, x.Length(), &obj)) {
       *mRv = NS_ERROR_OUT_OF_MEMORY;
       mCxt->EnqueueErrorOutOfMemory("ToJSValue: Out of memory.");
     }
