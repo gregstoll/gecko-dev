@@ -284,12 +284,11 @@ TexUnpackBlob::TexUnpackBlob(const WebGLPixelStore& pixelStore,
       mDepth(depth)
 
       ,
+      mTarget(target),
       mSrcAlphaType(srcAlphaType)
 
       ,
-      mNeedsExactUpload(false) {
-  MOZ_ASSERT_IF(!IsTarget3D(target), mDepth == 1);
-}
+      mNeedsExactUpload(false) {}
 
 static bool HasColorAndAlpha(const WebGLTexelFormat format) {
   switch (format) {
@@ -412,6 +411,7 @@ TexUnpackBytes::TexUnpackBytes(const WebGLPixelStore& pixelStore,
 
 bool TexUnpackBytes::Validate(WebGLContext* webgl,
                               const webgl::PackingInfo& pi) {
+  MOZ_ASSERT_IF(!IsTarget3D(mTarget), mDepth == 1);
   if (!HasData()) return true;
 
   return ValidateUnpackBytes(webgl, pi, mPtr.Length(), this);
@@ -593,6 +593,7 @@ TexUnpackImage::~TexUnpackImage() {}
 
 bool TexUnpackImage::Validate(WebGLContext* webgl,
                               const webgl::PackingInfo& pi) {
+  MOZ_ASSERT_IF(!IsTarget3D(mTarget), mDepth == 1);
   if (!ValidatePIForDOM(webgl, pi)) return false;
   return ValidateUnpackPixels(webgl, mImage->GetSize().height, 0, this);
 }
@@ -807,6 +808,7 @@ static bool GetFormatForSurf(gfx::SurfaceFormat surfFormat,
 
 bool TexUnpackSurface::Validate(WebGLContext* webgl,
                                 const webgl::PackingInfo& pi) {
+  MOZ_ASSERT_IF(!IsTarget3D(mTarget), mDepth == 1);
   if (!ValidatePIForDOM(webgl, pi)) return false;
 
   const auto fullRows = mSize.height;

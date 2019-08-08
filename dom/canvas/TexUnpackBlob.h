@@ -58,6 +58,7 @@ class TexUnpackBlob {
   uint32_t mHeight = 0;
   uint32_t mDepth = 0;
 
+  TexImageTarget mTarget;
   gfxAlphaType mSrcAlphaType;
 
   bool mNeedsExactUpload;

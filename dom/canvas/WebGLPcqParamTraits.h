@@ -22,6 +22,9 @@ struct PcqParamTraits;
 template <typename WebGLType>
 struct IsTriviallySerializable<WebGLId<WebGLType>> : TrueType {};
 
+template <typename T>
+struct IsTriviallySerializable<StrongGLenum<T>> : TrueType {};
+
 template <>
 struct IsTriviallySerializable<FloatOrInt> : TrueType {};
 
@@ -501,6 +504,7 @@ struct PcqParamTraits<webgl::TexUnpackBlob> {
     aProducerView.WriteParam(aArg.mWidth);
     aProducerView.WriteParam(aArg.mHeight);
     aProducerView.WriteParam(aArg.mDepth);
+    aProducerView.WriteParam(aArg.mTarget);
     aProducerView.WriteParam(aArg.mSrcAlphaType);
     return aProducerView.WriteParam(aArg.mNeedsExactUpload);
   }
@@ -515,6 +519,7 @@ struct PcqParamTraits<webgl::TexUnpackBlob> {
     aConsumerView.ReadParam(aArg ? &aArg->mWidth : nullptr);
     aConsumerView.ReadParam(aArg ? &aArg->mHeight : nullptr);
     aConsumerView.ReadParam(aArg ? &aArg->mDepth : nullptr);
+    aConsumerView.ReadParam(aArg ? &aArg->mTarget : nullptr);
     aConsumerView.ReadParam(aArg ? &aArg->mSrcAlphaType : nullptr);
     return aConsumerView.ReadParam(aArg ? &aArg->mNeedsExactUpload : nullptr);
   }
@@ -530,6 +535,7 @@ struct PcqParamTraits<webgl::TexUnpackBlob> {
            aView.MinSizeParam(aArg ? &aArg->mWidth : nullptr) +
            aView.MinSizeParam(aArg ? &aArg->mHeight : nullptr) +
            aView.MinSizeParam(aArg ? &aArg->mDepth : nullptr) +
+           aView.MinSizeParam(aArg ? &aArg->mTarget : nullptr) +
            aView.MinSizeParam(aArg ? &aArg->mSrcAlphaType : nullptr) +
            aView.MinSizeParam(aArg ? &aArg->mNeedsExactUpload : nullptr);
   }
