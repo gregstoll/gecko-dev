@@ -581,11 +581,11 @@ bool TexUnpackBytes::TexOrSubImage(bool isSubImage, bool needsRespec,
 ////////////////////////////////////////////////////////////////////////////////
 // TexUnpackImage
 
-TexUnpackImage::TexUnpackImage(const WebGLContext* webgl, TexImageTarget target,
-                               uint32_t rowLength, uint32_t width,
+TexUnpackImage::TexUnpackImage(const WebGLPixelStore& pixelStore,
+                               TexImageTarget target, uint32_t width,
                                uint32_t height, uint32_t depth,
                                layers::Image* image, gfxAlphaType srcAlphaType)
-    : TexUnpackBlob(webgl->GetPixelStore(), target, rowLength, width, height,
+    : TexUnpackBlob(pixelStore, target, image->GetSize().width, width, height,
                     depth, srcAlphaType),
       mImage(image) {}
 

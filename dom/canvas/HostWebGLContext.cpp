@@ -850,6 +850,12 @@ struct ToTexUnpackTypeMatcher {
     UniquePtr<webgl::TexUnpackBytes> bytes = mContext->ToTexUnpackBytes(aPbo);
     return operator()(bytes);
   }
+  UniquePtr<TexUnpackType> operator()(WebGLTexImageData& aImageData) {
+    // DLP: TODO: Remoted case
+    MOZ_RELEASE_ASSERT(XRE_IsContentProcess());
+    MOZ_ASSERT(aImageData.mPtr);
+    return operator()(aImageData.mPtr);
+  }
   WebGLContext* mContext;
 };
 

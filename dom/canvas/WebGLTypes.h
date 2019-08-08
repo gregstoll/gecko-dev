@@ -401,6 +401,7 @@ struct WebGLPixelStore {
   bool mRequireFastPath = false;
 };
 
+#ifdef SUPPORT_UNPACK_IMAGES
 struct WebGLTexImageData {
   TexImageTarget mTarget;
   int32_t mRowLength;
@@ -409,6 +410,13 @@ struct WebGLTexImageData {
   uint32_t mDepth;
   gfxAlphaType mSrcAlphaType;
 };
+#else
+// DLP: A short-term hack to make this work with non-remote WebGL.
+// This should not be serialized.
+struct WebGLTexImageData {
+  UniquePtr<webgl::TexUnpackImage> mPtr;
+};
+#endif
 
 struct WebGLTexPboOffset {
   TexImageTarget mTarget;
@@ -420,10 +428,9 @@ struct WebGLTexPboOffset {
   GLsizei mExpectedImageSize;
 };
 
-using WebGLTexUnpackVariant =
-    Variant<UniquePtr<webgl::TexUnpackBytes>,
-            UniquePtr<webgl::TexUnpackSurface>,
-            UniquePtr<webgl::TexUnpackImage>, WebGLTexPboOffset>;
+using WebGLTexUnpackVariant = Variant<UniquePtr<webgl::TexUnpackBytes>,
+                                      UniquePtr<webgl::TexUnpackSurface>,
+                                      WebGLTexPboOffset, WebGLTexImageData>;
 
 using MaybeWebGLTexUnpackVariant = Maybe<WebGLTexUnpackVariant>;
 

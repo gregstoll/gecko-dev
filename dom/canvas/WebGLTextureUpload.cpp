@@ -387,14 +387,19 @@ MaybeWebGLTexUnpackVariant ClientWebGLContext::ClientFromDomElem(
   // Ok, we're good!
 
   if (layersImage) {
+    // DLP: TODO: Remoted
+    MOZ_RELEASE_ASSERT(!IsHostOOP());
+    auto unpackImage = MakeUnique<webgl::TexUnpackImage>(
+        GetPixelStore(), target, width, height, depth, layersImage,
+        sfer.mAlphaType);
+    WebGLTexImageData data = {std::move(unpackImage)};
+    return AsSomeVariant(data);
     // TODO:
     //    WebGLTexImageData texImageData{
     //        target, static_cast<int32_t>(layersImage->GetSize().width),
     //        width,  height,
     //        depth,  sfer.mAlphaType};
     //    return AsSomeVariant(std::move(texImageData));
-    MOZ_ASSERT_UNREACHABLE("TODO: Unimplemented");
-    return Nothing();
   }
 
   MOZ_ASSERT(dataSurf);

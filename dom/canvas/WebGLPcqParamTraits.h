@@ -607,13 +607,14 @@ struct PcqParamTraits<WebGLTexUnpackVariant> {
         mProducerView.WriteParam(TexUnpackTypes::Surface);
         return mProducerView.WriteParam(x);
       }
-      PcqStatus operator()(const UniquePtr<webgl::TexUnpackImage>& x) {
-        MOZ_ASSERT_UNREACHABLE("TODO:");
-        return PcqStatus::kFatalError;
-      }
       PcqStatus operator()(const WebGLTexPboOffset& x) {
         mProducerView.WriteParam(TexUnpackTypes::Pbo);
         return mProducerView.WriteParam(x);
+      }
+      PcqStatus operator()(const WebGLTexImageData& x) {
+        MOZ_RELEASE_ASSERT(
+            false,
+            "DLP: TODO: TexImageData is not yet supported with remoted WebGL");
       }
       ProducerView& mProducerView;
     };
@@ -638,12 +639,13 @@ struct PcqParamTraits<WebGLTexUnpackVariant> {
         *aArg = AsVariant(UniquePtr<webgl::TexUnpackSurface>());
         return aConsumerView.ReadParam(
             &aArg->as<UniquePtr<webgl::TexUnpackSurface>>());
-      case TexUnpackTypes::Image:
-        MOZ_ASSERT_UNREACHABLE("TODO:");
-        return PcqStatus::kFatalError;
       case TexUnpackTypes::Pbo:
         *aArg = AsVariant(WebGLTexPboOffset());
         return aConsumerView.ReadParam(&aArg->as<WebGLTexPboOffset>());
+      case TexUnpackTypes::Image:
+        MOZ_RELEASE_ASSERT(
+            false,
+            "DLP: TODO: TexImageData is not yet supported with remoted WebGL");
     }
     MOZ_ASSERT_UNREACHABLE("Illegal texture unpack type");
     return PcqStatus::kFatalError;
@@ -663,12 +665,13 @@ struct PcqParamTraits<WebGLTexUnpackVariant> {
       size_t operator()(const UniquePtr<webgl::TexUnpackSurface>& x) {
         return mView.MinSizeParam(&x);
       }
-      size_t operator()(const UniquePtr<webgl::TexUnpackImage>& x) {
-        MOZ_ASSERT_UNREACHABLE("TODO:");
-        return 0;
-      }
       size_t operator()(const WebGLTexPboOffset& x) {
         return mView.MinSizeParam(&x);
+      }
+      size_t operator()(const WebGLTexImageData& x) {
+        MOZ_RELEASE_ASSERT(
+            false,
+            "DLP: TODO: TexImageData is not yet supported with remoted WebGL");
       }
       View& mView;
     };

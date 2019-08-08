@@ -127,10 +127,9 @@ class TexUnpackImage final : public TexUnpackBlob {
  public:
   RefPtr<layers::Image> mImage;
 
-  TexUnpackImage(const WebGLContext* webgl, TexImageTarget target,
-                 uint32_t rowLength, uint32_t width, uint32_t height,
-                 uint32_t depth, layers::Image* image,
-                 gfxAlphaType srcAlphaType);
+  TexUnpackImage(const WebGLPixelStore& pixelStore, TexImageTarget target,
+                 uint32_t width, uint32_t height, uint32_t depth,
+                 layers::Image* image, gfxAlphaType srcAlphaType);
 
   ~TexUnpackImage();  // Prevent needing to define layers::Image in the header.
 
