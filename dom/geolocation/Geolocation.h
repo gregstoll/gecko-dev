@@ -207,6 +207,9 @@ class Geolocation final : public nsIGeolocationUpdate, public nsWrapperCache {
   // request is coming from a chrome window.
   bool IsFullyActiveOrChrome();
 
+  // Initates the asynchronous process of filling the request.
+  bool RequestIfPermitted(nsGeolocationRequest* request);
+
   // Two callback arrays.  The first |mPendingCallbacks| holds objects for only
   // one callback and then they are released/removed from the array.  The second
   // |mWatchingCallbacks| holds objects until the object is explictly removed or
