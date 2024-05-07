@@ -670,6 +670,18 @@ Prompter.prototype = {
   confirmUserPaste() {
     return lazy.ClipboardContextMenu.confirmUserPaste(...arguments);
   },
+
+  dismissPrompts(aBrowsingContext) {
+    // browser will be null if the tab was closed
+    let browser = aBrowsingContext?.top.embedderElement;
+    let win = browser?.ownerGlobal;
+    if (win) {
+      let dialogBox = win.gBrowser.getTabDialogBox(browser);
+      // Don't close any content-modal dialogs, because we could be doing
+      // content analysis on something like a prompt() call.
+      dialogBox.getTabDialogManager().abortDialogs();
+    }
+  },
 };
 
 // Common utils not specific to a particular prompter style.
