@@ -741,6 +741,16 @@ class GeolocationPermissionPrompt extends PermissionPromptForRequest {
   constructor(request) {
     super();
     this.request = request;
+    let types = request.types.QueryInterface(Ci.nsIArray);
+    let perm = types.queryElementAt(0, Ci.nsIContentPermissionType);
+    // systemWillRequestPermission and needsSystemSetting are mutually
+    // exclusive
+    this.systemWillRequestPermission =
+      !!perm.options.length &&
+      perm.options.queryElementAt(0, Ci.nsISupportsString) == "sysdlg";
+    this.needsSystemSetting =
+      !!perm.options.length &&
+      perm.options.queryElementAt(0, Ci.nsISupportsString) == "syssetting";
   }
 
   get type() {
@@ -803,9 +813,33 @@ class GeolocationPermissionPrompt extends PermissionPromptForRequest {
       );
     }
 
+    if (this.systemWillRequestPermission) {
+      return lazy.gBrowserBundle.formatStringFromName(
+        "geolocation.shareWithSite4",
+        [
+          "<>",
+          "<p><font color='red'>" +
+            lazy.gBrowserBundle.GetStringFromName("geolocation.system_will_request_permission") +
+            "</font>"
+        ]
+      );
+    }
+
+    if (this.needsSystemSetting) {
+      return lazy.gBrowserBundle.formatStringFromName(
+        "geolocation.shareWithSite4",
+        [
+          "<>",
+          "<p><font color='red'>" +
+            lazy.gBrowserBundle.GetStringFromName("geolocation.needs_system_setting") +
+            "</font>"
+        ]
+      );
+    }
+
     return lazy.gBrowserBundle.formatStringFromName(
       "geolocation.shareWithSite4",
-      ["<>"]
+      ["<>", ""]
     );
   }
 
