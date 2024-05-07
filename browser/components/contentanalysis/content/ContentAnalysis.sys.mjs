@@ -445,16 +445,7 @@ export const ContentAnalysis = {
         caView.notification.close();
       } else if (caView.notification.dialogBrowsingContext) {
         // in-browser notification
-        let browser =
-          caView.notification.dialogBrowsingContext.top.embedderElement;
-        // browser will be null if the tab was closed
-        let win = browser?.ownerGlobal;
-        if (win) {
-          let dialogBox = win.gBrowser.getTabDialogBox(browser);
-          // Don't close any content-modal dialogs, because we could be doing
-          // content analysis on something like a prompt() call.
-          dialogBox.getTabDialogManager().abortDialogs();
-        }
+        Services.prompt.dismissPrompts(caView.notification.dialogBrowsingContext);
       } else {
         console.error(
           "Unexpected content analysis notification - can't close it!"

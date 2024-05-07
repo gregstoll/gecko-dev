@@ -631,4 +631,9 @@ interface nsIPromptService : nsISupports
    * @resolves nsIPropertyBag { ok: boolean }
    */
   Promise confirmUserPaste(in WindowGlobalParent aWindow);
+
+  /**
+   * Dismiss all prompts on the given browsing context.
+   */
+  void dismissPrompts(in BrowsingContext aBrowsingContext);
 };
