@@ -1391,6 +1391,9 @@ bool Geolocation::RequestIfPermitted(nsGeolocationRequest* request) {
   // If location access is already permitted by OS then we only need to
   // ask the user.
   if (mozilla::dom::geolocation::LocationIsPermittedHint()) {
+    // DLP: TEST:
+      request->SetNeedsSystemSetting();
+
     return RegisterRequestWithPrompt(request);
   }
 

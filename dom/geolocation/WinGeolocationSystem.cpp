@@ -62,7 +62,8 @@ public:
     }
 
     ComPtr<IAppCapability> appCapability =
-        CreateFromActivationFactory<IAppCapability>(InterfaceName_Windows_Security_Authorization_AppCapabilityAccess_IAppCapability);
+          CreateFromActivationFactory<IAppCapability>(L"11c7ccb6-c74f-50a3-b960-88008767d939");
+//          CreateFromActivationFactory<IAppCapability>(InterfaceName_Windows_Security_Authorization_AppCapabilityAccess_IAppCapability);
     if (NS_WARN_IF(!appCapability)) {
       return;
     }
@@ -88,7 +89,7 @@ already_AddRefed<OpenSettingsPromise::Private> OpenWindowsLocationSettings() {
   using ABI::Windows::Foundation::IUriRuntimeClass;
   using ABI::Windows::Foundation::IUriRuntimeClassFactory;
   ComPtr<IUriRuntimeClassFactory> uriFactory =
-      CreateFromActivationFactory<IUriRuntimeClassFactory>(InterfaceName_Windows_Foundation_IUriRuntimeClassFactory);
+      CreateFromActivationFactory<IUriRuntimeClassFactory>(RuntimeClass_Windows_Foundation_Uri);
   NS_ENSURE_TRUE(uriFactory, nullptr);
   RefPtr<IUriRuntimeClass> uri;
   HRESULT hr = uriFactory->CreateUri(HStringReference(L"ms-settings:privacy-location").Get(), getter_AddRefs(uri));
@@ -128,12 +129,14 @@ already_AddRefed<OpenSettingsPromise::Private> OpenWindowsLocationSettings() {
 bool SystemWillPromptForPermissionHint() {
   using ABI::Windows::Security::Authorization::AppCapabilityAccess::IAppCapabilityStatics;
   ComPtr<IAppCapabilityStatics> appCapabilityStatics =
-      CreateFromActivationFactory<IAppCapabilityStatics>(InterfaceName_Windows_Security_Authorization_AppCapabilityAccess_IAppCapability);
+      CreateFromActivationFactory<IAppCapabilityStatics>(L"4c49d915-8a2a-4295-9437-2df7c396aff4");
+//      CreateFromActivationFactory<IAppCapabilityStatics>(InterfaceName_Windows_Security_Authorization_AppCapabilityAccess_IAppCapability);
   NS_ENSURE_TRUE(appCapabilityStatics, false);
 
   using ABI::Windows::System::IUserStatics2;
   ComPtr<IUserStatics2> userStatics =
-      CreateFromActivationFactory<IUserStatics2>(InterfaceName_Windows_System_IUserStatics2);
+      CreateFromActivationFactory<IUserStatics2>(L"74a37e11-2eb5-4487-b0d5-2c6790e013e9");
+//      CreateFromActivationFactory<IUserStatics2>(InterfaceName_Windows_System_IUserStatics2);
   NS_ENSURE_TRUE(userStatics, false);
 
   using ABI::Windows::System::IUser;
@@ -185,7 +188,8 @@ PresentSystemSettings(BrowsingContext* aBC,
         return false;
       }
       ComPtr<IAppCapability> appCapability =
-          CreateFromActivationFactory<IAppCapability>(InterfaceName_Windows_Security_Authorization_AppCapabilityAccess_IAppCapability);
+          CreateFromActivationFactory<IAppCapability>(L"11c7ccb6-c74f-50a3-b960-88008767d939");
+//          CreateFromActivationFactory<IAppCapability>(InterfaceName_Windows_Security_Authorization_AppCapabilityAccess_IAppCapability);
       NS_ENSURE_TRUE(appCapability, false);
       EventRegistrationToken token{};
 
