@@ -8236,6 +8236,20 @@ IPCResult ContentParent::RecvGetGeolocationOSPermission(
   return IPC_OK();
 }
 
+IPCResult
+ContentParent::RecvReallowGeolocationRequestWithSystemPermissionOrCancel(
+    const MaybeDiscardedBrowsingContext& aBrowsingContext,
+    ReallowGeolocationRequestWithSystemPermissionOrCancelResolver&& aResolver) {
+  if (aBrowsingContext.IsNullOrDiscarded()) {
+    aResolver(Nothing());
+    return IPC_OK();
+  }
+  auto* browsingContext = aBrowsingContext.get();
+  Geolocation::ReallowWithSystemPermissionOrCancel(browsingContext,
+                                                   std::move(aResolver));
+  return IPC_OK();
+}
+
 #ifdef FUZZING_SNAPSHOT
 IPCResult ContentParent::RecvSignalFuzzingReady() {
   // No action needed here, we already observe this message directly

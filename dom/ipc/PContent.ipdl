@@ -1969,6 +1969,8 @@ parent:
 
     async GetGeolocationOSPermission() returns (LocationOSPermission permission);
 
+    async ReallowGeolocationRequestWithSystemPermissionOrCancel(MaybeDiscardedBrowsingContext aBrowsingContext) returns (uint16_t? aErrorCode);
+
 #ifdef FUZZING_SNAPSHOT
     // Used by the child process to signal that it is ready to start fuzzing.
     // This can in particular be used to wait for a particular event in a

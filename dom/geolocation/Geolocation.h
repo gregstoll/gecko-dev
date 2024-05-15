@@ -29,6 +29,7 @@
 #include "mozilla/dom/BindingDeclarations.h"
 #include "mozilla/dom/GeolocationBinding.h"
 #include "mozilla/dom/CallbackObject.h"
+#include "mozilla/dom/PContentParent.h"
 
 #include "nsIGeolocationProvider.h"
 #include "mozilla/Attributes.h"
@@ -181,6 +182,13 @@ class Geolocation final : public nsIGeolocationUpdate, public nsWrapperCache {
   static already_AddRefed<Geolocation> NonWindowSingleton();
 
   static geolocation::LocationOSPermission GetLocationOSPermission();
+
+  static MOZ_CAN_RUN_SCRIPT nsresult ReallowWithSystemPermissionOrCancel(
+      BrowsingContext* aBrowsingContext,
+      PContentParent::
+          ReallowGeolocationRequestWithSystemPermissionOrCancelResolver&&
+              aResolver);
+
  private:
   ~Geolocation();
 

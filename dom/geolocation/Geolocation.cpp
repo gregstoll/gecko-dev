@@ -93,7 +93,7 @@ class nsGeolocationRequest final : public ContentPermissionRequestBase,
   // nsIContentPermissionRequest
   MOZ_CAN_RUN_SCRIPT NS_IMETHOD Cancel(void) override;
   MOZ_CAN_RUN_SCRIPT NS_IMETHOD Allow(JS::Handle<JS::Value> choices) override;
-  MOZ_CAN_RUN_SCRIPT nsresult ReallowWithSystemPermissionOrCancel();
+//  MOZ_CAN_RUN_SCRIPT nsresult ReallowWithSystemPermissionOrCancel();
   NS_IMETHOD GetTypes(nsIArray** aTypes) override;
 
   void Shutdown();
@@ -278,6 +278,42 @@ nsGeolocationRequest::Cancel() {
   return NS_OK;
 }
 
+class SystemPermissionResolverTemp : public PromiseNativeHandler {
+  NS_DECL_ISUPPORTS
+
+  explicit SystemPermissionResolverTemp(
+      PContentParent::
+          ReallowGeolocationRequestWithSystemPermissionOrCancelResolver
+              aResolver,
+      RefPtr<mozilla::dom::geolocation::LocationSettingsListener>&&
+          aSystemSettingsListener)
+      : mResolver(aResolver),
+        mSystemSettingsListener(std::move(aSystemSettingsListener)) {}
+
+  MOZ_CAN_RUN_SCRIPT_BOUNDARY
+  void ResolvedCallback(JSContext* aCx, JS::Handle<JS::Value> aValue,
+                        ErrorResult& aRv) override {
+    mSystemSettingsListener = nullptr;
+    mResolver(Nothing());
+  }
+
+  MOZ_CAN_RUN_SCRIPT_BOUNDARY
+  void RejectedCallback(JSContext* aCx, JS::Handle<JS::Value> aValue,
+                        ErrorResult& aRv) override {
+    mSystemSettingsListener = nullptr;
+    mResolver(Nothing());
+  }
+
+ private:
+  ~SystemPermissionResolverTemp() = default;
+
+  PContentParent::ReallowGeolocationRequestWithSystemPermissionOrCancelResolver
+      mResolver;
+  RefPtr<mozilla::dom::geolocation::LocationSettingsListener>
+      mSystemSettingsListener;
+};
+NS_IMPL_ISUPPORTS0(SystemPermissionResolverTemp)
+
 class SystemPermissionResolver : public PromiseNativeHandler {
 public:
   NS_DECL_ISUPPORTS
@@ -337,20 +373,22 @@ nsresult nsGeolocationRequest::RerunAllow(BrowsingContext* aBC) {
   return Allow(JS::UndefinedHandleValue);
 }
 
-nsresult
-nsGeolocationRequest::ReallowWithSystemPermissionOrCancel() {
+/* static */ nsresult Geolocation::ReallowWithSystemPermissionOrCancel(
+    BrowsingContext* aBrowsingContext,
+    PContentParent::
+        ReallowGeolocationRequestWithSystemPermissionOrCancelResolver&&
+            aResolver) {
   // Make sure we don't return without responding to the geolocation request.
   auto denyRequest =
-    MakeScopeExit([self = RefPtr{this}]() MOZ_CAN_RUN_SCRIPT_BOUNDARY_LAMBDA {
-      self->NotifyError(GeolocationPositionError_Binding::PERMISSION_DENIED);
-    });
+      MakeScopeExit([aResolver]() MOZ_CAN_RUN_SCRIPT_BOUNDARY_LAMBDA {
+        aResolver(Some(GeolocationPositionError_Binding::PERMISSION_DENIED));
+      });
 
   nsresult rv;
   nsCOMPtr<nsIPromptService> promptSvc =
       do_GetService("@mozilla.org/prompter;1", &rv);
   NS_ENSURE_SUCCESS(rv, rv);
-  nsCOMPtr<nsPIDOMWindowInner> window = do_QueryReferent(mLocator->GetOwner());
-  NS_ENSURE_TRUE(window, NS_OK);
+  NS_ENSURE_TRUE(aBrowsingContext, NS_OK);
 
   nsCOMPtr<nsIStringBundle> bundle;
   nsCOMPtr<nsIStringBundleService> sbs =
@@ -362,35 +400,38 @@ nsGeolocationRequest::ReallowWithSystemPermissionOrCancel() {
   NS_ENSURE_TRUE(bundle, NS_OK);
 
   nsAutoString title;
-  rv = bundle->GetStringFromName(
-      "geolocation.system_settings_title", title);
+  rv = bundle->GetStringFromName("geolocation.system_settings_title", title);
   NS_ENSURE_SUCCESS(rv, rv);
 
   nsAutoString message;
-  rv = bundle->GetStringFromName(
-      "geolocation.system_settings_message", message);
+  rv =
+      bundle->GetStringFromName("geolocation.system_settings_message", message);
   NS_ENSURE_SUCCESS(rv, rv);
 
+  RefPtr<mozilla::dom::Promise> systemPermissionPromise;
   rv = promptSvc->AsyncConfirmEx(
-      window->GetBrowsingContext(), nsIPromptService::MODAL_TYPE_TAB,
-      title.get(), message.get(),
+      aBrowsingContext, nsIPromptService::MODAL_TYPE_TAB, title.get(),
+      message.get(),
       nsIPromptService::BUTTON_TITLE_CANCEL * nsIPromptService::BUTTON_POS_0,
       nullptr, nullptr, nullptr, nullptr, false, JS::UndefinedHandleValue,
-      getter_AddRefs(mSystemPermissionPromise));
+      getter_AddRefs(systemPermissionPromise));
   NS_ENSURE_SUCCESS(rv, rv);
-
-  mSystemPermissionPromise->AppendNativeHandler(
-      new SystemPermissionResolver(this, window->GetBrowsingContext()));
-
-  denyRequest.release();
 
   // Open the system settings and either resolve mSystemPermissionPromise when
   // permission is given (with a non-zero value) or when the dialog above is
   // canceled (with a value of zero).  Will reject promise on failure.
-  mSystemSettingsListener = mozilla::dom::geolocation::PresentSystemSettings(
-      window->GetBrowsingContext(), mSystemPermissionPromise);
+  // TOOD return value?
+  RefPtr<mozilla::dom::geolocation::LocationSettingsListener> listener =
+      mozilla::dom::geolocation::PresentSystemSettings(aBrowsingContext,
+                                                       systemPermissionPromise);
+  systemPermissionPromise->AppendNativeHandler(
+      new SystemPermissionResolverTemp(aResolver, std::move(listener)));
+
+  denyRequest.release();
+
   return NS_OK;
 }
+
 
 NS_IMETHODIMP
 nsGeolocationRequest::Allow(JS::Handle<JS::Value> aChoices) {
@@ -406,7 +447,22 @@ nsGeolocationRequest::Allow(JS::Handle<JS::Value> aChoices) {
     // to change or the request to be canceled.  If the permission is
     // (maybe) granted then it will call Allow again.
     mNeedsSystemSetting = false;
-    return ReallowWithSystemPermissionOrCancel();
+    MOZ_ASSERT(XRE_IsContentProcess());
+    ContentChild* cpc = ContentChild::GetSingleton();
+    // TODO
+    RefPtr<mozIDOMWindow> window;
+    GetWindow(getter_AddRefs(window));
+
+    RefPtr<BrowserChild> browserChild = BrowserChild::GetFrom(window);
+    MOZ_ASSERT(browserChild);
+    RefPtr<BrowsingContext> browsingContext =
+        browserChild->GetBrowsingContext();
+
+    // TODO
+    cpc->SendReallowGeolocationRequestWithSystemPermissionOrCancel(
+        browsingContext, [](Maybe<uint16_t> aResult) {},
+        [](mozilla::ipc::ResponseRejectReason aReason) {});
+    return NS_OK;
   }
 
   RefPtr<nsGeolocationService> gs =
@@ -438,7 +494,7 @@ nsGeolocationRequest::Allow(JS::Handle<JS::Value> aChoices) {
     // will now be owned by the RequestSendLocationEvent
     Update(lastPosition.position);
 
-    // After Update is called, getCurrentPosition finishes it's job.
+    // After Update is called, getCurrentPosition finishes its job.
     if (!mIsWatchPositionRequest) {
       return NS_OK;
     }

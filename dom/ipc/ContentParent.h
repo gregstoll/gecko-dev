@@ -1387,6 +1387,12 @@ class ContentParent final : public PContentParent,
   mozilla::ipc::IPCResult RecvGetGeolocationOSPermission(
       GetGeolocationOSPermissionResolver&& aResolver);
 
+  mozilla::ipc::IPCResult
+  RecvReallowGeolocationRequestWithSystemPermissionOrCancel(
+      const MaybeDiscardedBrowsingContext& aBrowsingContext,
+      ReallowGeolocationRequestWithSystemPermissionOrCancelResolver&&
+          aResolver);
+
 #ifdef FUZZING_SNAPSHOT
   mozilla::ipc::IPCResult RecvSignalFuzzingReady();
 #endif
