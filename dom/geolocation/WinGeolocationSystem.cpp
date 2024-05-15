@@ -18,6 +18,7 @@ using ABI::Windows::Foundation::GetActivationFactory;
 using ABI::Windows::Security::Authorization::AppCapabilityAccess::AppCapability;
 using ABI::Windows::Security::Authorization::AppCapabilityAccess::AppCapabilityAccessChangedEventArgs;
 using ABI::Windows::Security::Authorization::AppCapabilityAccess::IAppCapability;
+using ABI::Windows::Security::Authorization::AppCapabilityAccess::IAppCapabilityStatics;
 using ABI::Windows::Security::Authorization::AppCapabilityAccess::IAppCapabilityAccessChangedEventArgs;
 using Microsoft::WRL::Callback;
 using Microsoft::WRL::ComPtr;
@@ -61,6 +62,7 @@ public:
       return;
     }
 
+    // TODO - use the helper function from GetWifiControlAccess()
     ComPtr<IAppCapability> appCapability =
           CreateFromActivationFactory<IAppCapability>(L"11c7ccb6-c74f-50a3-b960-88008767d939");
 //          CreateFromActivationFactory<IAppCapability>(InterfaceName_Windows_Security_Authorization_AppCapabilityAccess_IAppCapability);
@@ -128,15 +130,15 @@ already_AddRefed<OpenSettingsPromise::Private> OpenWindowsLocationSettings() {
 
 static Maybe<ABI::Windows::Security::Authorization::AppCapabilityAccess::AppCapabilityAccessStatus> GetWifiControlAccess() {
   using ABI::Windows::Security::Authorization::AppCapabilityAccess::IAppCapabilityStatics;
-  ComPtr<IAppCapabilityStatics> appCapabilityStatics =
-      CreateFromActivationFactory<IAppCapabilityStatics>(L"4c49d915-8a2a-4295-9437-2df7c396aff4");
-//      CreateFromActivationFactory<IAppCapabilityStatics>(InterfaceName_Windows_Security_Authorization_AppCapabilityAccess_IAppCapability);
+  ComPtr<IAppCapabilityStatics> appCapabilityStatics = CreateFromActivationFactory<
+      IAppCapabilityStatics>(
+      RuntimeClass_Windows_Security_Authorization_AppCapabilityAccess_AppCapability);
   NS_ENSURE_TRUE(appCapabilityStatics, Nothing());
 
   using ABI::Windows::System::IUserStatics2;
   ComPtr<IUserStatics2> userStatics =
-      CreateFromActivationFactory<IUserStatics2>(L"74a37e11-2eb5-4487-b0d5-2c6790e013e9");
-//      CreateFromActivationFactory<IUserStatics2>(InterfaceName_Windows_System_IUserStatics2);
+      CreateFromActivationFactory<IUserStatics2>(
+          RuntimeClass_Windows_System_User);
   NS_ENSURE_TRUE(userStatics, Nothing());
 
   using ABI::Windows::System::IUser;
@@ -154,6 +156,7 @@ static Maybe<ABI::Windows::Security::Authorization::AppCapabilityAccess::AppCapa
     return Nothing();
   }
   NS_ENSURE_TRUE(appCapability, Nothing());
+  // TODO - extract this up to here as a helper function
 
   using ABI::Windows::Security::Authorization::AppCapabilityAccess::AppCapabilityAccessStatus;
   AppCapabilityAccessStatus status;
@@ -201,10 +204,48 @@ PresentSystemSettings(BrowsingContext* aBC,
         promise->MaybeReject(NS_ERROR_FAILURE);
         return false;
       }
-      ComPtr<IAppCapability> appCapability =
-          CreateFromActivationFactory<IAppCapability>(L"11c7ccb6-c74f-50a3-b960-88008767d939");
-//          CreateFromActivationFactory<IAppCapability>(InterfaceName_Windows_Security_Authorization_AppCapabilityAccess_IAppCapability);
-      NS_ENSURE_TRUE(appCapability, false);
+      // TODO - use the helper function from GetWifiControlAccess()
+      ComPtr<IAppCapabilityStatics> appCapabilityStatics = CreateFromActivationFactory<
+          IAppCapabilityStatics>(
+          RuntimeClass_Windows_Security_Authorization_AppCapabilityAccess_AppCapability);
+      if (!appCapabilityStatics) {
+        promise->MaybeReject(NS_ERROR_FAILURE);
+        return false;
+      }
+
+      using ABI::Windows::System::IUserStatics2;
+      ComPtr<IUserStatics2> userStatics =
+          CreateFromActivationFactory<IUserStatics2>(
+              RuntimeClass_Windows_System_User);
+      if (!userStatics) {
+        promise->MaybeReject(NS_ERROR_FAILURE);
+        return false;
+      }
+
+      using ABI::Windows::System::IUser;
+      RefPtr<IUser> user;
+      HRESULT hr = userStatics->GetDefault(getter_AddRefs(user));
+      if (FAILED(hr)) {
+        promise->MaybeReject(NS_ERROR_FAILURE);
+        return false;
+      }
+      if (!user) {
+        promise->MaybeReject(NS_ERROR_FAILURE);
+        return false;
+      }
+
+      RefPtr<IAppCapability> appCapability;
+      hr = appCapabilityStatics->CreateWithProcessIdForUser(
+          user, HStringReference(L"wifiControl").Get(), ::GetCurrentProcessId(), getter_AddRefs(appCapability));
+      if (FAILED(hr)) {
+        promise->MaybeReject(NS_ERROR_FAILURE);
+        return false;
+      }
+      if (!appCapability) {
+        promise->MaybeReject(NS_ERROR_FAILURE);
+        return false;
+      }
+
       EventRegistrationToken token{};
 
       using ABI::Windows::Foundation::ITypedEventHandler;
