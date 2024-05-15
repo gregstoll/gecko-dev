@@ -126,47 +126,61 @@ already_AddRefed<OpenSettingsPromise::Private> OpenWindowsLocationSettings() {
 
 //-----------------------------------------------------------------------------
 
-bool SystemWillPromptForPermissionHint() {
+static Maybe<ABI::Windows::Security::Authorization::AppCapabilityAccess::AppCapabilityAccessStatus> GetWifiControlAccess() {
   using ABI::Windows::Security::Authorization::AppCapabilityAccess::IAppCapabilityStatics;
   ComPtr<IAppCapabilityStatics> appCapabilityStatics =
       CreateFromActivationFactory<IAppCapabilityStatics>(L"4c49d915-8a2a-4295-9437-2df7c396aff4");
 //      CreateFromActivationFactory<IAppCapabilityStatics>(InterfaceName_Windows_Security_Authorization_AppCapabilityAccess_IAppCapability);
-  NS_ENSURE_TRUE(appCapabilityStatics, false);
+  NS_ENSURE_TRUE(appCapabilityStatics, Nothing());
 
   using ABI::Windows::System::IUserStatics2;
   ComPtr<IUserStatics2> userStatics =
       CreateFromActivationFactory<IUserStatics2>(L"74a37e11-2eb5-4487-b0d5-2c6790e013e9");
 //      CreateFromActivationFactory<IUserStatics2>(InterfaceName_Windows_System_IUserStatics2);
-  NS_ENSURE_TRUE(userStatics, false);
+  NS_ENSURE_TRUE(userStatics, Nothing());
 
   using ABI::Windows::System::IUser;
   RefPtr<IUser> user;
   HRESULT hr = userStatics->GetDefault(getter_AddRefs(user));
   if (FAILED(hr)) {
-    return false;
+    return Nothing();
   }
-  NS_ENSURE_TRUE(user, false);
+  NS_ENSURE_TRUE(user, Nothing());
 
   RefPtr<IAppCapability> appCapability;
   hr = appCapabilityStatics->CreateWithProcessIdForUser(
       user, HStringReference(L"wifiControl").Get(), ::GetCurrentProcessId(), getter_AddRefs(appCapability));
   if (FAILED(hr)) {
-    return false;
+    return Nothing();
   }
-  NS_ENSURE_TRUE(appCapability, false);
+  NS_ENSURE_TRUE(appCapability, Nothing());
 
   using ABI::Windows::Security::Authorization::AppCapabilityAccess::AppCapabilityAccessStatus;
   AppCapabilityAccessStatus status;
   hr = appCapability->CheckAccess(&status);
   if (FAILED(hr)) {
-    return false;
+    return Nothing();
   }
-  return status == AppCapabilityAccessStatus::AppCapabilityAccessStatus_UserPromptRequired;
+  return Some(status);
+}
+
+/* static */
+bool SystemWillPromptForPermissionHint() {
+  auto wifiAccess = GetWifiControlAccess();
+  return wifiAccess ==
+         mozilla::Some(ABI::Windows::Security::Authorization::
+                           AppCapabilityAccess::AppCapabilityAccessStatus::
+                               AppCapabilityAccessStatus_UserPromptRequired);
 }
 
 bool LocationIsPermittedHint() {
-  // TODO:
-  return true;
+  auto wifiAccess = GetWifiControlAccess();
+  // This API wasn't available on earlier versions of Windows,
+  // so a failure to get the result means that location is permitted.
+  return wifiAccess.isNothing() ||
+         *wifiAccess ==
+             ABI::Windows::Security::Authorization::AppCapabilityAccess::
+                 AppCapabilityAccessStatus::AppCapabilityAccessStatus_Allowed;
 }
 
 already_AddRefed<LocationSettingsListener>
