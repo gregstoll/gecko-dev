@@ -9,10 +9,12 @@
 #include "GeolocationSystem.h"
 #include "mozilla/ClearOnShutdown.h"
 #include "mozilla/CycleCollectedJSContext.h"  // for nsAutoMicroTask
+#include "mozilla/dom/BrowserChild.h"
 #include "mozilla/dom/ContentChild.h"
 #include "mozilla/dom/PermissionMessageUtils.h"
 #include "mozilla/dom/GeolocationPositionError.h"
 #include "mozilla/dom/GeolocationPositionErrorBinding.h"
+#include "mozilla/ipc/MessageChannel.h"
 #include "mozilla/Preferences.h"
 #include "mozilla/Services.h"
 #include "mozilla/StaticPrefs_geo.h"
@@ -1361,7 +1363,7 @@ void Geolocation::NotifyAllowedRequest(nsGeolocationRequest* aRequest) {
   }
 }
 
-bool Geolocation::RegisterRequestWithPrompt(nsGeolocationRequest* request) {
+/* static */ bool Geolocation::RegisterRequestWithPrompt(nsGeolocationRequest* request) {
   nsIEventTarget* target = GetMainThreadSerialEventTarget();
   ContentPermissionRequestBase::PromptResult pr = request->CheckPromptPrefs();
   if (pr == ContentPermissionRequestBase::PromptResult::Granted) {
@@ -1380,28 +1382,60 @@ bool Geolocation::RegisterRequestWithPrompt(nsGeolocationRequest* request) {
   return true;
 }
 
-bool Geolocation::RequestIfPermitted(nsGeolocationRequest* request) {
-  // If the system will prompt for geolocation access then tell the user they
-  // will have to grant permission twice.
+/* static */ mozilla::dom::geolocation::LocationOSPermission
+Geolocation::GetLocationOSPermission() {
   if (mozilla::dom::geolocation::SystemWillPromptForPermissionHint()) {
-    request->SetSystemWillRequestPermission();
-    return RegisterRequestWithPrompt(request);
+    return mozilla::dom::geolocation::LocationOSPermission::
+        eSystemWillPromptForPermission;
   }
 
-  // If location access is already permitted by OS then we only need to
-  // ask the user.
   if (mozilla::dom::geolocation::LocationIsPermittedHint()) {
-    // DLP: TEST:
-      request->SetNeedsSystemSetting();
-
-    return RegisterRequestWithPrompt(request);
+    return mozilla::dom::geolocation::LocationOSPermission::
+        eLocationIsPermitted;
   }
 
   // Tell the user that they will also need to enable location in system
   // settings, and (if possible) open the settings page for them if they
   // approve location access.
-  request->SetNeedsSystemSetting();
-  return RegisterRequestWithPrompt(request);
+  return mozilla::dom::geolocation::LocationOSPermission::eLocationNotPermitted;
+}
+
+bool Geolocation::RequestIfPermitted(nsGeolocationRequest* request) {
+  if (auto* contentChild = ContentChild::GetSingleton()) {
+    contentChild->SendGetGeolocationOSPermission(
+        [request = RefPtr{request}](auto aPermission) {
+          switch (aPermission) {
+            case mozilla::dom::geolocation::LocationOSPermission::
+                eSystemWillPromptForPermission:
+              // If the system will prompt for geolocation access then tell the
+              // user they will have to grant permission twice.
+              request->SetSystemWillRequestPermission();
+              break;
+            case mozilla::dom::geolocation::LocationOSPermission::
+                eLocationIsPermitted:
+              // If location access is already permitted by OS then we only need
+              // to ask the user.
+              break;
+            case mozilla::dom::geolocation::LocationOSPermission::
+                eLocationNotPermitted:
+              // Tell the user that they will also need to enable location in
+              // system settings, and (if possible) open the settings page for
+              // them if they approve location access.
+              request->SetNeedsSystemSetting();
+              break;
+            default:
+              MOZ_ASSERT_UNREACHABLE("unexpected LocationOSPermission value");
+              request->SetNeedsSystemSetting();
+              break;
+          }
+          RegisterRequestWithPrompt(request);
+        },
+        [](mozilla::ipc::ResponseRejectReason aReason) {
+          NS_WARNING("Got reject response from GetGeolocationOSPermission");
+        });
+    return true;
+  }
+  return false;
 }
 
 JSObject* Geolocation::WrapObject(JSContext* aCtx,

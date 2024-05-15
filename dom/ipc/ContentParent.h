@@ -1384,6 +1384,9 @@ class ContentParent final : public PContentParent,
   mozilla::ipc::IPCResult RecvGetSystemIcon(nsIURI* aURI,
                                             GetSystemIconResolver&& aResolver);
 
+  mozilla::ipc::IPCResult RecvGetGeolocationOSPermission(
+      GetGeolocationOSPermissionResolver&& aResolver);
+
 #ifdef FUZZING_SNAPSHOT
   mozilla::ipc::IPCResult RecvSignalFuzzingReady();
 #endif

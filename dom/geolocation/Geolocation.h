@@ -22,6 +22,7 @@
 
 #include "GeolocationPosition.h"
 #include "GeolocationCoordinates.h"
+#include "GeolocationIPCUtils.h"
 #include "nsIDOMGeoPosition.h"
 #include "nsIDOMGeoPositionCallback.h"
 #include "nsIDOMGeoPositionErrorCallback.h"
@@ -179,6 +180,7 @@ class Geolocation final : public nsIGeolocationUpdate, public nsWrapperCache {
   // null.
   static already_AddRefed<Geolocation> NonWindowSingleton();
 
+  static geolocation::LocationOSPermission GetLocationOSPermission();
  private:
   ~Geolocation();
 
@@ -194,7 +196,7 @@ class Geolocation final : public nsIGeolocationUpdate, public nsWrapperCache {
                         UniquePtr<PositionOptions>&& aOptions,
                         CallerType aCallerType, ErrorResult& aRv);
 
-  bool RegisterRequestWithPrompt(nsGeolocationRequest* request);
+  static bool RegisterRequestWithPrompt(nsGeolocationRequest* request);
 
   // Check if clearWatch is already called
   bool IsAlreadyCleared(nsGeolocationRequest* aRequest);
@@ -208,7 +210,7 @@ class Geolocation final : public nsIGeolocationUpdate, public nsWrapperCache {
   bool IsFullyActiveOrChrome();
 
   // Initates the asynchronous process of filling the request.
-  bool RequestIfPermitted(nsGeolocationRequest* request);
+  static bool RequestIfPermitted(nsGeolocationRequest* request);
 
   // Two callback arrays.  The first |mPendingCallbacks| holds objects for only
   // one callback and then they are released/removed from the array.  The second

@@ -8230,6 +8230,12 @@ IPCResult ContentParent::RecvGetSystemIcon(nsIURI* aURI,
 #endif
 }
 
+IPCResult ContentParent::RecvGetGeolocationOSPermission(
+    GetGeolocationOSPermissionResolver&& aResolver) {
+  aResolver(Geolocation::GetLocationOSPermission());
+  return IPC_OK();
+}
+
 #ifdef FUZZING_SNAPSHOT
 IPCResult ContentParent::RecvSignalFuzzingReady() {
   // No action needed here, we already observe this message directly
