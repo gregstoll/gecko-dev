@@ -21,7 +21,7 @@ bool LocationIsPermittedHint() {
 
 already_AddRefed<LocationSettingsListener>
 PresentSystemSettings(BrowsingContext* aBC,
-                      mozilla::dom::Promise* aSystemPermissionPromise) {
+                      RefPtr<mozilla::dom::Promise> aSystemPermissionPromise) {
   MOZ_ASSERT(false, "Should not warn user of need for system location permission since we cannot open system settings on this platform.");
   aSystemPermissionPromise->MaybeResolve(kSystemPermissionGranted);
   return nullptr;

@@ -76,9 +76,9 @@ bool LocationIsPermittedHint();
  * to cancel listening for the settings change.  This method will always
  * reject the given promise whenever it returns null.
  */
-already_AddRefed<LocationSettingsListener>
-PresentSystemSettings(BrowsingContext* aBC,
-                      mozilla::dom::Promise* aSystemPermissionPromise);
+already_AddRefed<LocationSettingsListener> PresentSystemSettings(
+    BrowsingContext* aBC,
+    RefPtr<mozilla::MozPromise<uint32_t, nsresult, true>::Private> aPromise);
 
 }  // namespace mozilla::dom
 

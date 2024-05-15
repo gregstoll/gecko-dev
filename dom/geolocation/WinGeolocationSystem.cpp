@@ -188,10 +188,10 @@ bool LocationIsPermittedHint() {
 
 already_AddRefed<LocationSettingsListener>
 PresentSystemSettings(BrowsingContext* aBC,
-                      mozilla::dom::Promise* aSystemPermissionPromise) {
+    RefPtr<mozilla::MozPromise<uint32_t, nsresult, true>::Private> aPromise) {
   RefPtr<OpenSettingsPromise::Private> openPromise = OpenWindowsLocationSettings();
   if (NS_WARN_IF(!openPromise)) {
-    aSystemPermissionPromise->MaybeReject(NS_ERROR_FAILURE);
+    aPromise->Reject(NS_ERROR_FAILURE, __func__);
     return nullptr;
   }
 
@@ -199,9 +199,9 @@ PresentSystemSettings(BrowsingContext* aBC,
       new WindowsLocationSettingsListener(openPromise);
   openPromise->Then(
     GetCurrentSerialEventTarget(), __func__,
-    [promise = RefPtr{aSystemPermissionPromise}, locationListener](bool aWasOpened){
+    [promise = RefPtr{aPromise}, locationListener](bool aWasOpened){
       if (!aWasOpened) {
-        promise->MaybeReject(NS_ERROR_FAILURE);
+        promise->Reject(NS_ERROR_FAILURE, __func__);
         return false;
       }
       // TODO - use the helper function from GetWifiControlAccess()
@@ -209,7 +209,7 @@ PresentSystemSettings(BrowsingContext* aBC,
           IAppCapabilityStatics>(
           RuntimeClass_Windows_Security_Authorization_AppCapabilityAccess_AppCapability);
       if (!appCapabilityStatics) {
-        promise->MaybeReject(NS_ERROR_FAILURE);
+        promise->Reject(NS_ERROR_FAILURE, __func__);
         return false;
       }
 
@@ -218,7 +218,7 @@ PresentSystemSettings(BrowsingContext* aBC,
           CreateFromActivationFactory<IUserStatics2>(
               RuntimeClass_Windows_System_User);
       if (!userStatics) {
-        promise->MaybeReject(NS_ERROR_FAILURE);
+        promise->Reject(NS_ERROR_FAILURE, __func__);
         return false;
       }
 
@@ -226,11 +226,11 @@ PresentSystemSettings(BrowsingContext* aBC,
       RefPtr<IUser> user;
       HRESULT hr = userStatics->GetDefault(getter_AddRefs(user));
       if (FAILED(hr)) {
-        promise->MaybeReject(NS_ERROR_FAILURE);
+        promise->Reject(NS_ERROR_FAILURE, __func__);
         return false;
       }
       if (!user) {
-        promise->MaybeReject(NS_ERROR_FAILURE);
+        promise->Reject(NS_ERROR_FAILURE, __func__);
         return false;
       }
 
@@ -238,11 +238,11 @@ PresentSystemSettings(BrowsingContext* aBC,
       hr = appCapabilityStatics->CreateWithProcessIdForUser(
           user, HStringReference(L"wifiControl").Get(), ::GetCurrentProcessId(), getter_AddRefs(appCapability));
       if (FAILED(hr)) {
-        promise->MaybeReject(NS_ERROR_FAILURE);
+        promise->Reject(NS_ERROR_FAILURE, __func__);
         return false;
       }
       if (!appCapability) {
-        promise->MaybeReject(NS_ERROR_FAILURE);
+        promise->Reject(NS_ERROR_FAILURE, __func__);
         return false;
       }
 
@@ -251,10 +251,13 @@ PresentSystemSettings(BrowsingContext* aBC,
       using ABI::Windows::Foundation::ITypedEventHandler;
       using AccessChangedHandler = ITypedEventHandler<AppCapability*, AppCapabilityAccessChangedEventArgs*>;
 
+      // TODO this is a leak
+      // but the lambda expression below doesn't seem to AddRef() on promise?
+      promise->AddRef();
       appCapability->add_AccessChanged(Callback<AccessChangedHandler>(
         [promise, locationListener](IAppCapability*, IAppCapabilityAccessChangedEventArgs*) {
           if (LocationIsPermittedHint()) {
-            promise->MaybeResolve(kSystemPermissionGranted);
+            promise->Resolve(kSystemPermissionGranted,  __func__);
             locationListener->Stop();
           }
           return S_OK;
@@ -263,8 +266,8 @@ PresentSystemSettings(BrowsingContext* aBC,
       locationListener->SetToken(token);
       return token.value != 0;
     },
-    [promise = RefPtr{aSystemPermissionPromise}](nsresult){
-      promise->MaybeReject(NS_ERROR_FAILURE);
+    [promise = RefPtr{aPromise}](nsresult){
+      promise->Reject(NS_ERROR_FAILURE, __func__);
     });
 
   return locationListener.forget();

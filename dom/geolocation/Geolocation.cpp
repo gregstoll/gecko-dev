@@ -293,15 +293,22 @@ class SystemPermissionResolverTemp : public PromiseNativeHandler {
   MOZ_CAN_RUN_SCRIPT_BOUNDARY
   void ResolvedCallback(JSContext* aCx, JS::Handle<JS::Value> aValue,
                         ErrorResult& aRv) override {
-    mSystemSettingsListener = nullptr;
-    mResolver(Nothing());
+    Resolve();
   }
 
   MOZ_CAN_RUN_SCRIPT_BOUNDARY
   void RejectedCallback(JSContext* aCx, JS::Handle<JS::Value> aValue,
                         ErrorResult& aRv) override {
-    mSystemSettingsListener = nullptr;
-    mResolver(Nothing());
+    Resolve();
+  }
+
+  MOZ_CAN_RUN_SCRIPT_BOUNDARY void Resolve() {
+    // TODO - needs to be threadsafe?
+    if (!mHaveResolved) {
+      mHaveResolved = true;
+      mSystemSettingsListener = nullptr;
+      mResolver(Nothing());
+    }
   }
 
  private:
@@ -311,6 +318,7 @@ class SystemPermissionResolverTemp : public PromiseNativeHandler {
       mResolver;
   RefPtr<mozilla::dom::geolocation::LocationSettingsListener>
       mSystemSettingsListener;
+  bool mHaveResolved = false;
 };
 NS_IMPL_ISUPPORTS0(SystemPermissionResolverTemp)
 
@@ -416,18 +424,24 @@ nsresult nsGeolocationRequest::RerunAllow(BrowsingContext* aBC) {
       nullptr, nullptr, nullptr, nullptr, false, JS::UndefinedHandleValue,
       getter_AddRefs(systemPermissionPromise));
   NS_ENSURE_SUCCESS(rv, rv);
+  denyRequest.release();
 
   // Open the system settings and either resolve mSystemPermissionPromise when
   // permission is given (with a non-zero value) or when the dialog above is
   // canceled (with a value of zero).  Will reject promise on failure.
-  // TOOD return value?
+  // TODO - this promise stuff is a mess
+  auto systemSettingsPromise =
+      MakeRefPtr<MozPromise<uint32_t, nsresult, true>::Private>(__func__);
   RefPtr<mozilla::dom::geolocation::LocationSettingsListener> listener =
       mozilla::dom::geolocation::PresentSystemSettings(aBrowsingContext,
-                                                       systemPermissionPromise);
-  systemPermissionPromise->AppendNativeHandler(
-      new SystemPermissionResolverTemp(aResolver, std::move(listener)));
-
-  denyRequest.release();
+                                                       systemSettingsPromise);
+  auto resolver =
+      MakeRefPtr<SystemPermissionResolverTemp>(aResolver, std::move(listener));
+  systemPermissionPromise->AppendNativeHandler(resolver);
+  systemSettingsPromise->Then(
+      GetMainThreadSerialEventTarget(), __func__,
+      [resolver]() { resolver->Resolve(); },
+      [resolver]() { resolver->Resolve(); });
 
   return NS_OK;
 }
@@ -458,10 +472,25 @@ nsGeolocationRequest::Allow(JS::Handle<JS::Value> aChoices) {
     RefPtr<BrowsingContext> browsingContext =
         browserChild->GetBrowsingContext();
 
-    // TODO
     cpc->SendReallowGeolocationRequestWithSystemPermissionOrCancel(
-        browsingContext, [](Maybe<uint16_t> aResult) {},
-        [](mozilla::ipc::ResponseRejectReason aReason) {});
+        browsingContext,
+        [self = RefPtr{this}, browsingContext](Maybe<uint16_t> aResult) {
+          // We could not RerunAllow if the dialog were canceled instead of
+          // permission being approved but that would mean that there was no way
+          // for a user to circumvent the permissions check in case it goes bad
+          // (e.g. if an API incorrectly reports all required permissions were
+          // given).  Instead, harmlessly re-run Allow.  If permission was
+          // really denied, that will result in PERMISSION_DENIED anyway. Note
+          // that we need this behavior anyway, to handle Windows 10 and 11
+          // installs that haven't been updated in a few years and are therefore
+          // missing the settings listeners.
+          self->RerunAllow(browsingContext);
+      },
+        [self = RefPtr{this}, browsingContext](mozilla::ipc::ResponseRejectReason aReason) {
+          // See comment in resolve handler for why we RerunAllow instead of
+          // rejecting with PERMISSION_DENIED here.
+          self->RerunAllow(browsingContext);
+      });
     return NS_OK;
   }
 
