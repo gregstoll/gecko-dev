@@ -252,6 +252,16 @@ class PermissionPrompt {
   }
 
   /**
+   * The hint text to show to the user in the PopupNotification, see
+   * `PopupNotifications_show` in PopupNotifications.sys.mjs.
+   *
+   * @return {string}
+   */
+  get hintText() {
+    return undefined;
+  }
+
+  /**
    * Provides the preferred name to use in the permission popups,
    * based on the principal URI (the URI.hostPort for any URI scheme
    * besides the moz-extension one which should default to the
@@ -616,6 +626,7 @@ class PermissionPrompt {
       return false;
     };
 
+    options.hintText = this.hintText;
     // Post-prompts show up as dismissed.
     options.dismissed = postPrompt;
 
@@ -813,34 +824,22 @@ class GeolocationPermissionPrompt extends PermissionPromptForRequest {
       );
     }
 
+    return lazy.gBrowserBundle.formatStringFromName(
+      "geolocation.shareWithSite4",
+      ["<>"]
+    );
+  }
+
+  get hintText() {
     if (this.systemWillRequestPermission) {
-      return lazy.gBrowserBundle.formatStringFromName(
-        "geolocation.shareWithSite4",
-        [
-          "<>",
-          "<p><font color='red'>" +
-            lazy.gBrowserBundle.GetStringFromName("geolocation.system_will_request_permission") +
-            "</font>"
-        ]
-      );
+      return lazy.gBrowserBundle.GetStringFromName("geolocation.system_will_request_permission");
     }
 
     if (this.needsSystemSetting) {
-      return lazy.gBrowserBundle.formatStringFromName(
-        "geolocation.shareWithSite4",
-        [
-          "<>",
-          "<p><font color='red'>" +
-            lazy.gBrowserBundle.GetStringFromName("geolocation.needs_system_setting") +
-            "</font>"
-        ]
-      );
+      return lazy.gBrowserBundle.GetStringFromName("geolocation.needs_system_setting");
     }
 
-    return lazy.gBrowserBundle.formatStringFromName(
-      "geolocation.shareWithSite4",
-      ["<>", ""]
-    );
+    return undefined;
   }
 
   get promptActions() {
@@ -956,7 +955,7 @@ class XRPermissionPrompt extends PermissionPromptForRequest {
     }
 
     return lazy.gBrowserBundle.formatStringFromName("xr.shareWithSite4", [
-      "<>",
+      "<>"
     ]);
   }
 
