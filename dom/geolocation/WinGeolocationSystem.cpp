@@ -34,6 +34,38 @@ ComPtr<TypeToCreate> CreateFromActivationFactory(const wchar_t* aNamespace) {
   return newObject;
 }
 
+RefPtr<
+    ABI::Windows::Security::Authorization::AppCapabilityAccess::IAppCapability>
+  GetWifiControlAppCapability() {
+  ComPtr<IAppCapabilityStatics> appCapabilityStatics = CreateFromActivationFactory<
+      IAppCapabilityStatics>(
+      RuntimeClass_Windows_Security_Authorization_AppCapabilityAccess_AppCapability);
+  NS_ENSURE_TRUE(appCapabilityStatics, nullptr);
+
+  using ABI::Windows::System::IUserStatics2;
+  ComPtr<IUserStatics2> userStatics =
+      CreateFromActivationFactory<IUserStatics2>(
+          RuntimeClass_Windows_System_User);
+  NS_ENSURE_TRUE(userStatics, nullptr);
+
+  using ABI::Windows::System::IUser;
+  RefPtr<IUser> user;
+  HRESULT hr = userStatics->GetDefault(getter_AddRefs(user));
+  if (FAILED(hr)) {
+    return nullptr;
+  }
+  NS_ENSURE_TRUE(user, nullptr);
+
+  RefPtr<IAppCapability> appCapability;
+  hr = appCapabilityStatics->CreateWithProcessIdForUser(
+      user, HStringReference(L"wifiControl").Get(), ::GetCurrentProcessId(), getter_AddRefs(appCapability));
+  if (FAILED(hr)) {
+    return nullptr;
+  }
+  NS_ENSURE_TRUE(appCapability, nullptr);
+  return appCapability;
+}
+
 class LocationSettingsListener final : public nsISupports {
 public:
   NS_DECL_ISUPPORTS
@@ -54,10 +86,7 @@ public:
       return;
     }
 
-    // TODO - use the helper function from GetWifiControlAccess()
-    ComPtr<IAppCapability> appCapability =
-          CreateFromActivationFactory<IAppCapability>(L"11c7ccb6-c74f-50a3-b960-88008767d939");
-//          CreateFromActivationFactory<IAppCapability>(InterfaceName_Windows_Security_Authorization_AppCapabilityAccess_IAppCapability);
+    RefPtr<IAppCapability> appCapability = GetWifiControlAppCapability();
     if (NS_WARN_IF(!appCapability)) {
       return;
     }
@@ -124,37 +153,12 @@ already_AddRefed<OpenSettingsPromise::Private> OpenWindowsLocationSettings() {
 
 static Maybe<ABI::Windows::Security::Authorization::AppCapabilityAccess::AppCapabilityAccessStatus> GetWifiControlAccess() {
   using ABI::Windows::Security::Authorization::AppCapabilityAccess::IAppCapabilityStatics;
-  ComPtr<IAppCapabilityStatics> appCapabilityStatics = CreateFromActivationFactory<
-      IAppCapabilityStatics>(
-      RuntimeClass_Windows_Security_Authorization_AppCapabilityAccess_AppCapability);
-  NS_ENSURE_TRUE(appCapabilityStatics, Nothing());
-
-  using ABI::Windows::System::IUserStatics2;
-  ComPtr<IUserStatics2> userStatics =
-      CreateFromActivationFactory<IUserStatics2>(
-          RuntimeClass_Windows_System_User);
-  NS_ENSURE_TRUE(userStatics, Nothing());
-
-  using ABI::Windows::System::IUser;
-  RefPtr<IUser> user;
-  HRESULT hr = userStatics->GetDefault(getter_AddRefs(user));
-  if (FAILED(hr)) {
-    return Nothing();
-  }
-  NS_ENSURE_TRUE(user, Nothing());
-
-  RefPtr<IAppCapability> appCapability;
-  hr = appCapabilityStatics->CreateWithProcessIdForUser(
-      user, HStringReference(L"wifiControl").Get(), ::GetCurrentProcessId(), getter_AddRefs(appCapability));
-  if (FAILED(hr)) {
-    return Nothing();
-  }
+  auto appCapability = GetWifiControlAppCapability();
   NS_ENSURE_TRUE(appCapability, Nothing());
-  // TODO - extract this up to here as a helper function
 
   using ABI::Windows::Security::Authorization::AppCapabilityAccess::AppCapabilityAccessStatus;
   AppCapabilityAccessStatus status;
-  hr = appCapability->CheckAccess(&status);
+  HRESULT hr = appCapability->CheckAccess(&status);
   if (FAILED(hr)) {
     return Nothing();
   }
@@ -207,38 +211,7 @@ PresentSystemSettings() {
       if (!aWasOpened) {
         return false;
       }
-      // TODO - use the helper function from GetWifiControlAccess()
-      ComPtr<IAppCapabilityStatics> appCapabilityStatics = CreateFromActivationFactory<
-          IAppCapabilityStatics>(
-          RuntimeClass_Windows_Security_Authorization_AppCapabilityAccess_AppCapability);
-      if (!appCapabilityStatics) {
-        return false;
-      }
-
-      using ABI::Windows::System::IUserStatics2;
-      ComPtr<IUserStatics2> userStatics =
-          CreateFromActivationFactory<IUserStatics2>(
-              RuntimeClass_Windows_System_User);
-      if (!userStatics) {
-        return false;
-      }
-
-      using ABI::Windows::System::IUser;
-      RefPtr<IUser> user;
-      HRESULT hr = userStatics->GetDefault(getter_AddRefs(user));
-      if (FAILED(hr)) {
-        return false;
-      }
-      if (!user) {
-        return false;
-      }
-
-      RefPtr<IAppCapability> appCapability;
-      hr = appCapabilityStatics->CreateWithProcessIdForUser(
-          user, HStringReference(L"wifiControl").Get(), ::GetCurrentProcessId(), getter_AddRefs(appCapability));
-      if (FAILED(hr)) {
-        return false;
-      }
+      RefPtr<IAppCapability> appCapability = GetWifiControlAppCapability();
       if (!appCapability) {
         return false;
       }
