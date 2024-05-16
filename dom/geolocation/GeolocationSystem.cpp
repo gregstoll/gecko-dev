@@ -9,8 +9,6 @@
 
 namespace mozilla::dom::geolocation {
 
-NS_IMPL_ISUPPORTS0(LocationSettingsListener)
-
 bool SystemWillPromptForPermissionHint() {
   return false;
 }
@@ -19,11 +17,9 @@ bool LocationIsPermittedHint() {
   return true;
 }
 
-already_AddRefed<LocationSettingsListener>
-PresentSystemSettings(BrowsingContext* aBC,
-                      RefPtr<mozilla::dom::Promise> aSystemPermissionPromise) {
+already_AddRefed<OpenSettingsPromise::Private>
+PresentSystemSettings() {
   MOZ_ASSERT(false, "Should not warn user of need for system location permission since we cannot open system settings on this platform.");
-  aSystemPermissionPromise->MaybeResolve(kSystemPermissionGranted);
   return nullptr;
 }
 

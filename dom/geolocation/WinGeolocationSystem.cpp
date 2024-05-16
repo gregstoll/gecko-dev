@@ -24,10 +24,6 @@ using Microsoft::WRL::Callback;
 using Microsoft::WRL::ComPtr;
 using Microsoft::WRL::Wrappers::HStringReference;
 
-using OpenSettingsPromise = MozPromise<bool, nsresult, true>;
-
-NS_IMPL_ISUPPORTS0(LocationSettingsListener)
-
 namespace {
 
 /* static */
@@ -38,17 +34,13 @@ ComPtr<TypeToCreate> CreateFromActivationFactory(const wchar_t* aNamespace) {
   return newObject;
 }
 
-// Allows callers of PresentSystemSettings to stop the AccessChanged listener
-// registered with Windows.
-class WindowsLocationSettingsListener final : public LocationSettingsListener {
+class LocationSettingsListener final : public nsISupports {
 public:
-  explicit WindowsLocationSettingsListener(OpenSettingsPromise::Private* aOpenPromise) :
-      mOpenPromise(aOpenPromise) {
-  }
+  NS_DECL_ISUPPORTS
 
   void SetToken(EventRegistrationToken aToken) { mToken = aToken; }
 
-  void Stop() override {
+  void Stop() {
     // If the promise to open system settings is still waiting, reject it.
     if (mOpenPromise) {
       mOpenPromise->Reject(NS_ERROR_FAILURE, __func__);
@@ -75,11 +67,13 @@ public:
   }
 
 protected:
-  virtual ~WindowsLocationSettingsListener() { Stop(); }
+  virtual ~LocationSettingsListener() { Stop(); }
 
   RefPtr<OpenSettingsPromise::Private> mOpenPromise;
   EventRegistrationToken mToken = {};
 };
+
+NS_IMPL_ISUPPORTS0(LocationSettingsListener)
 
 /* static */
 already_AddRefed<OpenSettingsPromise::Private> OpenWindowsLocationSettings() {
@@ -186,22 +180,31 @@ bool LocationIsPermittedHint() {
                  AppCapabilityAccessStatus::AppCapabilityAccessStatus_Allowed;
 }
 
-already_AddRefed<LocationSettingsListener>
-PresentSystemSettings(BrowsingContext* aBC,
-    RefPtr<mozilla::MozPromise<uint32_t, nsresult, true>::Private> aPromise) {
+already_AddRefed<OpenSettingsPromise::Private>
+PresentSystemSettings() {
   RefPtr<OpenSettingsPromise::Private> openPromise = OpenWindowsLocationSettings();
   if (NS_WARN_IF(!openPromise)) {
-    aPromise->Reject(NS_ERROR_FAILURE, __func__);
     return nullptr;
   }
 
-  RefPtr<WindowsLocationSettingsListener> locationListener =
-      new WindowsLocationSettingsListener(openPromise);
+  // We need two promises because openPromise is resolved when the settings
+  // window has opened and retPromise resolves when system permission is
+  // granted (and rejects when the user presses cancel in the modal in
+  // the Geolocation class).
+
+  // This creates a circular reference between openPromise and retPromise
+  // but this is ok because retPromise is guaranteed to be resolved or
+  // rejected by the caller (if not by us) and it rejects openPromise
+  // in either case. 
+  RefPtr<OpenSettingsPromise::Private> retPromise =
+      new OpenSettingsPromise::Private(__func__);
+
+  RefPtr<LocationSettingsListener> locationListener =
+      new LocationSettingsListener();
   openPromise->Then(
     GetCurrentSerialEventTarget(), __func__,
-    [promise = RefPtr{aPromise}, locationListener](bool aWasOpened){
+    [locationListener, retPromise](bool aWasOpened){
       if (!aWasOpened) {
-        promise->Reject(NS_ERROR_FAILURE, __func__);
         return false;
       }
       // TODO - use the helper function from GetWifiControlAccess()
@@ -209,7 +212,6 @@ PresentSystemSettings(BrowsingContext* aBC,
           IAppCapabilityStatics>(
           RuntimeClass_Windows_Security_Authorization_AppCapabilityAccess_AppCapability);
       if (!appCapabilityStatics) {
-        promise->Reject(NS_ERROR_FAILURE, __func__);
         return false;
       }
 
@@ -218,7 +220,6 @@ PresentSystemSettings(BrowsingContext* aBC,
           CreateFromActivationFactory<IUserStatics2>(
               RuntimeClass_Windows_System_User);
       if (!userStatics) {
-        promise->Reject(NS_ERROR_FAILURE, __func__);
         return false;
       }
 
@@ -226,11 +227,9 @@ PresentSystemSettings(BrowsingContext* aBC,
       RefPtr<IUser> user;
       HRESULT hr = userStatics->GetDefault(getter_AddRefs(user));
       if (FAILED(hr)) {
-        promise->Reject(NS_ERROR_FAILURE, __func__);
         return false;
       }
       if (!user) {
-        promise->Reject(NS_ERROR_FAILURE, __func__);
         return false;
       }
 
@@ -238,11 +237,9 @@ PresentSystemSettings(BrowsingContext* aBC,
       hr = appCapabilityStatics->CreateWithProcessIdForUser(
           user, HStringReference(L"wifiControl").Get(), ::GetCurrentProcessId(), getter_AddRefs(appCapability));
       if (FAILED(hr)) {
-        promise->Reject(NS_ERROR_FAILURE, __func__);
         return false;
       }
       if (!appCapability) {
-        promise->Reject(NS_ERROR_FAILURE, __func__);
         return false;
       }
 
@@ -251,13 +248,10 @@ PresentSystemSettings(BrowsingContext* aBC,
       using ABI::Windows::Foundation::ITypedEventHandler;
       using AccessChangedHandler = ITypedEventHandler<AppCapability*, AppCapabilityAccessChangedEventArgs*>;
 
-      // TODO this is a leak
-      // but the lambda expression below doesn't seem to AddRef() on promise?
-      promise->AddRef();
       appCapability->add_AccessChanged(Callback<AccessChangedHandler>(
-        [promise, locationListener](IAppCapability*, IAppCapabilityAccessChangedEventArgs*) {
+        [locationListener, retPromise](IAppCapability*, IAppCapabilityAccessChangedEventArgs*) {
           if (LocationIsPermittedHint()) {
-            promise->Resolve(kSystemPermissionGranted,  __func__);
+            retPromise->Resolve(kSystemPermissionGranted, __func__);
             locationListener->Stop();
           }
           return S_OK;
@@ -266,11 +260,28 @@ PresentSystemSettings(BrowsingContext* aBC,
       locationListener->SetToken(token);
       return token.value != 0;
     },
-    [promise = RefPtr{aPromise}](nsresult){
-      promise->Reject(NS_ERROR_FAILURE, __func__);
+    [locationListener, retPromise](nsresult){
+      locationListener->Stop();
+      retPromise->Resolve(kSystemPermissionGranted, __func__);
     });
 
-  return locationListener.forget();
+  retPromise->Then(
+    GetCurrentSerialEventTarget(), __func__,
+    [openPromise, locationListener](){
+      // We got system permission.  Nothing to do here. We reject the promise
+      // and stop the location listener solely as a hedge.  The reject should
+      // simply be ignored.
+      locationListener->Stop();
+      openPromise->Reject(NS_ERROR_FAILURE, __func__);
+    },
+    [openPromise, locationListener](){
+      // We were canceled or got an error.  Make sure we stop watching the
+      // system setting, and don't start listening if openPromise hasn't
+      // resolved yet.  (If it has then the call to Reject is ignored.)
+      locationListener->Stop();
+      openPromise->Reject(NS_ERROR_FAILURE, __func__);
+    });
+  return retPromise.forget();
 }
 
 }  // namespace mozilla::dom::geolocation

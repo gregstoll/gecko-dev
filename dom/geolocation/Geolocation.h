@@ -38,11 +38,16 @@ class nsGeolocationService;
 class nsGeolocationRequest;
 
 namespace mozilla::dom {
+class ContentParent;
+
 class Geolocation;
 using GeoPositionCallback =
     CallbackObjectHolder<PositionCallback, nsIDOMGeoPositionCallback>;
 using GeoPositionErrorCallback =
     CallbackObjectHolder<PositionErrorCallback, nsIDOMGeoPositionErrorCallback>;
+namespace geolocation {
+class LocationSettingsListener;
+}
 }  // namespace mozilla::dom
 
 struct CachedPositionAndAccuracy {
@@ -183,11 +188,12 @@ class Geolocation final : public nsIGeolocationUpdate, public nsWrapperCache {
 
   static geolocation::LocationOSPermission GetLocationOSPermission();
 
-  static MOZ_CAN_RUN_SCRIPT nsresult ReallowWithSystemPermissionOrCancel(
-      BrowsingContext* aBrowsingContext,
-      PContentParent::
-          ReallowGeolocationRequestWithSystemPermissionOrCancelResolver&&
-              aResolver);
+  using ParentRequestResolver =
+      PContentParent::ReallowGeolocationRequestWithSystemPermissionOrCancelResolver;
+
+  static MOZ_CAN_RUN_SCRIPT
+  void ReallowWithSystemPermissionOrCancel(
+      BrowsingContext* aBrowsingContext, ParentRequestResolver&& aResolver);
 
  private:
   ~Geolocation();

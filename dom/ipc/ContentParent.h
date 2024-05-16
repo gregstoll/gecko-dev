@@ -1387,7 +1387,7 @@ class ContentParent final : public PContentParent,
   mozilla::ipc::IPCResult RecvGetGeolocationOSPermission(
       GetGeolocationOSPermissionResolver&& aResolver);
 
-  mozilla::ipc::IPCResult
+  MOZ_CAN_RUN_SCRIPT_BOUNDARY mozilla::ipc::IPCResult
   RecvReallowGeolocationRequestWithSystemPermissionOrCancel(
       const MaybeDiscardedBrowsingContext& aBrowsingContext,
       ReallowGeolocationRequestWithSystemPermissionOrCancelResolver&&

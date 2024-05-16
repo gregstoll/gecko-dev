@@ -72,6 +72,7 @@ class nsIPrincipal;
 using mozilla::Unused;  // <snicker>
 using namespace mozilla;
 using namespace mozilla::dom;
+using namespace mozilla::dom::geolocation;
 
 class nsGeolocationRequest final : public ContentPermissionRequestBase,
                                    public nsIGeolocationUpdate,
@@ -164,11 +165,6 @@ class nsGeolocationRequest final : public ContentPermissionRequestBase,
   int32_t mWatchId;
   bool mShutdown;
   nsCOMPtr<nsIEventTarget> mMainThreadSerialEventTarget;
-
-  RefPtr<mozilla::dom::Promise> mSystemPermissionPromise;
-
-  // Listens for changes to location system setting.
-  RefPtr<mozilla::dom::geolocation::LocationSettingsListener> mSystemSettingsListener;
 
   // The system will present a dialog requesting permission so inform the user it's coming.
   bool mSystemWillRequestPermission;
@@ -278,179 +274,190 @@ nsGeolocationRequest::Cancel() {
   return NS_OK;
 }
 
-class SystemPermissionResolverTemp : public PromiseNativeHandler {
+class ParentRequestResolverHolder : public nsISupports {
+public:
   NS_DECL_ISUPPORTS
 
-  explicit SystemPermissionResolverTemp(
-      PContentParent::
-          ReallowGeolocationRequestWithSystemPermissionOrCancelResolver
-              aResolver,
-      RefPtr<mozilla::dom::geolocation::LocationSettingsListener>&&
-          aSystemSettingsListener)
-      : mResolver(aResolver),
-        mSystemSettingsListener(std::move(aSystemSettingsListener)) {}
+  explicit ParentRequestResolverHolder(Geolocation::ParentRequestResolver&& aResolver) :
+    mResolver(aResolver) {}
 
-  MOZ_CAN_RUN_SCRIPT_BOUNDARY
-  void ResolvedCallback(JSContext* aCx, JS::Handle<JS::Value> aValue,
-                        ErrorResult& aRv) override {
-    Resolve();
-  }
-
-  MOZ_CAN_RUN_SCRIPT_BOUNDARY
-  void RejectedCallback(JSContext* aCx, JS::Handle<JS::Value> aValue,
-                        ErrorResult& aRv) override {
-    Resolve();
-  }
-
-  MOZ_CAN_RUN_SCRIPT_BOUNDARY void Resolve() {
-    // TODO - needs to be threadsafe?
-    if (!mHaveResolved) {
-      mHaveResolved = true;
-      mSystemSettingsListener = nullptr;
-      mResolver(Nothing());
+  void Allowed() {
+    if (!mResolved) {
+      mResolver(Some(kSystemPermissionGranted));
+      mResolved = true;
     }
   }
 
- private:
-  ~SystemPermissionResolverTemp() = default;
+  void Rejected() {
+    if (!mResolved) {
+      mResolver(Some(kSystemPermissionCanceled));
+      mResolved = true;
+    }
+  }
 
-  PContentParent::ReallowGeolocationRequestWithSystemPermissionOrCancelResolver
-      mResolver;
-  RefPtr<mozilla::dom::geolocation::LocationSettingsListener>
-      mSystemSettingsListener;
-  bool mHaveResolved = false;
+private:
+  virtual ~ParentRequestResolverHolder() = default;
+
+  Geolocation::ParentRequestResolver mResolver;
+  bool mResolved = false;
 };
-NS_IMPL_ISUPPORTS0(SystemPermissionResolverTemp)
+
+NS_IMPL_ISUPPORTS0(ParentRequestResolverHolder);
 
 class SystemPermissionResolver : public PromiseNativeHandler {
+  using OpenSettingsPromise = geolocation::OpenSettingsPromise;
 public:
   NS_DECL_ISUPPORTS
 
   explicit SystemPermissionResolver(
-      nsGeolocationRequest* aRequest, BrowsingContext* aBC);
+      OpenSettingsPromise::Private* aSettingsPromise,
+      ParentRequestResolverHolder* aResolverHolder) :
+    mSettingsPromise(aSettingsPromise), mResolverHolder(aResolverHolder) {}
 
   MOZ_CAN_RUN_SCRIPT_BOUNDARY
   void ResolvedCallback(JSContext* aCx, JS::Handle<JS::Value> aValue,
                         ErrorResult& aRv) override {
-    RefPtr<nsGeolocationRequest> request = mRequest;
-    RefPtr<BrowsingContext> bc = mBrowsingContext;
-    // We could not RerunAllow if the dialog were canceled instead of
-    // permission being approved but that would mean that there was no way
-    // for a user to circumvent the permissions check in case it goes bad
-    // (e.g. if an API incorrectly reports all required permissions were
-    // given).  Instead, harmlessly re-run Allow.  If permission was really
-    // denied, that will result in PERMISSION_DENIED anyway.
-    // Note that we need this behavior anyway, to handle Windows 10 and 11
-    // installs that haven't been updated in a few years and are therefore
-    // missing the settings listeners.
-    request->RerunAllow(bc);
+    mResolverHolder->Allowed();
+    mSettingsPromise->Reject(NS_ERROR_ABORT, __func__);
+    mSettingsPromise = nullptr;
   }
 
   MOZ_CAN_RUN_SCRIPT_BOUNDARY
   void RejectedCallback(JSContext* aCx, JS::Handle<JS::Value> aValue,
                         ErrorResult& aRv) override {
-    RefPtr<nsGeolocationRequest> request = mRequest;
-    RefPtr<BrowsingContext> bc = mBrowsingContext;
-    // See comment in ResolvedCallback for why we RerunAllow instead of
-    // rejecting with PERMISSION_DENIED here.
-    request->RerunAllow(bc);
+    mResolverHolder->Rejected();
+    mSettingsPromise->Reject(NS_ERROR_ABORT, __func__);
+    mSettingsPromise = nullptr;
   }
 
 private:
   ~SystemPermissionResolver() = default;
 
-  RefPtr<nsGeolocationRequest> mRequest;
-  RefPtr<BrowsingContext> mBrowsingContext;
+  RefPtr<OpenSettingsPromise::Private> mSettingsPromise;
+  RefPtr<ParentRequestResolverHolder> mResolverHolder;
 };
 
 NS_IMPL_ISUPPORTS0(SystemPermissionResolver)
 
-SystemPermissionResolver::SystemPermissionResolver(
-    nsGeolocationRequest* aRequest, BrowsingContext* aBC) :
-  mRequest(aRequest), mBrowsingContext(aBC) {}
+static void
+WaitForAnyPromise(BrowsingContext* aBC,
+                  OpenSettingsPromise::Private* aSettingsPromisePrivate,
+                  mozilla::dom::Promise* aPermissionDlgPromise,
+                  Geolocation::ParentRequestResolver&& aResolver) {
+  MOZ_ASSERT(aSettingsPromisePrivate && aPermissionDlgPromise);
 
-nsresult nsGeolocationRequest::RerunAllow(BrowsingContext* aBC) {
-  mSystemPermissionPromise = nullptr;
-  mSystemSettingsListener = nullptr;
-  nsresult rv;
-  nsCOMPtr<nsIPromptService> promptSvc =
-      do_GetService("@mozilla.org/prompter;1", &rv);
-  NS_ENSURE_SUCCESS(rv, rv);
-  rv = promptSvc->DismissPrompts(aBC);
-  NS_ENSURE_SUCCESS(rv, rv);
-  return Allow(JS::UndefinedHandleValue);
+  // Since we need to be able to call the handler from 4 different handlers,
+  // it needs to be shared.
+  RefPtr<ParentRequestResolverHolder> resolverHolder =
+      new ParentRequestResolverHolder(std::move(aResolver));
+
+  // Each promise will hold a strong reference to the other and will release
+  // that reference when resolved/rejected.  No one else holds these
+  // references.  Note that this is safe because the aPermissionDlgPromise
+  // will always be resolved or rejected when the dialog it represents
+  // is destroyed.
+
+  // This promise cannot cancel the aPermissionDlgPromise because it is
+  // made with an async handler.  To dismiss the modal dialog, we remove
+  // all modal dialogs from the browsing context.
+  OpenSettingsPromise* osPromise = aSettingsPromisePrivate;
+  osPromise->Then(
+    GetCurrentSerialEventTarget(), __func__,
+    [permDlg = RefPtr{aPermissionDlgPromise}, bc = RefPtr{aBC}, resolverHolder](){
+      nsresult rv;
+      nsCOMPtr<nsIPromptService> promptSvc =
+          do_GetService("@mozilla.org/prompter;1", &rv);
+      NS_ENSURE_SUCCESS_VOID(rv);
+      rv = promptSvc->DismissPrompts(bc);
+      NS_ENSURE_SUCCESS_VOID(rv);
+      resolverHolder->Allowed();
+    },
+    [permDlg = RefPtr{aPermissionDlgPromise}, bc = RefPtr{aBC}, resolverHolder](){
+      nsresult rv;
+      nsCOMPtr<nsIPromptService> promptSvc =
+          do_GetService("@mozilla.org/prompter;1", &rv);
+      NS_ENSURE_SUCCESS_VOID(rv);
+      rv = promptSvc->DismissPrompts(bc);
+      NS_ENSURE_SUCCESS_VOID(rv);
+      resolverHolder->Rejected();
+    });
+
+  // This will cancel the settings promise, which will stop the settings
+  // listener.
+  aPermissionDlgPromise->AppendNativeHandler(
+      new SystemPermissionResolver(aSettingsPromisePrivate, resolverHolder));
 }
 
-/* static */ nsresult Geolocation::ReallowWithSystemPermissionOrCancel(
+/* static */
+void Geolocation::ReallowWithSystemPermissionOrCancel(
     BrowsingContext* aBrowsingContext,
-    PContentParent::
-        ReallowGeolocationRequestWithSystemPermissionOrCancelResolver&&
-            aResolver) {
+    Geolocation::ParentRequestResolver&& aResolver) {
   // Make sure we don't return without responding to the geolocation request.
   auto denyRequest =
       MakeScopeExit([aResolver]() MOZ_CAN_RUN_SCRIPT_BOUNDARY_LAMBDA {
-        aResolver(Some(GeolocationPositionError_Binding::PERMISSION_DENIED));
+        aResolver(Nothing());
       });
 
   nsresult rv;
   nsCOMPtr<nsIPromptService> promptSvc =
       do_GetService("@mozilla.org/prompter;1", &rv);
-  NS_ENSURE_SUCCESS(rv, rv);
-  NS_ENSURE_TRUE(aBrowsingContext, NS_OK);
+  NS_ENSURE_SUCCESS_VOID(rv);
+  NS_ENSURE_TRUE_VOID(aBrowsingContext);
 
   nsCOMPtr<nsIStringBundle> bundle;
   nsCOMPtr<nsIStringBundleService> sbs =
       do_GetService(NS_STRINGBUNDLE_CONTRACTID);
-  NS_ENSURE_TRUE(sbs, NS_OK);
+  NS_ENSURE_TRUE_VOID(sbs);
 
   sbs->CreateBundle("chrome://browser/locale/browser.properties",
                     getter_AddRefs(bundle));
-  NS_ENSURE_TRUE(bundle, NS_OK);
+  NS_ENSURE_TRUE_VOID(bundle);
 
   nsAutoString title;
   rv = bundle->GetStringFromName("geolocation.system_settings_title", title);
-  NS_ENSURE_SUCCESS(rv, rv);
+  NS_ENSURE_SUCCESS_VOID(rv);
 
   nsAutoString message;
   rv =
       bundle->GetStringFromName("geolocation.system_settings_message", message);
-  NS_ENSURE_SUCCESS(rv, rv);
+  NS_ENSURE_SUCCESS_VOID(rv);
 
-  RefPtr<mozilla::dom::Promise> systemPermissionPromise;
+  RefPtr<OpenSettingsPromise::Private> settingsPromise =
+      geolocation::PresentSystemSettings();
+  NS_ENSURE_TRUE_VOID(settingsPromise);
+
+  RefPtr<mozilla::dom::Promise> permissionDlgPromise;
   rv = promptSvc->AsyncConfirmEx(
-      aBrowsingContext, nsIPromptService::MODAL_TYPE_TAB, title.get(),
-      message.get(),
+      aBrowsingContext, nsIPromptService::MODAL_TYPE_TAB,
+      title.get(), message.get(),
       nsIPromptService::BUTTON_TITLE_CANCEL * nsIPromptService::BUTTON_POS_0,
       nullptr, nullptr, nullptr, nullptr, false, JS::UndefinedHandleValue,
-      getter_AddRefs(systemPermissionPromise));
-  NS_ENSURE_SUCCESS(rv, rv);
+      getter_AddRefs(permissionDlgPromise));
+  if (NS_WARN_IF(NS_FAILED(rv))) {
+    // We failed to present the modal.  Stop waiting for the system permission
+    // and just leave it all up to the user.
+    settingsPromise->Reject(rv, __func__);
+    return;
+  }
+
+  MOZ_ASSERT(permissionDlgPromise);
+
   denyRequest.release();
 
-  // Open the system settings and either resolve mSystemPermissionPromise when
-  // permission is given (with a non-zero value) or when the dialog above is
-  // canceled (with a value of zero).  Will reject promise on failure.
-  // TODO - this promise stuff is a mess
-  auto systemSettingsPromise =
-      MakeRefPtr<MozPromise<uint32_t, nsresult, true>::Private>(__func__);
-  RefPtr<mozilla::dom::geolocation::LocationSettingsListener> listener =
-      mozilla::dom::geolocation::PresentSystemSettings(aBrowsingContext,
-                                                       systemSettingsPromise);
-  auto resolver =
-      MakeRefPtr<SystemPermissionResolverTemp>(aResolver, std::move(listener));
-  systemPermissionPromise->AppendNativeHandler(resolver);
-  systemSettingsPromise->Then(
-      GetMainThreadSerialEventTarget(), __func__,
-      [resolver]() { resolver->Resolve(); },
-      [resolver]() { resolver->Resolve(); });
-
-  return NS_OK;
+  // Wait for either settingsPromise (which waits for the system permission to
+  // be granted) or permissionDlgPromise (which waits for cancel to be
+  // pressed).  Resolve/reject aResolver based on this, and clean up
+  // (i.e. release) the promise that hasn't resolved yet.
+  WaitForAnyPromise(aBrowsingContext, settingsPromise, permissionDlgPromise, std::move(aResolver));
 }
 
+nsresult nsGeolocationRequest::RerunAllow(BrowsingContext* aBC) {
+  return Allow(JS::UndefinedHandleValue);
+}
 
 NS_IMETHODIMP
 nsGeolocationRequest::Allow(JS::Handle<JS::Value> aChoices) {
   MOZ_ASSERT(aChoices.isUndefined());
-  MOZ_ASSERT(!mSystemPermissionPromise);
 
   if (mLocator->ClearPendingRequest(this)) {
     return NS_OK;
@@ -474,7 +481,7 @@ nsGeolocationRequest::Allow(JS::Handle<JS::Value> aChoices) {
 
     cpc->SendReallowGeolocationRequestWithSystemPermissionOrCancel(
         browsingContext,
-        [self = RefPtr{this}, browsingContext](Maybe<uint16_t> aResult) {
+        [self = RefPtr{this}, browsingContext](Maybe<uint16_t> aResult) MOZ_CAN_RUN_SCRIPT_BOUNDARY_LAMBDA {
           // We could not RerunAllow if the dialog were canceled instead of
           // permission being approved but that would mean that there was no way
           // for a user to circumvent the permissions check in case it goes bad
@@ -486,7 +493,7 @@ nsGeolocationRequest::Allow(JS::Handle<JS::Value> aChoices) {
           // missing the settings listeners.
           self->RerunAllow(browsingContext);
       },
-        [self = RefPtr{this}, browsingContext](mozilla::ipc::ResponseRejectReason aReason) {
+        [self = RefPtr{this}, browsingContext](mozilla::ipc::ResponseRejectReason aReason) MOZ_CAN_RUN_SCRIPT_BOUNDARY_LAMBDA {
           // See comment in resolve handler for why we RerunAllow instead of
           // rejecting with PERMISSION_DENIED here.
           self->RerunAllow(browsingContext);
@@ -1467,41 +1474,43 @@ void Geolocation::NotifyAllowedRequest(nsGeolocationRequest* aRequest) {
   return true;
 }
 
-/* static */ mozilla::dom::geolocation::LocationOSPermission
+/* static */ geolocation::LocationOSPermission
 Geolocation::GetLocationOSPermission() {
-  if (mozilla::dom::geolocation::SystemWillPromptForPermissionHint()) {
-    return mozilla::dom::geolocation::LocationOSPermission::
+  if (geolocation::SystemWillPromptForPermissionHint()) {
+    return geolocation::LocationOSPermission::
         eSystemWillPromptForPermission;
   }
 
-  if (mozilla::dom::geolocation::LocationIsPermittedHint()) {
-    return mozilla::dom::geolocation::LocationOSPermission::
+  if (geolocation::LocationIsPermittedHint()) {
+    return geolocation::LocationOSPermission::
         eLocationIsPermitted;
   }
 
   // Tell the user that they will also need to enable location in system
   // settings, and (if possible) open the settings page for them if they
   // approve location access.
-  return mozilla::dom::geolocation::LocationOSPermission::eLocationNotPermitted;
+  return geolocation::LocationOSPermission::eLocationNotPermitted;
 }
 
 bool Geolocation::RequestIfPermitted(nsGeolocationRequest* request) {
   if (auto* contentChild = ContentChild::GetSingleton()) {
     contentChild->SendGetGeolocationOSPermission(
         [request = RefPtr{request}](auto aPermission) {
+          // TODO: TEST: turn on system settings always
+              request->SetNeedsSystemSetting();
           switch (aPermission) {
-            case mozilla::dom::geolocation::LocationOSPermission::
+            case geolocation::LocationOSPermission::
                 eSystemWillPromptForPermission:
               // If the system will prompt for geolocation access then tell the
               // user they will have to grant permission twice.
               request->SetSystemWillRequestPermission();
               break;
-            case mozilla::dom::geolocation::LocationOSPermission::
+            case geolocation::LocationOSPermission::
                 eLocationIsPermitted:
               // If location access is already permitted by OS then we only need
               // to ask the user.
               break;
-            case mozilla::dom::geolocation::LocationOSPermission::
+            case geolocation::LocationOSPermission::
                 eLocationNotPermitted:
               // Tell the user that they will also need to enable location in
               // system settings, and (if possible) open the settings page for

@@ -26,6 +26,7 @@
 #include "nsIDOMGeoPositionCallback.h"
 #include "nsIDOMGeoPositionErrorCallback.h"
 #include "mozilla/dom/BindingDeclarations.h"
+#include "mozilla/dom/ContentParent.h"
 #include "mozilla/dom/GeolocationBinding.h"
 #include "mozilla/dom/CallbackObject.h"
 
@@ -33,25 +34,11 @@ namespace mozilla::dom::geolocation {
 
 // Value system settings promise resolves to when the user presses the cancel
 // button.  See PresentSystemSettings.
-const int32_t kSystemPermissionCanceled = 0;
+const uint16_t kSystemPermissionCanceled = 0;
 
 // Value system settings promise resolves to when permission was given.
 // See PresentSystemSettings.
-const int32_t kSystemPermissionGranted = 1;
-
-// Allows callers of PresentSystemSettings to stop any OS system settings
-// listeners we registered for.  Listeners will be automatically unregistered
-// if they exist when this object is destroyed.
-class LocationSettingsListener : public nsISupports {
-public:
-  NS_DECL_ISUPPORTS
-
-  // Stop listening.
-  virtual void Stop() = 0;
-
-protected:
-  virtual ~LocationSettingsListener() = default;
-};
+const uint16_t kSystemPermissionGranted = 1;
 
 /**
  * If true then expect that the system will request permission from the user
@@ -70,15 +57,14 @@ bool SystemWillPromptForPermissionHint();
  */
 bool LocationIsPermittedHint();
 
+using OpenSettingsPromise = MozPromise<bool, nsresult, false>;
+
 /**
  * Opens the system settings application to the right spot and waits for the
- * user to give us geolocation permission.  Callers can use the return value
- * to cancel listening for the settings change.  This method will always
- * reject the given promise whenever it returns null.
+ * user to give us geolocation permission.  Callers can reject the returned
+ * promise to cancel listening for the settings change.
  */
-already_AddRefed<LocationSettingsListener> PresentSystemSettings(
-    BrowsingContext* aBC,
-    RefPtr<mozilla::MozPromise<uint32_t, nsresult, true>::Private> aPromise);
+already_AddRefed<OpenSettingsPromise::Private> PresentSystemSettings();
 
 }  // namespace mozilla::dom
 

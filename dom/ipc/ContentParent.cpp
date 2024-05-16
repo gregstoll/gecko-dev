@@ -106,6 +106,7 @@
 #include "mozilla/dom/FileSystemSecurity.h"
 #include "mozilla/dom/GeolocationBinding.h"
 #include "mozilla/dom/GeolocationPositionError.h"
+#include "mozilla/dom/GeolocationSystem.h"
 #include "mozilla/dom/GetFilesHelper.h"
 #include "mozilla/dom/IPCBlobUtils.h"
 #include "mozilla/dom/JSActorService.h"
@@ -8244,7 +8245,9 @@ ContentParent::RecvReallowGeolocationRequestWithSystemPermissionOrCancel(
     aResolver(Nothing());
     return IPC_OK();
   }
-  auto* browsingContext = aBrowsingContext.get();
+  RefPtr<BrowsingContext> browsingContext = aBrowsingContext.get();
+
+  // Listens for changes to location system setting.
   Geolocation::ReallowWithSystemPermissionOrCancel(browsingContext,
                                                    std::move(aResolver));
   return IPC_OK();
