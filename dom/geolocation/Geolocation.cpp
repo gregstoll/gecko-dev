@@ -1496,8 +1496,6 @@ bool Geolocation::RequestIfPermitted(nsGeolocationRequest* request) {
   if (auto* contentChild = ContentChild::GetSingleton()) {
     contentChild->SendGetGeolocationOSPermission(
         [request = RefPtr{request}](auto aPermission) {
-          // TODO: TEST: turn on system settings always
-              request->SetNeedsSystemSetting();
           switch (aPermission) {
             case geolocation::LocationOSPermission::
                 eSystemWillPromptForPermission:
